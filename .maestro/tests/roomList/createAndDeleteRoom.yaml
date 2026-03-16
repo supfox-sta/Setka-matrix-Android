@@ -1,0 +1,44 @@
+appId: ${MAESTRO_APP_ID}
+---
+# Purpose: Test the creation and deletion of a room
+- tapOn: "Create a new conversation or room"
+- tapOn: "New room"
+- tapOn: "Add name…"
+- inputText: "aRoomName"
+- tapOn: "Add description…"
+- inputText: "aRoomTopic"
+- tapOn: "Create"
+- takeScreenshot: build/maestro/320-createAndDeleteRoom
+- tapOn: "Search for someone"
+- inputText: ${MAESTRO_INVITEE1_MXID}
+- tapOn:
+    text: ${MAESTRO_INVITEE1_MXID}
+    index: 1
+- tapOn: "Finish"
+- tapOn: "aRoomName"
+- tapOn: "Invite"
+# assert there's 1 member and 1 invitee
+- tapOn: "Search for someone"
+- inputText: ${MAESTRO_INVITEE2_MXID}
+- tapOn:
+    text: ${MAESTRO_INVITEE2_MXID}
+    index: 1
+- tapOn: "Invite"
+- tapOn: "Back"
+- tapOn: "aRoomName"
+- scrollUntilVisible:
+    direction: DOWN
+    element:
+      text: "People"
+- tapOn: "People"
+# assert there's 1 member and 2 invitees
+- tapOn: "Back"
+- scroll
+- scroll
+- tapOn: "Leave room"
+- tapOn: "Leave"
+- runFlow:
+    when:
+      visible: 'You need an invite in order to join'
+    commands:
+      - tapOn: "Back"
