@@ -8,6 +8,9 @@
 
 package io.element.android.features.roomdetails.impl
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -77,6 +80,7 @@ import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarHost
 import io.element.android.libraries.designsystem.utils.snackbar.rememberSnackbarHostState
 import io.element.android.libraries.matrix.api.core.RoomAlias
+import io.element.android.libraries.preferences.api.store.RoomWallpaperStyles
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.room.RoomMember
@@ -106,6 +110,7 @@ fun RoomDetailsView(
     openMediaGallery: () -> Unit,
     openAdminSettings: () -> Unit,
     onJoinCallClick: () -> Unit,
+    onJoinAudioCallClick: () -> Unit = {},
     onPinnedMessagesClick: () -> Unit,
     onKnockRequestsClick: () -> Unit,
     onSecurityAndPrivacyClick: () -> Unit,
@@ -115,6 +120,22 @@ fun RoomDetailsView(
     leaveRoomView: @Composable () -> Unit,
 ) {
     val snackbarHostState = rememberSnackbarHostState(snackbarMessage = state.snackbarMessage)
+    var showWallpaperMenu by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val customWallpaperPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.toCustomStyle(uri.toString())))
+            }
+        }
+    )
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -175,6 +196,7 @@ fun RoomDetailsView(
                 onShareRoom = onShareRoom,
                 onInvitePeople = invitePeople,
                 onCall = onJoinCallClick,
+                onAudioCall = onJoinAudioCallClick,
             )
             Spacer(Modifier.height(12.dp))
 
@@ -199,6 +221,51 @@ fun RoomDetailsView(
                         state.eventSink(RoomDetailsEvent.SetFavorite(it))
                     }
                 )
+
+                if (state.canToggleContact) {
+                    ContactItem(
+                        isInContacts = state.isInContacts,
+                        onClick = { state.eventSink(RoomDetailsEvent.ToggleContact) }
+                    )
+                }
+
+                WallpaperItem(
+                    wallpaperStyle = state.roomWallpaperStyle,
+                    onClick = { showWallpaperMenu = true },
+                )
+                DropdownMenu(
+                    expanded = showWallpaperMenu,
+                    onDismissRequest = { showWallpaperMenu = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_auto)) },
+                        onClick = {
+                            showWallpaperMenu = false
+                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.AUTO))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_light)) },
+                        onClick = {
+                            showWallpaperMenu = false
+                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.LIGHT))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_dark)) },
+                        onClick = {
+                            showWallpaperMenu = false
+                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.DARK))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_custom)) },
+                        onClick = {
+                            showWallpaperMenu = false
+                            customWallpaperPicker.launch(arrayOf("image/*"))
+                        },
+                    )
+                }
 
                 if (state.canShowSecurityAndPrivacy) {
                     SecurityAndPrivacyItem(
@@ -328,6 +395,7 @@ private fun MainActionsSection(
     onShareRoom: () -> Unit,
     onInvitePeople: () -> Unit,
     onCall: () -> Unit,
+    onAudioCall: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -356,6 +424,11 @@ private fun MainActionsSection(
         }
         if (state.roomCallState.hasPermissionToJoin()) {
             // TODO Improve the view depending on all the cases here?
+            MainActionButton(
+                title = stringResource(CommonStrings.action_audio_call),
+                imageVector = CompoundIcons.VoiceCallSolid(),
+                onClick = onAudioCall,
+            )
             MainActionButton(
                 title = stringResource(CommonStrings.action_call),
                 imageVector = CompoundIcons.VideoCall(),
@@ -620,6 +693,50 @@ private fun FavoriteItem(
         title = stringResource(id = textResId),
         isChecked = isFavorite,
         onCheckedChange = onFavoriteChanges
+    )
+}
+
+@Composable
+private fun ContactItem(
+    isInContacts: Boolean,
+    onClick: () -> Unit,
+) {
+    val title = if (isInContacts) {
+        stringResource(R.string.screen_room_details_remove_from_contacts)
+    } else {
+        stringResource(R.string.screen_room_details_add_to_contacts)
+    }
+    ListItem(
+        headlineContent = { Text(title) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.UserProfile())),
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun WallpaperItem(
+    wallpaperStyle: String?,
+    onClick: () -> Unit,
+) {
+    val subtitle = when (wallpaperStyle) {
+        RoomWallpaperStyles.AUTO, null -> stringResource(R.string.screen_room_details_wallpaper_auto)
+        RoomWallpaperStyles.LIGHT -> stringResource(R.string.screen_room_details_wallpaper_light)
+        RoomWallpaperStyles.DARK -> stringResource(R.string.screen_room_details_wallpaper_dark)
+        else -> {
+            if (RoomWallpaperStyles.customUri(wallpaperStyle) != null) {
+                stringResource(R.string.screen_room_details_wallpaper_custom)
+            } else if (RoomWallpaperStyles.customColor(wallpaperStyle) != null) {
+                "Цвет фона"
+            } else {
+                stringResource(R.string.screen_room_details_wallpaper_auto)
+            }
+        }
+    }
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.screen_room_details_wallpaper_title)) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Image())),
+        onClick = onClick,
     )
 }
 

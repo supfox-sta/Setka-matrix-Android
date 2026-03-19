@@ -65,6 +65,8 @@ import io.element.android.libraries.designsystem.preview.DAY_MODE_NAME
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.NIGHT_MODE_NAME
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.theme.components.CircularProgressIndicator
 import io.element.android.libraries.designsystem.theme.components.HorizontalDivider
 import io.element.android.libraries.designsystem.theme.components.Icon
@@ -498,8 +500,9 @@ private fun StandardLayout(
     onVoiceRecorderEvent: (VoiceMessageRecorderEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val showEncryptionStatus = LocalSetkaCustomization.current.showEncryptionStatus
     Column(modifier = modifier) {
-        if (isRoomEncrypted == false) {
+        if (showEncryptionStatus && isRoomEncrypted == false) {
             Spacer(Modifier.height(16.dp))
             NotEncryptedBadge()
             Spacer(Modifier.height(4.dp))
@@ -615,11 +618,12 @@ private fun TextFormattingLayout(
     endButtonParams: EndButtonParams,
     modifier: Modifier = Modifier
 ) {
+    val showEncryptionStatus = LocalSetkaCustomization.current.showEncryptionStatus
     Column(
         modifier = modifier.padding(vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (isRoomEncrypted == false) {
+        if (showEncryptionStatus && isRoomEncrypted == false) {
             NotEncryptedBadge()
             Spacer(Modifier.height(8.dp))
         }
@@ -672,7 +676,10 @@ private fun TextInputBox(
     modifier: Modifier = Modifier,
     textInput: @Composable () -> Unit,
 ) {
-    val bgColor = ElementTheme.colors.bgSubtleSecondary
+    val composerOpacity = (LocalSetkaCustomization.current.composerBackgroundOpacityPercent / 100f).coerceIn(0f, 1f)
+    val baseColor = parseSetkaColorOrNull(LocalSetkaCustomization.current.composerBackgroundColorHex)
+        ?: ElementTheme.colors.bgSubtleSecondary
+    val bgColor = baseColor.copy(alpha = composerOpacity)
     val borderColor = ElementTheme.colors.borderDisabled
     val roundedCorners = textInputRoundedCornerShape(composerMode = composerMode)
 

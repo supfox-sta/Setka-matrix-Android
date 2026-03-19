@@ -56,6 +56,7 @@ import io.element.android.libraries.di.SessionScope
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.RoomId
+import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.services.analytics.api.AnalyticsService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -70,6 +71,8 @@ import kotlinx.parcelize.Parcelize
 import timber.log.Timber
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
+import io.element.android.libraries.matrix.api.room.StartDMResult
+import io.element.android.libraries.matrix.api.room.startDM
 
 @ContributesNode(SessionScope::class)
 @AssistedInject
@@ -218,8 +221,37 @@ class HomeFlowNode(
             HomeView(
                 homeState = state,
                 onRoomClick = ::navigateToRoom,
+                onUserProfileClick = callback::navigateToUserProfile,
                 onSettingsClick = callback::navigateToSettings,
                 onStartChatClick = callback::navigateToCreateRoom,
+                onSearchUsers = { query ->
+                    matrixClient.searchUsers(query, 20)
+                        .getOrNull()
+                        ?.results
+                        ?.toList()
+                        .orEmpty()
+                },
+                onAddContact = { user, displayName ->
+                    when (val dmResult = matrixClient.startDM(user.userId, createIfDmDoesNotExist = true)) {
+                        is StartDMResult.Success -> {
+                            matrixClient.putContact(
+                                roomId = dmResult.roomId,
+                                displayName = displayName,
+                                email = null,
+                                phone = null,
+                            ).isSuccess
+                        }
+                        else -> false
+                    }
+                },
+                onUpdateContactName = { contact, displayName ->
+                    matrixClient.putContact(
+                        roomId = contact.roomId,
+                        displayName = displayName,
+                        email = contact.email,
+                        phone = contact.phone,
+                    ).isSuccess
+                },
                 onCreateSpaceClick = callback::navigateToCreateSpace,
                 onSetUpRecoveryClick = callback::navigateToSetUpRecovery,
                 onConfirmRecoveryKeyClick = callback::navigateToEnterRecoveryKey,

@@ -59,6 +59,7 @@ fun PreferencesRootView(
     onOpenRageShake: () -> Unit,
     onOpenLockScreenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
+    onOpenCustomization: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
     onOpenLabs: () -> Unit,
@@ -110,6 +111,7 @@ fun PreferencesRootView(
         GeneralSection(
             state = state,
             onOpenAbout = onOpenAbout,
+            onOpenCustomization = onOpenCustomization,
             onOpenAnalytics = onOpenAnalytics,
             onOpenRageShake = onOpenRageShake,
             onOpenAdvancedSettings = onOpenAdvancedSettings,
@@ -240,6 +242,7 @@ private fun ColumnScope.ManageAccountSection(
 private fun ColumnScope.GeneralSection(
     state: PreferencesRootState,
     onOpenAbout: () -> Unit,
+    onOpenCustomization: () -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenRageShake: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
@@ -271,6 +274,12 @@ private fun ColumnScope.GeneralSection(
         headlineContent = { Text(stringResource(id = CommonStrings.common_advanced_settings)) },
         leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Settings())),
         onClick = onOpenAdvancedSettings,
+    )
+    ListItem(
+        headlineContent = { Text(stringResource(id = R.string.screen_preferences_customization_title)) },
+        supportingContent = { Text(stringResource(id = R.string.screen_preferences_customization_description)) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Settings())),
+        onClick = onOpenCustomization,
     )
 
     if (state.showLabsItem) {
@@ -361,6 +370,7 @@ private fun ContentToPreview(matrixUser: MatrixUser) {
         onOpenAdvancedSettings = {},
         onOpenLabs = {},
         onOpenAbout = {},
+        onOpenCustomization = {},
         onSecureBackupClick = {},
         onManageAccountClick = {},
         onLinkNewDeviceClick = {},

@@ -25,6 +25,7 @@ import io.element.android.libraries.matrix.api.core.RoomAlias
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.RoomIdOrAlias
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.contact.MatrixContact
 import io.element.android.libraries.matrix.api.createroom.CreateRoomParameters
 import io.element.android.libraries.matrix.api.createroom.RoomPreset
 import io.element.android.libraries.matrix.api.linknewdevice.LinkDesktopHandler
@@ -92,6 +93,11 @@ import io.element.android.services.toolbox.api.systemclock.SystemClock
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
@@ -124,6 +130,9 @@ import org.matrix.rustcomponents.sdk.TaskHandle
 import org.matrix.rustcomponents.sdk.use
 import timber.log.Timber
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.Optional
 import kotlin.jvm.optionals.getOrNull
 import kotlin.time.Duration
@@ -131,6 +140,18 @@ import kotlin.time.Duration.Companion.seconds
 import org.matrix.rustcomponents.sdk.CreateRoomParameters as RustCreateRoomParameters
 import org.matrix.rustcomponents.sdk.RoomPreset as RustRoomPreset
 import org.matrix.rustcomponents.sdk.SyncService as ClientSyncService
+
+@Serializable
+private data class ContactListResponse(
+    val rooms: Map<String, ContactListEntry> = emptyMap(),
+)
+
+@Serializable
+private data class ContactListEntry(
+    @SerialName("display_name") val displayName: String? = null,
+    val email: String? = null,
+    val phone: String? = null,
+)
 
 class RustMatrixClient(
     private val innerClient: Client,
@@ -184,6 +205,10 @@ class RustMatrixClient(
     )
 
     private val sessionPathsProvider = SessionPathsProvider(sessionStore)
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
 
     private val roomSyncSubscriber: RoomSyncSubscriber = RoomSyncSubscriber(innerRoomListService, dispatchers)
 
@@ -310,6 +335,97 @@ class RustMatrixClient(
         runCatchingExceptions {
             innerClient.getUrl(url)
         }.mapFailure { it.mapClientException() }
+    }
+
+    override suspend fun getContactList(): Result<List<MatrixContact>> = withContext(sessionDispatcher) {
+        runCatchingExceptions {
+            val responseBytes = executeContactListRequest(
+                method = "GET",
+                path = buildContactListPath()
+            )
+            val response = json.decodeFromString<ContactListResponse>(responseBytes.decodeToString())
+            response.rooms.mapNotNull { (roomId, entry) ->
+                runCatching {
+                    MatrixContact(
+                        roomId = RoomId(roomId),
+                        displayName = entry.displayName,
+                        email = entry.email,
+                        phone = entry.phone,
+                    )
+                }.getOrNull()
+            }
+        }
+    }
+
+    override suspend fun putContact(
+        roomId: RoomId,
+        displayName: String?,
+        email: String?,
+        phone: String?,
+    ): Result<Unit> = withContext(sessionDispatcher) {
+        runCatchingExceptions {
+            val body = buildJsonObject {
+                displayName?.let { put("display_name", it) }
+                email?.let { put("email", it) }
+                phone?.let { put("phone", it) }
+            }.toString().encodeToByteArray()
+            executeContactListRequest(
+                method = "PUT",
+                path = buildContactListPath(roomId),
+                body = body,
+            )
+            Unit
+        }
+    }
+
+    override suspend fun deleteContact(roomId: RoomId): Result<Unit> = withContext(sessionDispatcher) {
+        runCatchingExceptions {
+            executeContactListRequest(
+                method = "DELETE",
+                path = buildContactListPath(roomId),
+            )
+            Unit
+        }
+    }
+
+    private fun buildContactListPath(roomId: RoomId? = null): String {
+        val encodedUserId = URLEncoder.encode(sessionId.value, Charsets.UTF_8.name())
+        val basePath = "/_matrix/client/v3/user/$encodedUserId/contact_list"
+        if (roomId == null) return basePath
+        val encodedRoomId = URLEncoder.encode(roomId.value, Charsets.UTF_8.name())
+        return "$basePath/rooms/$encodedRoomId"
+    }
+
+    private fun executeContactListRequest(
+        method: String,
+        path: String,
+        body: ByteArray? = null,
+    ): ByteArray {
+        val homeserver = innerClient.homeserver().trimEnd('/')
+        val token = innerClient.session().accessToken
+        val connection = (URL("$homeserver$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Authorization", "Bearer $token")
+            if (body != null) {
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json")
+                outputStream.use { it.write(body) }
+            }
+        }
+        return try {
+            val statusCode = connection.responseCode
+            val responseBytes = (if (statusCode in 200..299) connection.inputStream else connection.errorStream)
+                ?.use { it.readBytes() }
+                ?: byteArrayOf()
+            if (statusCode !in 200..299) {
+                val details = responseBytes.decodeToString()
+                error("Request failed ($method $path): HTTP $statusCode ${details.ifBlank { "<empty>" }}")
+            }
+            responseBytes
+        } finally {
+            connection.disconnect()
+        }
     }
 
     override suspend fun getRoom(roomId: RoomId): BaseRoom? = withContext(sessionDispatcher) {

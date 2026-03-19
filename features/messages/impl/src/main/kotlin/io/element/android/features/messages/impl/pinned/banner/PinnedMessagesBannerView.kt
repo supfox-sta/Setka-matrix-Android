@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.res.stringResource
@@ -47,6 +48,8 @@ import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TextButton
 import io.element.android.libraries.designsystem.theme.pinnedMessageBannerBorder
@@ -85,12 +88,16 @@ private fun PinnedMessagesBannerRow(
     modifier: Modifier = Modifier,
 ) {
     val analyticsService = LocalAnalyticsService.current
-    val borderColor = ElementTheme.colors.pinnedMessageBannerBorder
+    val customization = LocalSetkaCustomization.current
+    val bubbleColor = parseSetkaColorOrNull(customization.serviceBubbleColorHex)
+        ?: ElementTheme.colors.bgSubtleSecondary
+    val textColor = parseSetkaColorOrNull(customization.serviceTextColorHex)
+        ?: ElementTheme.colors.textPrimary
     Row(
         modifier = modifier
-            .background(color = ElementTheme.colors.bgCanvasDefault)
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .background(color = bubbleColor.copy(alpha = 0.92f), shape = RoundedCornerShape(14.dp))
             .fillMaxWidth()
-            .drawBorder(borderColor)
             .heightIn(min = 64.dp)
             .clickable {
                 if (state is PinnedMessagesBannerState.Loaded) {
@@ -109,7 +116,7 @@ private fun PinnedMessagesBannerRow(
         Icon(
             imageVector = CompoundIcons.PinSolid(),
             contentDescription = null,
-            tint = ElementTheme.colors.iconSecondary,
+            tint = textColor,
             modifier = Modifier
                 .padding(horizontal = 10.dp)
                 .size(20.dp)
@@ -147,27 +154,6 @@ private fun ViewAllButton(
         onClick = onViewAllClick,
         modifier = modifier,
     )
-}
-
-private fun Modifier.drawBorder(borderColor: Color): Modifier {
-    return this
-        .drawBehind {
-            val strokeWidth = 0.5.dp.toPx()
-            val y = size.height - strokeWidth / 2
-            drawLine(
-                borderColor,
-                Offset(0f, y),
-                Offset(size.width, y),
-                strokeWidth
-            )
-            drawLine(
-                borderColor,
-                Offset(0f, 0f),
-                Offset(size.width, 0f),
-                strokeWidth
-            )
-        }
-        .shadow(elevation = 5.dp, spotColor = Color.Transparent)
 }
 
 @Composable

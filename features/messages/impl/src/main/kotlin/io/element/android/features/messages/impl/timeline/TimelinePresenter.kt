@@ -54,6 +54,7 @@ import io.element.android.libraries.matrix.api.room.roomMembers
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
 import io.element.android.libraries.matrix.api.timeline.Timeline
 import io.element.android.libraries.matrix.api.timeline.item.event.TimelineItemEventOrigin
+import io.element.android.libraries.preferences.api.store.AppPreferencesStore
 import io.element.android.libraries.preferences.api.store.SessionPreferencesStore
 import io.element.android.services.analytics.api.AnalyticsLongRunningTransaction.DisplayFirstTimelineItems
 import io.element.android.services.analytics.api.AnalyticsLongRunningTransaction.NotificationToMessage
@@ -63,6 +64,7 @@ import io.element.android.services.analytics.api.finishLongRunningTransaction
 import io.element.android.services.analyticsproviders.api.AnalyticsUserData
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -87,6 +89,7 @@ class TimelinePresenter(
     private val sendPollResponseAction: SendPollResponseAction,
     private val endPollAction: EndPollAction,
     private val sessionPreferencesStore: SessionPreferencesStore,
+    private val appPreferencesStore: AppPreferencesStore,
     @Assisted private val timelineController: TimelineController,
     private val timelineItemIndexer: TimelineItemIndexer = TimelineItemIndexer(),
     private val resolveVerifiedUserSendFailurePresenter: Presenter<ResolveVerifiedUserSendFailureState>,
@@ -149,10 +152,15 @@ class TimelinePresenter(
         val displayThreadSummaries by produceState(false) {
             value = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
         }
+        val initialTimelineItemCount by remember {
+            appPreferencesStore.getCustomizationInitialTimelineItemCountFlow()
+        }.collectAsState(initial = 5)
+        var hasExpandedInitialTimelineWindow by rememberSaveable { mutableStateOf(false) }
 
         fun handleEvent(event: TimelineEvent) {
             when (event) {
                 is TimelineEvent.LoadMore -> {
+                    hasExpandedInitialTimelineWindow = true
                     if (event.direction == Timeline.PaginationDirection.FORWARDS && timelineMode is Timeline.Mode.Thread) {
                         // Do not paginate forwards in thread mode, as it's not supported
                         return
@@ -162,6 +170,9 @@ class TimelinePresenter(
                     }
                 }
                 is TimelineEvent.OnScrollFinished -> {
+                    if (event.firstIndex > 0) {
+                        hasExpandedInitialTimelineWindow = true
+                    }
                     if (isLive) {
                         if (event.firstIndex == 0) {
                             newEventState.value = NewEventState.None
@@ -304,8 +315,19 @@ class TimelinePresenter(
             Timber.tag(tag).d("Timeline: $timelineMode | focus state: ${focusRequestState.value}")
         }
 
+        val effectiveTimelineItems by remember(timelineItems, hasExpandedInitialTimelineWindow, initialTimelineItemCount) {
+            derivedStateOf {
+                val clampedCount = initialTimelineItemCount.coerceAtLeast(1)
+                if (hasExpandedInitialTimelineWindow || timelineItems.size <= clampedCount) {
+                    timelineItems
+                } else {
+                    timelineItems.take(clampedCount).toImmutableList()
+                }
+            }
+        }
+
         return TimelineState(
-            timelineItems = timelineItems,
+            timelineItems = effectiveTimelineItems,
             timelineMode = timelineMode,
             timelineRoomInfo = timelineRoomInfo,
             renderReadReceipts = renderReadReceipts,

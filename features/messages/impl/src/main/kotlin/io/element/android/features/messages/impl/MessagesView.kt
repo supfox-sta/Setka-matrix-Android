@@ -9,6 +9,8 @@
 package io.element.android.features.messages.impl
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -35,12 +37,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
@@ -103,12 +108,15 @@ import io.element.android.libraries.designsystem.text.toDp
 import io.element.android.libraries.designsystem.theme.components.BottomSheetDragHandle
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.utils.HideKeyboardWhenDisposed
 import io.element.android.libraries.designsystem.utils.KeepScreenOn
 import io.element.android.libraries.designsystem.utils.OnLifecycleEvent
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarHost
 import io.element.android.libraries.designsystem.utils.snackbar.rememberSnackbarHostState
 import io.element.android.libraries.matrix.api.core.EventId
+import io.element.android.libraries.preferences.api.store.RoomWallpaperStyles
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
@@ -120,9 +128,13 @@ import io.element.android.libraries.textcomposer.model.TextEditorState
 import io.element.android.libraries.textcomposer.model.VideoNoteState
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.wysiwyg.link.Link
+import coil3.compose.AsyncImage
 import kotlinx.collections.immutable.persistentListOf
 import timber.log.Timber
 import kotlin.time.Duration.Companion.milliseconds
+
+private const val LIGHT_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/light_bg.png"
+private const val DARK_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/dark_bg.png"
 
 @Composable
 fun MessagesView(
@@ -135,6 +147,7 @@ fun MessagesView(
     onSendLocationClick: () -> Unit,
     onCreatePollClick: () -> Unit,
     onJoinCallClick: () -> Unit,
+    onJoinAudioCallClick: () -> Unit = {},
     onViewAllPinnedMessagesClick: () -> Unit,
     modifier: Modifier = Modifier,
     forceJumpToBottomVisibility: Boolean = false,
@@ -201,6 +214,29 @@ fun MessagesView(
     val expandableState = rememberExpandableBottomSheetLayoutState()
     val showVideoNoteOverlay = state.videoNoteComposerState.videoNoteState !is VideoNoteState.Idle
 
+    val useLightWallpaper = when (state.roomWallpaperStyle) {
+        RoomWallpaperStyles.LIGHT -> true
+        RoomWallpaperStyles.DARK -> false
+        else -> ElementTheme.isLightTheme
+    }
+    val customWallpaperUri = RoomWallpaperStyles.customUri(state.roomWallpaperStyle)
+    val customWallpaperColor = parseSetkaColorOrNull(RoomWallpaperStyles.customColor(state.roomWallpaperStyle))
+    val customization = LocalSetkaCustomization.current
+    val animationsEnabled = customization.enableChatAnimations
+    val topBarBackgroundColor = parseSetkaColorOrNull(customization.topBarBackgroundColorHex)
+    val topBarTextColor = parseSetkaColorOrNull(customization.topBarTextColorHex)
+    val composerContainerBase = parseSetkaColorOrNull(customization.composerBackgroundColorHex)
+        ?: ElementTheme.colors.bgSubtleSecondary
+    val composerContainerColor = composerContainerBase.copy(
+        alpha = (customization.composerBackgroundOpacityPercent / 100f).coerceIn(0f, 1f)
+    )
+    val safeWallpaperBlurDp = customization.wallpaperBlurDp.coerceIn(0, 4)
+    val wallpaperBlurModifier = if (customization.enableBlurEffects && safeWallpaperBlurDp > 0) {
+        Modifier.blur(safeWallpaperBlurDp.dp)
+    } else {
+        Modifier
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -213,12 +249,45 @@ fun MessagesView(
                 maxComposerHeightPx = (size.height * 0.5f).toInt()
             },
     ) {
+        if (customWallpaperColor != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(customWallpaperColor)
+            )
+        } else if (customWallpaperUri != null) {
+            AsyncImage(
+                model = customWallpaperUri,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(wallpaperBlurModifier),
+                contentScale = ContentScale.Crop,
+            )
+        } else {
+            AsyncImage(
+                model = if (useLightWallpaper) LIGHT_WALLPAPER_URL else DARK_WALLPAPER_URL,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(wallpaperBlurModifier),
+                contentScale = ContentScale.Crop,
+                error = painterResource(
+                    id = if (useLightWallpaper) R.drawable.light_bg else R.drawable.dark_bg
+                ),
+                placeholder = painterResource(
+                    id = if (useLightWallpaper) R.drawable.light_bg else R.drawable.dark_bg
+                ),
+            )
+        }
         ExpandableBottomSheetLayout(
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (showVideoNoteOverlay) Modifier.blur(16.dp) else Modifier),
+            backgroundColor = composerContainerColor,
             content = {
                 Scaffold(
+                containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets.statusBars,
                 topBar = {
                     if (state.timelineState.timelineMode is Timeline.Mode.Thread) {
@@ -228,6 +297,8 @@ fun MessagesView(
                             heroes = state.heroes,
                             isTombstoned = state.isTombstoned,
                             onBackClick = onBackClick,
+                            backgroundColorOverride = topBarBackgroundColor,
+                            contentColorOverride = topBarTextColor,
                         )
                     } else {
                         MessagesViewTopBar(
@@ -241,6 +312,9 @@ fun MessagesView(
                             onBackClick = { hidingKeyboard { onBackClick() } },
                             onRoomDetailsClick = { hidingKeyboard { onRoomDetailsClick() } },
                             onJoinCallClick = onJoinCallClick,
+                            onJoinAudioCallClick = onJoinAudioCallClick,
+                            backgroundColorOverride = topBarBackgroundColor,
+                            contentColorOverride = topBarTextColor,
                         )
                     }
                 },
@@ -279,6 +353,7 @@ fun MessagesView(
                                 state.eventSink(MessagesEvent.HandleAction(TimelineItemAction.Reply, targetEvent))
                             },
                             forceJumpToBottomVisibility = forceJumpToBottomVisibility,
+                            animationsEnabled = animationsEnabled,
                             onJoinCallClick = onJoinCallClick,
                             onViewAllPinnedMessagesClick = onViewAllPinnedMessagesClick,
                             knockRequestsBannerView = knockRequestsBannerView,
@@ -446,6 +521,7 @@ private fun MessagesViewContent(
     onJoinCallClick: () -> Unit,
     onViewAllPinnedMessagesClick: () -> Unit,
     forceJumpToBottomVisibility: Boolean,
+    animationsEnabled: Boolean,
     onSwipeToReply: (TimelineItem.Event) -> Unit,
     modifier: Modifier = Modifier,
     knockRequestsBannerView: @Composable () -> Unit,
@@ -504,8 +580,8 @@ private fun MessagesViewContent(
             if (state.timelineState.timelineMode !is Timeline.Mode.Thread) {
                 AnimatedVisibility(
                     visible = state.pinnedMessagesBannerState is PinnedMessagesBannerState.Visible && scrollBehavior.isVisible,
-                    enter = expandVertically(),
-                    exit = shrinkVertically(),
+                    enter = if (animationsEnabled) expandVertically() else EnterTransition.None,
+                    exit = if (animationsEnabled) shrinkVertically() else ExitTransition.None,
                 ) {
                     fun focusOnPinnedEvent(eventId: EventId) {
                         state.timelineState.eventSink(

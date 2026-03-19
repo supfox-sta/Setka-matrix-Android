@@ -93,6 +93,7 @@ import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.swipe.SwipeableActionsState
 import io.element.android.libraries.designsystem.swipe.rememberSwipeableActionsState
 import io.element.android.libraries.designsystem.text.toPx
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.matrix.api.core.EventId
@@ -307,6 +308,7 @@ private fun ThreadSummaryView(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val bubbleWidthRatio = LocalSetkaCustomization.current.bubbleWidthPercent / 100f
     BoxWithConstraints(modifier = modifier) {
         Row(
             modifier = Modifier
@@ -318,7 +320,7 @@ private fun ThreadSummaryView(
                 .background(MessageEventBubbleDefaults.backgroundBubbleColor(isOutgoing))
                 .niceClickable(onClick)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
-                .widthIn(max = (maxWidth - 24.dp) * MessageEventBubbleDefaults.BUBBLE_WIDTH_RATIO),
+                .widthIn(max = (maxWidth - 24.dp) * bubbleWidthRatio),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(

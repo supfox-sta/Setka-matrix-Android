@@ -281,6 +281,16 @@ class MessagesFlowNode(
                         elementCallEntryPoint.startCall(callType)
                     }
 
+                    override fun navigateToRoomAudioCall(roomId: RoomId) {
+                        val callType = CallType.RoomCall(
+                            sessionId = sessionId,
+                            roomId = roomId,
+                            isAudioOnly = true,
+                        )
+                        analyticsService.captureInteraction(Interaction.Name.MobileRoomCallButton)
+                        elementCallEntryPoint.startCall(callType)
+                    }
+
                     override fun navigateToPinnedMessagesList() {
                         backstack.push(NavTarget.PinnedMessagesList)
                     }
@@ -492,6 +502,16 @@ class MessagesFlowNode(
                         val callType = CallType.RoomCall(
                             sessionId = sessionId,
                             roomId = roomId,
+                        )
+                        analyticsService.captureInteraction(Interaction.Name.MobileRoomCallButton)
+                        elementCallEntryPoint.startCall(callType)
+                    }
+
+                    override fun navigateToRoomAudioCall(roomId: RoomId) {
+                        val callType = CallType.RoomCall(
+                            sessionId = sessionId,
+                            roomId = roomId,
+                            isAudioOnly = true,
                         )
                         analyticsService.captureInteraction(Interaction.Name.MobileRoomCallButton)
                         elementCallEntryPoint.startCall(callType)

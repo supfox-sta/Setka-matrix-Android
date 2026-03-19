@@ -90,7 +90,6 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     api(projects.features.preferences.api)
     implementation(libs.showkase)
-
     implementation(platform(libs.network.okhttp.bom))
     implementation(libs.network.okhttp)
 

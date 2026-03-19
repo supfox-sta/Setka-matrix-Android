@@ -131,6 +131,7 @@ class ThreadedMessagesNode(
         fun navigateToCreatePoll()
         fun navigateToEditPoll(eventId: EventId)
         fun navigateToRoomCall(roomId: RoomId)
+        fun navigateToRoomAudioCall(roomId: RoomId) {}
         fun navigateToThread(threadRootId: ThreadId, focusedEventId: EventId?)
     }
 
@@ -282,6 +283,7 @@ class ThreadedMessagesNode(
                     onSendLocationClick = callback::navigateToSendLocation,
                     onCreatePollClick = callback::navigateToCreatePoll,
                     onJoinCallClick = { callback.navigateToRoomCall(room.roomId) },
+                    onJoinAudioCallClick = { callback.navigateToRoomAudioCall(room.roomId) },
                     onViewAllPinnedMessagesClick = {},
                     modifier = modifier,
                     knockRequestsBannerView = {},

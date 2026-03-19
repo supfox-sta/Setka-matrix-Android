@@ -16,6 +16,8 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.aTimelineItemStateEventContent
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.theme.components.Text
 
 @Composable
@@ -23,9 +25,11 @@ fun TimelineItemStateView(
     content: TimelineItemStateContent,
     modifier: Modifier = Modifier
 ) {
+    val textColor = parseSetkaColorOrNull(LocalSetkaCustomization.current.serviceTextColorHex)
+        ?: ElementTheme.colors.textSecondary
     Text(
         modifier = modifier,
-        color = ElementTheme.colors.textSecondary,
+        color = textColor,
         style = ElementTheme.typography.fontBodyMdRegular,
         text = content.body,
         textAlign = TextAlign.Center,

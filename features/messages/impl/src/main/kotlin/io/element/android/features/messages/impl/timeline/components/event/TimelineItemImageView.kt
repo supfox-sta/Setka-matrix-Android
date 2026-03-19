@@ -10,6 +10,7 @@ package io.element.android.features.messages.impl.timeline.components.event
 
 import android.text.SpannedString
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -40,6 +41,7 @@ import coil3.compose.AsyncImagePainter
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.messages.impl.timeline.aTimelineItemEvent
 import io.element.android.features.messages.impl.timeline.components.ATimelineItemEventRow
+import io.element.android.features.messages.impl.timeline.components.LocalBubbleBaseColor
 import io.element.android.features.messages.impl.timeline.components.layout.ContentAvoidingLayout
 import io.element.android.features.messages.impl.timeline.components.layout.ContentAvoidingLayoutData
 import io.element.android.features.messages.impl.timeline.model.TimelineItemGroupPosition
@@ -72,6 +74,7 @@ fun TimelineItemImageView(
 ) {
     val a11yLabel = stringResource(CommonStrings.common_image)
     val description = content.caption?.let { "$a11yLabel: $it" } ?: a11yLabel
+    val imageBorderColor = LocalBubbleBaseColor.current.copy(alpha = 0.88f)
     Column(modifier = modifier) {
         val containerModifier = if (content.showCaption) {
             Modifier.clip(RoundedCornerShape(10.dp))
@@ -90,6 +93,7 @@ fun TimelineItemImageView(
                 AsyncImage(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .border(width = 3.dp, color = imageBorderColor, shape = RoundedCornerShape(10.dp))
                         .then(if (isLoaded) Modifier.background(Color.White) else Modifier)
                         .then(
                             if (!isTalkbackActive() && onContentClick != null) {

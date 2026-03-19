@@ -21,7 +21,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.unit.Density
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -30,6 +34,7 @@ import com.bumble.appyx.core.integration.NodeHost
 import com.bumble.appyx.core.integrationpoint.NodeActivity
 import com.bumble.appyx.core.plugin.NodeReadyObserver
 import io.element.android.compound.colors.SemanticColorsLightDark
+import io.element.android.compound.tokens.generated.SemanticColors
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.lockscreen.api.LockScreenEntryPoint
 import io.element.android.features.lockscreen.api.LockScreenLockState
@@ -38,6 +43,9 @@ import io.element.android.features.lockscreen.api.handleSecureFlag
 import io.element.android.libraries.architecture.bindings
 import io.element.android.libraries.core.log.logger.LoggerTag
 import io.element.android.libraries.designsystem.theme.ElementThemeApp
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.SetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.utils.snackbar.LocalSnackbarDispatcher
 import io.element.android.services.analytics.compose.LocalAnalyticsService
 import io.element.android.x.di.AppBindings
@@ -69,13 +77,115 @@ class MainActivity : NodeActivity() {
         val colors by remember {
             appBindings.enterpriseService().semanticColorsFlow(sessionId = null)
         }.collectAsState(SemanticColorsLightDark.default)
+        val accentColorHex by remember {
+            appBindings.preferencesStore().getCustomizationAccentColorHexFlow()
+        }.collectAsState(initial = null)
+        val uiScale by remember {
+            appBindings.preferencesStore().getCustomizationUiScaleFlow()
+        }.collectAsState(initial = 1.0f)
+        val messageScale by remember {
+            appBindings.preferencesStore().getCustomizationMessageScaleFlow()
+        }.collectAsState(initial = 1.0f)
+        val bubbleRadiusDp by remember {
+            appBindings.preferencesStore().getCustomizationBubbleRadiusDpFlow()
+        }.collectAsState(initial = 12)
+        val bubbleWidthPercent by remember {
+            appBindings.preferencesStore().getCustomizationBubbleWidthPercentFlow()
+        }.collectAsState(initial = 78)
+        val timelineOverlayOpacityPercent by remember {
+            appBindings.preferencesStore().getCustomizationTimelineOverlayOpacityPercentFlow()
+        }.collectAsState(initial = 22)
+        val composerBackgroundOpacityPercent by remember {
+            appBindings.preferencesStore().getCustomizationComposerBackgroundOpacityPercentFlow()
+        }.collectAsState(initial = 92)
+        val wallpaperBlurDp by remember {
+            appBindings.preferencesStore().getCustomizationWallpaperBlurDpFlow()
+        }.collectAsState(initial = 0)
+        val showEncryptionStatus by remember {
+            appBindings.preferencesStore().getCustomizationShowEncryptionStatusFlow()
+        }.collectAsState(initial = false)
+        val topBarBackgroundColorHex by remember {
+            appBindings.preferencesStore().getCustomizationTopBarBackgroundColorHexFlow()
+        }.collectAsState(initial = null)
+        val topBarTextColorHex by remember {
+            appBindings.preferencesStore().getCustomizationTopBarTextColorHexFlow()
+        }.collectAsState(initial = null)
+        val composerBackgroundColorHex by remember {
+            appBindings.preferencesStore().getCustomizationComposerBackgroundColorHexFlow()
+        }.collectAsState(initial = null)
+        val serviceBubbleColorHex by remember {
+            appBindings.preferencesStore().getCustomizationServiceBubbleColorHexFlow()
+        }.collectAsState(initial = null)
+        val serviceTextColorHex by remember {
+            appBindings.preferencesStore().getCustomizationServiceTextColorHexFlow()
+        }.collectAsState(initial = null)
+        val incomingBubbleColorHex by remember {
+            appBindings.preferencesStore().getCustomizationIncomingBubbleColorHexFlow()
+        }.collectAsState(initial = null)
+        val outgoingBubbleColorHex by remember {
+            appBindings.preferencesStore().getCustomizationOutgoingBubbleColorHexFlow()
+        }.collectAsState(initial = null)
+        val incomingBubbleGradientToColorHex by remember {
+            appBindings.preferencesStore().getCustomizationIncomingBubbleGradientToColorHexFlow()
+        }.collectAsState(initial = null)
+        val outgoingBubbleGradientToColorHex by remember {
+            appBindings.preferencesStore().getCustomizationOutgoingBubbleGradientToColorHexFlow()
+        }.collectAsState(initial = null)
+        val homeBackgroundColorHex by remember {
+            appBindings.preferencesStore().getCustomizationHomeBackgroundColorHexFlow()
+        }.collectAsState(initial = null)
+        val homeBackgroundImageUri by remember {
+            appBindings.preferencesStore().getCustomizationHomeBackgroundImageUriFlow()
+        }.collectAsState(initial = null)
+        val enableChatAnimations by remember {
+            appBindings.preferencesStore().getCustomizationEnableChatAnimationsFlow()
+        }.collectAsState(initial = true)
+        val enableBlurEffects by remember {
+            appBindings.preferencesStore().getCustomizationEnableBlurEffectsFlow()
+        }.collectAsState(initial = true)
+        val initialTimelineItemCount by remember {
+            appBindings.preferencesStore().getCustomizationInitialTimelineItemCountFlow()
+        }.collectAsState(initial = 12)
+        val customizedColors = remember(colors, accentColorHex) {
+            colors.applySetkaAccentColor(accentColorHex)
+        }
+        val currentDensity = LocalDensity.current
         ElementThemeApp(
             appPreferencesStore = appBindings.preferencesStore(),
-            compoundLight = colors.light,
-            compoundDark = colors.dark,
+            compoundLight = customizedColors.light,
+            compoundDark = customizedColors.dark,
             buildMeta = appBindings.buildMeta()
         ) {
             CompositionLocalProvider(
+                LocalDensity provides Density(
+                    density = currentDensity.density * uiScale,
+                    fontScale = messageScale,
+                ),
+                LocalSetkaCustomization provides SetkaCustomization(
+                    accentColorHex = accentColorHex,
+                    uiScale = uiScale,
+                    messageScale = messageScale,
+                    bubbleRadiusDp = bubbleRadiusDp,
+                    bubbleWidthPercent = bubbleWidthPercent,
+                    timelineOverlayOpacityPercent = timelineOverlayOpacityPercent,
+                    composerBackgroundOpacityPercent = composerBackgroundOpacityPercent,
+                    wallpaperBlurDp = wallpaperBlurDp,
+                    showEncryptionStatus = showEncryptionStatus,
+                    topBarBackgroundColorHex = topBarBackgroundColorHex,
+                    topBarTextColorHex = topBarTextColorHex,
+                    composerBackgroundColorHex = composerBackgroundColorHex,
+                    serviceBubbleColorHex = serviceBubbleColorHex,
+                    serviceTextColorHex = serviceTextColorHex,
+                    incomingBubbleColorHex = incomingBubbleColorHex,
+                    outgoingBubbleColorHex = outgoingBubbleColorHex,
+                    incomingBubbleGradientToColorHex = incomingBubbleGradientToColorHex,
+                    outgoingBubbleGradientToColorHex = outgoingBubbleGradientToColorHex,
+                    homeBackgroundColorHex = homeBackgroundColorHex,
+                    homeBackgroundImageUri = homeBackgroundImageUri,
+                    enableChatAnimations = enableChatAnimations,
+                    enableBlurEffects = enableBlurEffects,
+                    initialTimelineItemCount = initialTimelineItemCount,
+                ),
                 LocalSnackbarDispatcher provides appBindings.snackbarDispatcher(),
                 LocalUriHandler provides SafeUriHandler(this),
                 LocalAnalyticsService provides appBindings.analyticsService(),
@@ -167,4 +277,37 @@ class MainActivity : NodeActivity() {
         super.onDestroy()
         Timber.tag(loggerTag.value).w("onDestroy")
     }
+}
+
+private fun SemanticColorsLightDark.applySetkaAccentColor(accentColorHex: String?): SemanticColorsLightDark {
+    val accentColor = parseAccentColorOrNull(accentColorHex) ?: return this
+    return copy(
+        light = light.applySetkaAccentColor(accentColor),
+        dark = dark.applySetkaAccentColor(accentColor),
+    )
+}
+
+private fun SemanticColors.applySetkaAccentColor(accentColor: Color): SemanticColors {
+    val hovered = lerp(accentColor, Color.Black, 0.10f)
+    val pressed = lerp(accentColor, Color.Black, 0.18f)
+    return copy(
+        bgAccentRest = accentColor,
+        bgAccentHovered = hovered,
+        bgAccentPressed = pressed,
+        bgAccentSelected = pressed,
+        bgActionPrimaryRest = accentColor,
+        bgActionPrimaryHovered = hovered,
+        bgActionPrimaryPressed = pressed,
+        textActionAccent = accentColor,
+        iconAccentPrimary = accentColor,
+        borderAccentSubtle = lerp(accentColor, Color.White, 0.45f),
+        gradientActionStop1 = accentColor,
+        gradientActionStop2 = hovered,
+        gradientActionStop3 = pressed,
+        gradientActionStop4 = accentColor,
+    )
+}
+
+private fun parseAccentColorOrNull(value: String?): Color? {
+    return parseSetkaColorOrNull(value)
 }

@@ -10,6 +10,8 @@ package io.element.android.features.messages.impl.timeline
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
@@ -68,6 +70,7 @@ import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.FloatingActionButton
 import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.designsystem.utils.animateScrollToItemCenter
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.timeline.Timeline
@@ -145,9 +148,13 @@ fun TimelineView(
     fun prefetchMoreItems() {
         state.eventSink(TimelineEvent.LoadMore(Timeline.PaginationDirection.BACKWARDS))
     }
+    val animationsEnabled = LocalSetkaCustomization.current.enableChatAnimations
 
     // Animate alpha when timeline is first displayed, to avoid flashes or glitching when viewing rooms
-    AnimatedVisibility(visible = true, enter = fadeIn()) {
+    AnimatedVisibility(
+        visible = true,
+        enter = if (animationsEnabled) fadeIn() else EnterTransition.None,
+    ) {
         Box(modifier) {
             LazyColumn(
                 modifier = Modifier
@@ -358,11 +365,12 @@ private fun JumpToBottomButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val animationsEnabled = LocalSetkaCustomization.current.enableChatAnimations
     AnimatedVisibility(
         modifier = modifier,
         visible = isVisible,
-        enter = scaleIn(animationSpec = tween(100)),
-        exit = scaleOut(animationSpec = tween(100)),
+        enter = if (animationsEnabled) scaleIn(animationSpec = tween(100)) else EnterTransition.None,
+        exit = if (animationsEnabled) scaleOut(animationSpec = tween(100)) else ExitTransition.None,
     ) {
         FloatingActionButton(
             onClick = onClick,

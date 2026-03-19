@@ -18,9 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -31,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.messages.impl.SharedHistoryIcon
+import io.element.android.features.messages.impl.timeline.components.AudioCallMenuItem
 import io.element.android.features.messages.impl.timeline.components.CallMenuItem
 import io.element.android.features.roomcall.api.RoomCallState
 import io.element.android.features.roomcall.api.aStandByCallState
@@ -67,9 +70,14 @@ internal fun MessagesViewTopBar(
     sharedHistoryIcon: SharedHistoryIcon,
     onRoomDetailsClick: () -> Unit,
     onJoinCallClick: () -> Unit,
+    onJoinAudioCallClick: () -> Unit = {},
     onBackClick: () -> Unit,
+    backgroundColorOverride: Color? = null,
+    contentColorOverride: Color? = null,
     modifier: Modifier = Modifier,
 ) {
+    val containerColor = backgroundColorOverride ?: ElementTheme.colors.bgCanvasDefault
+    val contentColor = contentColorOverride ?: ElementTheme.colors.textPrimary
     TopAppBar(
         modifier = modifier,
         navigationIcon = {
@@ -127,13 +135,23 @@ internal fun MessagesViewTopBar(
             }
         },
         actions = {
+            AudioCallMenuItem(
+                roomCallState = roomCallState,
+                onJoinAudioCallClick = onJoinAudioCallClick,
+            )
             CallMenuItem(
                 roomCallState = roomCallState,
                 onJoinCallClick = onJoinCallClick,
             )
             Spacer(Modifier.width(8.dp))
         },
-        windowInsets = WindowInsets(0.dp)
+        windowInsets = WindowInsets(0.dp),
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = containerColor,
+            navigationIconContentColor = contentColor,
+            titleContentColor = contentColor,
+            actionIconContentColor = contentColor,
+        ),
     )
 }
 
@@ -196,6 +214,7 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         sharedHistoryIcon = sharedHistoryIcon,
         onRoomDetailsClick = {},
         onJoinCallClick = {},
+        onJoinAudioCallClick = {},
         onBackClick = {},
     )
     Column {

@@ -8,14 +8,15 @@
 
 package io.element.android.features.messages.impl.timeline.components
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -39,6 +40,8 @@ import io.element.android.libraries.designsystem.modifiers.onKeyboardContextMenu
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.text.toDp
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.ui.strings.CommonStrings
 
 @Composable
@@ -49,64 +52,74 @@ internal fun TimelineItemCallNotifyView(
     onJoinCallClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(1.dp, ElementTheme.colors.borderInteractiveSecondary, RoundedCornerShape(8.dp))
-            .combinedClickable(
-                enabled = true,
-                onClick = {},
-                onLongClick = { onLongClick(event) },
-                onLongClickLabel = stringResource(CommonStrings.action_open_context_menu),
-            )
-            .onKeyboardContextMenuAction { onLongClick(event) }
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val bubbleWidthRatio = (LocalSetkaCustomization.current.bubbleWidthPercent / 100f).coerceIn(0.55f, 0.95f)
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = if (event.isMine) Alignment.CenterEnd else Alignment.CenterStart,
     ) {
-        Avatar(
-            avatarData = event.senderAvatar,
-            avatarType = AvatarType.User,
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = event.safeSenderName,
-                style = ElementTheme.typography.fontBodyLgMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Surface(
+            modifier = Modifier.widthIn(max = 420.dp * bubbleWidthRatio),
+            shape = RoundedCornerShape(14.dp),
+            color = MessageEventBubbleDefaults.backgroundBubbleColor(event.isMine),
+        ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier
+                    .combinedClickable(
+                        enabled = true,
+                        onClick = {},
+                        onLongClick = { onLongClick(event) },
+                        onLongClickLabel = stringResource(CommonStrings.action_open_context_menu),
+                    )
+                    .onKeyboardContextMenuAction { onLongClick(event) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    modifier = Modifier.size(20.sp.toDp()),
-                    imageVector = CompoundIcons.VideoCallSolid(),
-                    contentDescription = null,
-                    tint = ElementTheme.colors.iconSecondary,
+                Avatar(
+                    avatarData = event.senderAvatar,
+                    avatarType = AvatarType.User,
                 )
-                Text(
-                    text = stringResource(CommonStrings.common_call_started),
-                    style = ElementTheme.typography.fontBodyMdRegular,
-                    color = ElementTheme.colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = event.safeSenderName,
+                        style = ElementTheme.typography.fontBodyMdMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            modifier = Modifier.size(18.sp.toDp()),
+                            imageVector = CompoundIcons.VideoCallSolid(),
+                            contentDescription = null,
+                            tint = ElementTheme.colors.iconSecondary,
+                        )
+                        Text(
+                            text = stringResource(CommonStrings.common_call_started),
+                            style = ElementTheme.typography.fontBodySmRegular,
+                            color = ElementTheme.colors.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (roomCallState is RoomCallState.OnGoing) {
+                    CallMenuItem(
+                        roomCallState = roomCallState,
+                        onJoinCallClick = onJoinCallClick,
+                    )
+                } else {
+                    Text(
+                        text = event.sentTime,
+                        style = ElementTheme.typography.fontBodyXsRegular,
+                        color = ElementTheme.colors.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
-        }
-        if (roomCallState is RoomCallState.OnGoing) {
-            CallMenuItem(
-                roomCallState = roomCallState,
-                onJoinCallClick = onJoinCallClick,
-            )
-        } else {
-            Text(
-                text = event.sentTime,
-                style = ElementTheme.typography.fontBodyMdRegular,
-                color = ElementTheme.colors.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }

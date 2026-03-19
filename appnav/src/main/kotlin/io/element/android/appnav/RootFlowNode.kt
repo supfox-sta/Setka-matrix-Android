@@ -10,12 +10,38 @@ package io.element.android.appnav
 
 import android.content.Intent
 import android.os.Parcelable
+import android.os.SystemClock
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.lifecycleScope
 import com.bumble.appyx.core.modality.BuildContext
+import com.bumble.appyx.core.node.node
 import com.bumble.appyx.core.node.Node
 import com.bumble.appyx.core.plugin.Plugin
 import com.bumble.appyx.core.state.MutableSavedStateMap
@@ -61,17 +87,28 @@ import io.element.android.libraries.oidc.api.OidcAction
 import io.element.android.libraries.oidc.api.OidcActionFlow
 import io.element.android.libraries.sessionstorage.api.LoggedInState
 import io.element.android.libraries.sessionstorage.api.SessionStore
+import io.element.android.libraries.designsystem.theme.components.CircularProgressIndicator
+import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.ui.common.nodes.emptyNode
 import io.element.android.services.analytics.api.AnalyticsLongRunningTransaction
 import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analytics.api.watchers.AnalyticsColdStartWatcher
 import io.element.android.services.appnavstate.api.ROOM_OPENED_FROM_NOTIFICATION
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 import timber.log.Timber
+import java.net.HttpURLConnection
+import java.net.URL
+
+private const val MIN_SPLASH_DURATION_MS = 2200L
+private const val LIGHT_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/light_bg.png"
+private const val DARK_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/dark_bg.png"
 
 @ContributesNode(AppScope::class)
 @AssistedInject
@@ -100,10 +137,13 @@ class RootFlowNode(
     buildContext = buildContext,
     plugins = plugins
 ) {
+    private val splashStartedAtMillis = SystemClock.elapsedRealtime()
+
     override fun onBuilt() {
         analyticsColdStartWatcher.start()
         matrixSessionCache.restoreWithSavedState(buildContext.savedStateMap)
         super.onBuilt()
+        prefetchDefaultWallpapers()
         observeNavState()
     }
 
@@ -118,6 +158,7 @@ class RootFlowNode(
             Timber.v("navState=$navState")
             when (navState.loggedInState) {
                 is LoggedInState.LoggedIn -> {
+                    waitForSplashMinimumDuration()
                     if (navState.loggedInState.isTokenValid) {
                         tryToRestoreLatestSession(
                             onSuccess = { sessionId -> switchToLoggedInFlow(sessionId, navState.cacheIndex) },
@@ -128,10 +169,38 @@ class RootFlowNode(
                     }
                 }
                 LoggedInState.NotLoggedIn -> {
+                    waitForSplashMinimumDuration()
                     switchToNotLoggedInFlow(null)
                 }
             }
         }.launchIn(lifecycleScope)
+    }
+
+    private suspend fun waitForSplashMinimumDuration() {
+        val elapsed = SystemClock.elapsedRealtime() - splashStartedAtMillis
+        val remaining = MIN_SPLASH_DURATION_MS - elapsed
+        if (remaining > 0) delay(remaining)
+    }
+
+    private fun prefetchDefaultWallpapers() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { warmupUrl(LIGHT_WALLPAPER_URL) }
+            runCatching { warmupUrl(DARK_WALLPAPER_URL) }
+        }
+    }
+
+    private fun warmupUrl(url: String) {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 4000
+            readTimeout = 4000
+            instanceFollowRedirects = true
+        }
+        connection.inputStream.use { stream ->
+            val buffer = ByteArray(256)
+            stream.read(buffer)
+        }
+        connection.disconnect()
     }
 
     private fun switchToLoggedInFlow(sessionId: SessionId, navId: Int) {
@@ -269,7 +338,7 @@ class RootFlowNode(
                     ),
                 )
             }
-            NavTarget.SplashScreen -> emptyNode(buildContext)
+            NavTarget.SplashScreen -> splashNode(buildContext)
             NavTarget.BugReport -> {
                 val callback = object : BugReportEntryPoint.Callback {
                     override fun onDone() {
@@ -309,6 +378,79 @@ class RootFlowNode(
                     parentNode = this,
                     buildContext = buildContext,
                     callback = callback,
+                )
+            }
+        }
+    }
+
+    private fun splashNode(buildContext: BuildContext) = node(buildContext) { modifier ->
+        val context = LocalContext.current
+        val appIconBitmap = remember {
+            runCatching { context.packageManager.getApplicationIcon(context.packageName).toBitmap() }.getOrNull()
+        }
+        val pulseTransition = rememberInfiniteTransition(label = "setkaSplashPulse")
+        val pulseScale by pulseTransition.animateFloat(
+            initialValue = 0.96f,
+            targetValue = 1.04f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 900),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "setkaSplashScale",
+        )
+        val bootLogs = remember {
+            listOf(
+                "\u0417\u0430\u0433\u0440\u0443\u0436\u0430\u044e \u043c\u043e\u0434\u0443\u043b\u0438...",
+                "\u041e\u0431\u043d\u043e\u0432\u043b\u044f\u044e \u0434\u0430\u043d\u043d\u044b\u0435...",
+                "\u041e\u043f\u0442\u0438\u043c\u0438\u0437\u0438\u0440\u0443\u044e \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441...",
+            )
+        }
+        var bootLogIndex by remember { mutableIntStateOf(0) }
+        LaunchedEffect(Unit) {
+            while (true) {
+                delay(900)
+                bootLogIndex = (bootLogIndex + 1) % bootLogs.size
+            }
+        }
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(io.element.android.compound.theme.ElementTheme.colors.bgCanvasDefault),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.padding(horizontal = 24.dp),
+            ) {
+                if (appIconBitmap != null) {
+                    Image(
+                        bitmap = appIconBitmap.asImageBitmap(),
+                        contentDescription = "\u0421\u0435\u0442\u043a\u0430 Matrix",
+                        modifier = Modifier
+                            .size(88.dp)
+                            .scale(pulseScale),
+                    )
+                } else {
+                    Icon(
+                        painter = androidx.compose.ui.res.painterResource(R.drawable.setka_logo),
+                        contentDescription = "\u0421\u0435\u0442\u043a\u0430 Matrix",
+                        modifier = Modifier
+                            .size(88.dp)
+                            .scale(pulseScale),
+                    )
+                }
+                Text(
+                    text = "\u0421\u0435\u0442\u043a\u0430 Matrix",
+                    style = io.element.android.compound.theme.ElementTheme.typography.fontHeadingSmMedium,
+                )
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = bootLogs[bootLogIndex],
+                    style = io.element.android.compound.theme.ElementTheme.typography.fontBodySmRegular,
+                    color = io.element.android.compound.theme.ElementTheme.colors.textSecondary,
                 )
             }
         }

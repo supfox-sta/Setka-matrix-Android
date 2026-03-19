@@ -20,9 +20,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.element.android.compound.theme.ElementTheme
 import io.element.android.libraries.designsystem.modifiers.onKeyboardContextMenuAction
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.ui.strings.CommonStrings
 
@@ -36,7 +39,8 @@ fun MessageStateEventContainer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit = {},
 ) {
-    val backgroundColor = Color.Transparent
+    val backgroundColor = parseSetkaColorOrNull(LocalSetkaCustomization.current.serviceBubbleColorHex)
+        ?: ElementTheme.colors.bgSubtleSecondary.copy(alpha = 0.38f)
     val shape = RoundedCornerShape(CORNER_RADIUS)
     Surface(
         modifier = modifier

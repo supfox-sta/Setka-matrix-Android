@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,6 +25,9 @@ import io.element.android.features.messages.impl.timeline.model.virtual.Timeline
 import io.element.android.features.messages.impl.timeline.model.virtual.TimelineItemDaySeparatorModelProvider
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
+import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.components.Text
 
 @Composable
@@ -31,6 +35,11 @@ internal fun TimelineItemDaySeparatorView(
     model: TimelineItemDaySeparatorModel,
     modifier: Modifier = Modifier
 ) {
+    val customization = LocalSetkaCustomization.current
+    val bubbleColor = parseSetkaColorOrNull(customization.serviceBubbleColorHex)
+        ?: ElementTheme.colors.bgSubtleSecondary.copy(alpha = 0.38f)
+    val textColor = parseSetkaColorOrNull(customization.serviceTextColorHex)
+        ?: ElementTheme.colors.textPrimary
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -38,15 +47,21 @@ internal fun TimelineItemDaySeparatorView(
             .padding(16.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            modifier = Modifier
-                .semantics {
-                    heading()
-                },
-            text = model.formattedDate,
-            style = ElementTheme.typography.fontBodyMdMedium,
-            color = ElementTheme.colors.textPrimary,
-        )
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = bubbleColor,
+        ) {
+            Text(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .semantics {
+                        heading()
+                    },
+                text = model.formattedDate,
+                style = ElementTheme.typography.fontBodyMdMedium,
+                color = textColor,
+            )
+        }
     }
 }
 

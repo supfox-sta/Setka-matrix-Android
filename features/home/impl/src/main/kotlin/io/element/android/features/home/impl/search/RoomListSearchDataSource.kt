@@ -23,8 +23,11 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 private const val PAGE_SIZE = 30
 
@@ -35,6 +38,8 @@ class RoomListSearchDataSource(
     coroutineDispatchers: CoroutineDispatchers,
     private val roomSummaryFactory: RoomListRoomSummaryFactory,
 ) {
+    private val queryFlow = MutableStateFlow("")
+
     @AssistedFactory
     interface Factory {
         fun create(coroutineScope: CoroutineScope): RoomListSearchDataSource
@@ -46,12 +51,29 @@ class RoomListSearchDataSource(
         coroutineScope = coroutineScope
     )
 
-    val roomSummaries: Flow<ImmutableList<RoomListRoomSummary>> = roomList.summaries
-        .map { roomSummaries ->
-            roomSummaries
-                .map(roomSummaryFactory::create)
-                .toImmutableList()
+    init {
+        coroutineScope.launch {
+            roomList.updateVisibleRange(0..200)
         }
+    }
+
+    val roomSummaries: Flow<ImmutableList<RoomListRoomSummary>> = combine(
+        roomList.summaries,
+        queryFlow,
+    ) { roomSummaries, query ->
+        val normalizedQuery = query.trim().lowercase()
+        roomSummaries
+            .map(roomSummaryFactory::create)
+            .filter { summary ->
+                if (normalizedQuery.isBlank()) {
+                    true
+                } else {
+                    val name = summary.name.orEmpty().lowercase()
+                    name.contains(normalizedQuery)
+                }
+            }
+            .toImmutableList()
+    }
         .flowOn(coroutineDispatchers.computation)
 
     suspend fun updateVisibleRange(visibleRange: IntRange) {
@@ -59,11 +81,9 @@ class RoomListSearchDataSource(
     }
 
     suspend fun setSearchQuery(searchQuery: String) = coroutineScope {
-        val filter = if (searchQuery.isBlank()) {
-            RoomListFilter.None
-        } else {
-            RoomListFilter.NormalizedMatchRoomName(searchQuery)
-        }
-        roomList.updateFilter(filter)
+        queryFlow.value = searchQuery
+        // Keep remote filter disabled so local search can match renamed contact rooms and room ids.
+        roomList.updateFilter(RoomListFilter.None)
+        roomList.updateVisibleRange(0..500)
     }
 }

@@ -335,6 +335,10 @@ class LoggedInFlowNode(
                         backstack.push(NavTarget.Settings())
                     }
 
+                    override fun navigateToUserProfile(userId: UserId) {
+                        backstack.push(NavTarget.UserProfile(userId))
+                    }
+
                     override fun navigateToCreateRoom() {
                         backstack.push(NavTarget.CreateRoom)
                     }

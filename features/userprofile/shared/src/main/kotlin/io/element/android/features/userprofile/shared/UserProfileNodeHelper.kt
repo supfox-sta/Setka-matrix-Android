@@ -10,13 +10,11 @@ package io.element.android.features.userprofile.shared
 
 import android.content.Context
 import io.element.android.libraries.androidutils.R
-import io.element.android.libraries.androidutils.system.startSharePlainTextIntent
+import io.element.android.libraries.androidutils.system.openUrlInExternalApp
 import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
-import io.element.android.libraries.ui.strings.CommonStrings
-import timber.log.Timber
 
 class UserProfileNodeHelper(
     private val userId: UserId,
@@ -31,18 +29,11 @@ class UserProfileNodeHelper(
 
     fun onShareUser(
         context: Context,
-        permalinkBuilder: PermalinkBuilder,
+        _permalinkBuilder: PermalinkBuilder,
     ) {
-        val permalinkResult = permalinkBuilder.permalinkForUser(userId)
-        permalinkResult.onSuccess { permalink ->
-            context.startSharePlainTextIntent(
-                activityResultLauncher = null,
-                chooserTitle = context.getString(CommonStrings.action_share),
-                text = permalink,
-                noActivityFoundMessage = context.getString(R.string.error_no_compatible_app_found)
-            )
-        }.onFailure {
-            Timber.e(it)
-        }
+        context.openUrlInExternalApp(
+            url = "https://setka-matrix.ru",
+            errorMessage = context.getString(R.string.error_no_compatible_app_found),
+        )
     }
 }

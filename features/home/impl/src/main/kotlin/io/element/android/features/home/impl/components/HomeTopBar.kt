@@ -8,14 +8,19 @@
 
 package io.element.android.features.home.impl.components
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,18 +55,18 @@ import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.aSelectedSpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.anUnselectedSpaceFiltersState
 import io.element.android.libraries.designsystem.atomic.atoms.RedIndicatorAtom
-import io.element.android.libraries.designsystem.components.TopAppBarScrollBehaviorLayout
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.designsystem.components.avatar.AvatarType
-import io.element.android.libraries.designsystem.modifiers.backgroundVerticalGradient
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.aliasScreenTitle
+import io.element.android.libraries.designsystem.components.TopAppBarScrollBehaviorLayout
 import io.element.android.libraries.designsystem.theme.components.DropdownMenu
 import io.element.android.libraries.designsystem.theme.components.DropdownMenuItem
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
+import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.matrix.api.core.SessionId
@@ -69,6 +74,8 @@ import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.ui.components.aMatrixUserList
 import io.element.android.libraries.matrix.ui.model.getAvatarData
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.testtags.TestTags
 import io.element.android.libraries.testtags.testTag
 import io.element.android.libraries.ui.strings.CommonStrings
@@ -88,42 +95,84 @@ fun HomeTopBar(
     onOpenSettings: () -> Unit,
     onAccountSwitch: (SessionId) -> Unit,
     onCreateSpace: () -> Unit,
+    onToggleTheme: () -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
     canCreateSpaces: Boolean,
     canReportBug: Boolean,
     displayFilters: Boolean,
     filtersState: RoomListFiltersState,
     spaceFiltersState: SpaceFiltersState,
+    hasNetworkConnection: Boolean = true,
+    isUpdating: Boolean = false,
+    searchEntryBackgroundColor: Color = ElementTheme.colors.bgCanvasDefault,
     modifier: Modifier = Modifier,
 ) {
+    val customization = LocalSetkaCustomization.current
+    val topBarBackgroundColor = parseSetkaColorOrNull(customization.topBarBackgroundColorHex)
+        ?: ElementTheme.colors.bgCanvasDefault
+    val topBarContentColor = parseSetkaColorOrNull(customization.topBarTextColorHex)
+        ?: ElementTheme.colors.textPrimary
+    val enableAnimations = customization.enableChatAnimations
+
+    val tabTitle = when (selectedNavigationItem) {
+        HomeNavigationBarItem.Chats -> {
+            when (spaceFiltersState) {
+                is SpaceFiltersState.Selected -> spaceFiltersState.selectedFilter.spaceRoom.displayName
+                else -> stringResource(selectedNavigationItem.labelRes)
+            }
+        }
+        HomeNavigationBarItem.Spaces -> stringResource(selectedNavigationItem.labelRes)
+        HomeNavigationBarItem.Contacts -> stringResource(selectedNavigationItem.labelRes)
+    }
+    var showAppName by remember(tabTitle) { mutableStateOf(false) }
+    LaunchedEffect(tabTitle) {
+        showAppName = false
+        kotlinx.coroutines.delay(3000)
+        showAppName = true
+    }
+    LaunchedEffect(hasNetworkConnection, isUpdating) {
+        if (!hasNetworkConnection || isUpdating) {
+            showAppName = false
+        }
+    }
+    val displayedTitle = when {
+        !hasNetworkConnection -> stringResource(CommonStrings.common_offline)
+        isUpdating -> stringResource(CommonStrings.common_syncing)
+        showAppName -> "\u0421\u0435\u0442\u043a\u0430 Matrix"
+        else -> tabTitle
+    }
+
     Column(modifier) {
         TopAppBar(
             modifier = Modifier
-                .backgroundVerticalGradient(
-                    isVisible = !areSearchResultsDisplayed,
-                )
                 .statusBarsPadding(),
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-                scrolledContainerColor = Color.Transparent,
+                containerColor = topBarBackgroundColor.copy(alpha = 0.92f),
+                scrolledContainerColor = topBarBackgroundColor.copy(alpha = 0.96f),
+                titleContentColor = topBarContentColor,
+                navigationIconContentColor = topBarContentColor,
+                actionIconContentColor = topBarContentColor,
             ),
             title = {
-                val displayTitle = when (selectedNavigationItem) {
-                    HomeNavigationBarItem.Chats -> {
-                        when (spaceFiltersState) {
-                            is SpaceFiltersState.Selected -> spaceFiltersState.selectedFilter.spaceRoom.displayName
-                            else -> stringResource(selectedNavigationItem.labelRes)
-                        }
+                if (enableAnimations) {
+                    Crossfade(targetState = displayedTitle, label = "homeTopBarTitle") { animatedTitle ->
+                        Text(
+                            modifier = Modifier.semantics {
+                                heading()
+                            },
+                            style = ElementTheme.typography.aliasScreenTitle,
+                            text = animatedTitle,
+                        )
                     }
-                    HomeNavigationBarItem.Spaces -> stringResource(selectedNavigationItem.labelRes)
+                } else {
+                    Text(
+                        modifier = Modifier.semantics {
+                            heading()
+                        },
+                        style = ElementTheme.typography.aliasScreenTitle,
+                        text = displayedTitle,
+                    )
                 }
-                Text(
-                    modifier = Modifier.semantics {
-                        heading()
-                    },
-                    style = ElementTheme.typography.aliasScreenTitle,
-                    text = displayTitle,
-                )
             },
             navigationIcon = {
                 NavigationIcon(
@@ -137,14 +186,15 @@ fun HomeTopBar(
                 when (selectedNavigationItem) {
                     HomeNavigationBarItem.Chats -> RoomListMenuItems(
                         onToggleSearch = onToggleSearch,
+                        onToggleTheme = onToggleTheme,
                         onMenuActionClick = onMenuActionClick,
                         canReportBug = canReportBug,
-                        spaceFiltersState = spaceFiltersState,
                     )
                     HomeNavigationBarItem.Spaces -> SpacesMenuItems(
                         canCreateSpaces = canCreateSpaces,
                         onCreateSpace = onCreateSpace
                     )
+                    HomeNavigationBarItem.Contacts -> Unit
                 }
             },
             // We want a 16dp left padding for the navigationIcon :
@@ -154,10 +204,16 @@ fun HomeTopBar(
             windowInsets = WindowInsets(left = 4.dp),
         )
         if (displayFilters) {
-            TopAppBarScrollBehaviorLayout(scrollBehavior = scrollBehavior) {
-                RoomListFiltersView(
-                    state = filtersState,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            TopAppBarScrollBehaviorLayout(
+                scrollBehavior = scrollBehavior,
+                backgroundColor = Color.Transparent,
+            ) {
+                SearchEntryRow(
+                    onClick = onToggleSearch,
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .fillMaxWidth(),
+                    containerColor = searchEntryBackgroundColor.copy(alpha = 0.92f),
                 )
             }
         }
@@ -165,12 +221,50 @@ fun HomeTopBar(
 }
 
 @Composable
+private fun SearchEntryRow(
+    onClick: () -> Unit,
+    containerColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(99.dp),
+        color = containerColor,
+        border = androidx.compose.foundation.BorderStroke(1.dp, ElementTheme.colors.borderInteractiveSecondary),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = CompoundIcons.Search(),
+                contentDescription = null,
+                tint = ElementTheme.colors.iconSecondary,
+            )
+            Text(
+                text = stringResource(CommonStrings.action_search),
+                color = ElementTheme.colors.textSecondary,
+            )
+        }
+    }
+}
+
+@Composable
 private fun RoomListMenuItems(
     onToggleSearch: () -> Unit,
+    onToggleTheme: () -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     canReportBug: Boolean,
-    spaceFiltersState: SpaceFiltersState,
 ) {
+    IconButton(onClick = onToggleTheme) {
+        Icon(
+            imageVector = CompoundIcons.Settings(),
+            contentDescription = stringResource(CommonStrings.common_settings),
+        )
+    }
     IconButton(
         onClick = onToggleSearch,
     ) {
@@ -179,7 +273,6 @@ private fun RoomListMenuItems(
             contentDescription = stringResource(CommonStrings.action_search),
         )
     }
-    SpaceFilterButton(spaceFiltersState = spaceFiltersState)
     if (RoomListConfig.HAS_DROP_DOWN_MENU) {
         var showMenu by remember { mutableStateOf(false) }
         IconButton(
@@ -366,6 +459,7 @@ internal fun HomeTopBarPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
+        onToggleTheme = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -389,6 +483,7 @@ internal fun HomeTopBarSpaceFiltersSelectedPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
+        onToggleTheme = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -412,6 +507,7 @@ internal fun HomeTopBarSpacesPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
+        onToggleTheme = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = false,
@@ -435,6 +531,7 @@ internal fun HomeTopBarWithIndicatorPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
+        onToggleTheme = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -458,6 +555,7 @@ internal fun HomeTopBarMultiAccountPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
+        onToggleTheme = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,

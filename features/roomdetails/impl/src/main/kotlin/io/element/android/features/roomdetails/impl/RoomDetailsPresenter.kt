@@ -14,9 +14,11 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
 import im.vector.app.features.analytics.plan.Interaction
 import io.element.android.features.knockrequests.api.KnockRequestPermissions
@@ -51,6 +53,7 @@ import io.element.android.libraries.matrix.ui.room.getCurrentRoomMember
 import io.element.android.libraries.matrix.ui.room.getDirectRoomMember
 import io.element.android.libraries.matrix.ui.room.roomMemberIdentityStateChange
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
+import io.element.android.libraries.preferences.api.store.RoomWallpaperStyles
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analyticsproviders.api.trackers.captureInteraction
@@ -104,6 +107,24 @@ class RoomDetailsPresenter(
         val roomType = getRoomType(dmMember, currentMember)
         val roomCallState = roomCallStatePresenter.present()
         val joinedMemberCount by remember { derivedStateOf { roomInfo.joinedMembersCount } }
+        val canToggleContact by remember { derivedStateOf { joinedMemberCount == 2L } }
+        var contactRoomIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+        val isInContacts by remember(canToggleContact, contactRoomIds) {
+            derivedStateOf { canToggleContact && contactRoomIds.contains(room.roomId.value) }
+        }
+        val roomWallpaperStyle by appPreferencesStore.getRoomWallpaperFlow(room.roomId.value).collectAsState(initial = null)
+
+        fun refreshContacts() = scope.launch(dispatchers.io) {
+            contactRoomIds = client.getContactList()
+                .getOrNull()
+                ?.map { it.roomId.value }
+                ?.toSet()
+                .orEmpty()
+        }
+
+        LaunchedEffect(room.roomId.value) {
+            refreshContacts()
+        }
 
         val topicState = remember(permissions.editDetailsPermissions.canEditTopic, roomTopic, roomType) {
             val topic = roomTopic
@@ -151,6 +172,34 @@ class RoomDetailsPresenter(
                     }
                 }
                 is RoomDetailsEvent.SetFavorite -> scope.setFavorite(event.isFavorite)
+                RoomDetailsEvent.ToggleContact -> {
+                    if (!canToggleContact) return
+                    val displayName = roomName.ifBlank { dmMember?.displayName }
+                    scope.toggleContact(
+                        isInContacts = isInContacts,
+                        roomId = room.roomId,
+                        displayName = displayName,
+                        onSuccess = { refreshContacts() },
+                    )
+                }
+                is RoomDetailsEvent.SetWallpaper -> {
+                    scope.launch(dispatchers.io) {
+                        val normalizedStyle = when (event.style) {
+                            null,
+                            RoomWallpaperStyles.AUTO -> RoomWallpaperStyles.AUTO
+                            RoomWallpaperStyles.LIGHT -> RoomWallpaperStyles.LIGHT
+                            RoomWallpaperStyles.DARK -> RoomWallpaperStyles.DARK
+                            else -> {
+                                if (RoomWallpaperStyles.customUri(event.style) != null || RoomWallpaperStyles.customColor(event.style) != null) {
+                                    event.style
+                                } else {
+                                    RoomWallpaperStyles.AUTO
+                                }
+                            }
+                        }
+                        appPreferencesStore.setRoomWallpaper(room.roomId.value, normalizedStyle)
+                    }
+                }
                 is RoomDetailsEvent.CopyToClipboard -> {
                     clipboardHelper.copyPlainText(event.text)
                     snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_copied_to_clipboard))
@@ -185,6 +234,9 @@ class RoomDetailsPresenter(
             roomMemberDetailsState = roomMemberDetailsState,
             leaveRoomState = leaveRoomState,
             roomNotificationSettings = roomNotificationSettingsState.roomNotificationSettings(),
+            canToggleContact = canToggleContact,
+            isInContacts = isInContacts,
+            roomWallpaperStyle = roomWallpaperStyle,
             isFavorite = isFavorite,
             displayRolesAndPermissionsSettings = !isDm && permissions.canEditRolesAndPermissions,
             isPublic = joinRule == JoinRule.Public,
@@ -259,5 +311,24 @@ class RoomDetailsPresenter(
             .onSuccess {
                 analyticsService.captureInteraction(Interaction.Name.MobileRoomFavouriteToggle)
             }
+    }
+
+    private fun CoroutineScope.toggleContact(
+        isInContacts: Boolean,
+        roomId: io.element.android.libraries.matrix.api.core.RoomId,
+        displayName: String?,
+        onSuccess: () -> Unit,
+    ) = launch(dispatchers.io) {
+        val result = if (isInContacts) {
+            client.deleteContact(roomId)
+        } else {
+            client.putContact(
+                roomId = roomId,
+                displayName = displayName,
+                email = null,
+                phone = null,
+            )
+        }
+        result.onSuccess { onSuccess() }
     }
 }

@@ -170,4 +170,10 @@
   <string name="screen_security_and_privacy_room_visibility_section_footer">"Адреса позволяют находить и получать доступ к комнатам и пространствам. Это также гарантирует, что вы сможете легко поделиться ими с другими."</string>
   <string name="screen_security_and_privacy_room_visibility_section_header">"Видимость"</string>
   <string name="screen_security_and_privacy_title">"Безопасность и конфиденциальность"</string>
+  <string name="screen_room_details_add_to_contacts">"Добавить в контакты"</string>
+  <string name="screen_room_details_remove_from_contacts">"Убрать из контактов"</string>
+  <string name="screen_room_details_wallpaper_auto">"Авто"</string>
+  <string name="screen_room_details_wallpaper_light">"Светлые"</string>
+  <string name="screen_room_details_wallpaper_dark">"Темные"</string>
+  <string name="screen_room_details_wallpaper_custom">"Свои"</string>
 </resources>

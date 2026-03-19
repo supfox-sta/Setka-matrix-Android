@@ -52,4 +52,6 @@
   <string name="screen_roomlist_tombstoned_room_description">"Эта комната была обновлена"</string>
   <string name="session_verification_banner_message">"Похоже, вы используете новое устройство. Чтобы получить доступ к зашифрованным сообщениям пройдите подтверждение с другим устройством."</string>
   <string name="session_verification_banner_title">"Подтвердите, что это вы"</string>
+  <string name="screen_home_tab_contacts">"Контакты"</string>
+  <string name="screen_home_contacts_empty">"Пока нет контактов"</string>
 </resources>

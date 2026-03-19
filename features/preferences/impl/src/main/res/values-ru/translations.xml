@@ -79,4 +79,6 @@
   <string name="troubleshoot_notifications_entry_point_push_history_title">"История уведомлений"</string>
   <string name="troubleshoot_notifications_entry_point_section">"Устранение неполадок"</string>
   <string name="troubleshoot_notifications_entry_point_title">"Уведомления об устранении неполадок"</string>
+  <string name="screen_preferences_customization_title">"\u041a\u0430\u0441\u0442\u043e\u043c\u0438\u0437\u0430\u0446\u0438\u044f \u0447\u0430\u0442\u0430"</string>
+  <string name="screen_preferences_customization_description">"\u0426\u0432\u0435\u0442\u0430, \u043e\u0431\u043e\u0438, \u0441\u0442\u0438\u043b\u044c \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u0439 \u0438 \u0430\u043d\u0438\u043c\u0430\u0446\u0438\u0438."</string>
 </resources>

@@ -18,6 +18,7 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.RoomIdOrAlias
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.contact.MatrixContact
 import io.element.android.libraries.matrix.api.createroom.CreateRoomParameters
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 import io.element.android.libraries.matrix.api.linknewdevice.LinkDesktopHandler
@@ -152,6 +153,9 @@ interface MatrixClient {
      * Execute generic GET requests through the SDKs internal HTTP client.
      */
     suspend fun getUrl(url: String): Result<ByteArray>
+    suspend fun getContactList(): Result<List<MatrixContact>>
+    suspend fun putContact(roomId: RoomId, displayName: String?, email: String?, phone: String?): Result<Unit>
+    suspend fun deleteContact(roomId: RoomId): Result<Unit>
 
     /**
      * Get a room preview for a given room ID or alias. This is especially useful for rooms that the user is not a member of, or hasn't joined yet.

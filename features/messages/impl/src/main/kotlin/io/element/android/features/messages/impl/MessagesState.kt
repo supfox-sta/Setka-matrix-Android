@@ -53,6 +53,7 @@ data class MessagesState(
     val enableTextFormatting: Boolean,
     val roomCallState: RoomCallState,
     val appName: String,
+    val roomWallpaperStyle: String?,
     val pinnedMessagesBannerState: PinnedMessagesBannerState,
     val dmUserVerificationState: IdentityState?,
     val roomMemberModerationState: RoomMemberModerationState,

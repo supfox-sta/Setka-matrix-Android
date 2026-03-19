@@ -17,6 +17,7 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.RoomIdOrAlias
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.contact.MatrixContact
 import io.element.android.libraries.matrix.api.createroom.CreateRoomParameters
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 import io.element.android.libraries.matrix.api.linknewdevice.LinkDesktopHandler
@@ -94,6 +95,9 @@ class FakeMatrixClient(
     private val clearCacheLambda: () -> Unit = { lambdaError() },
     private val userIdServerNameLambda: () -> String = { lambdaError() },
     private val getUrlLambda: (String) -> Result<ByteArray> = { lambdaError() },
+    private val getContactListLambda: () -> Result<List<MatrixContact>> = { lambdaError() },
+    private val putContactLambda: (RoomId, String?, String?, String?) -> Result<Unit> = { _, _, _, _ -> lambdaError() },
+    private val deleteContactLambda: (RoomId) -> Result<Unit> = { lambdaError() },
     private val canDeactivateAccountResult: () -> Boolean = { lambdaError() },
     private val deactivateAccountResult: (String, Boolean) -> Result<Unit> = { _, _ -> lambdaError() },
     private val currentSlidingSyncVersionLambda: () -> Result<SlidingSyncVersion> = { lambdaError() },
@@ -335,6 +339,18 @@ class FakeMatrixClient(
 
     override suspend fun getUrl(url: String): Result<ByteArray> {
         return getUrlLambda(url)
+    }
+
+    override suspend fun getContactList(): Result<List<MatrixContact>> {
+        return getContactListLambda()
+    }
+
+    override suspend fun putContact(roomId: RoomId, displayName: String?, email: String?, phone: String?): Result<Unit> {
+        return putContactLambda(roomId, displayName, email, phone)
+    }
+
+    override suspend fun deleteContact(roomId: RoomId): Result<Unit> {
+        return deleteContactLambda(roomId)
     }
 
     override suspend fun currentSlidingSyncVersion(): Result<SlidingSyncVersion> {

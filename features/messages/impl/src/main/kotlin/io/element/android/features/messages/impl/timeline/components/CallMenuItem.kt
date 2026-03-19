@@ -60,6 +60,47 @@ internal fun CallMenuItem(
 }
 
 @Composable
+internal fun AudioCallMenuItem(
+    roomCallState: RoomCallState,
+    onJoinAudioCallClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    when (roomCallState) {
+        RoomCallState.Unavailable -> {
+            Box(modifier)
+        }
+        is RoomCallState.StandBy -> {
+            IconButton(
+                modifier = modifier,
+                onClick = onJoinAudioCallClick,
+                enabled = roomCallState.canStartCall,
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.VoiceCallSolid(),
+                    contentDescription = stringResource(CommonStrings.action_audio_call),
+                )
+            }
+        }
+        is RoomCallState.OnGoing -> {
+            if (!roomCallState.isUserLocallyInTheCall) {
+                IconButton(
+                    modifier = modifier,
+                    onClick = onJoinAudioCallClick,
+                    enabled = roomCallState.canJoinCall,
+                ) {
+                    Icon(
+                        imageVector = CompoundIcons.VoiceCallSolid(),
+                        contentDescription = stringResource(CommonStrings.action_audio_call),
+                    )
+                }
+            } else {
+                Box(modifier)
+            }
+        }
+    }
+}
+
+@Composable
 private fun StandByCallMenuItem(
     roomCallState: RoomCallState.StandBy,
     onJoinCallClick: () -> Unit,

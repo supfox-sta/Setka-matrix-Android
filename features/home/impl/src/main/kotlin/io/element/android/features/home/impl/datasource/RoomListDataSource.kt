@@ -71,6 +71,11 @@ class RoomListDataSource(
         source = RoomList.Source.All,
         coroutineScope = sessionCoroutineScope
     )
+    init {
+        sessionCoroutineScope.launch {
+            roomList.updateVisibleRange(0..160, PAGINATION_THRESHOLD)
+        }
+    }
     private val _roomSummariesFlow = MutableSharedFlow<ImmutableList<RoomListRoomSummary>>(replay = 1)
 
     private val lock = Mutex()

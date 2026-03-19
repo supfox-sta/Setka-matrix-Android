@@ -68,6 +68,7 @@ import io.element.android.libraries.designsystem.utils.snackbar.collectSnackbarM
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
+import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.toThreadId
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
@@ -81,6 +82,7 @@ import io.element.android.libraries.matrix.api.room.powerlevels.permissionsAsSta
 import io.element.android.libraries.matrix.api.timeline.item.event.EventOrTransactionId
 import io.element.android.libraries.matrix.ui.messages.reply.map
 import io.element.android.libraries.matrix.ui.model.getAvatarData
+import io.element.android.libraries.preferences.api.store.AppPreferencesStore
 import io.element.android.libraries.matrix.ui.room.getDirectRoomMember
 import io.element.android.libraries.recentemojis.api.AddRecentEmoji
 import io.element.android.libraries.textcomposer.model.MessageComposerMode
@@ -113,6 +115,7 @@ class MessagesPresenter(
     private val roomMemberModerationPresenter: Presenter<RoomMemberModerationState>,
     private val snackbarDispatcher: SnackbarDispatcher,
     private val dispatchers: CoroutineDispatchers,
+    private val matrixClient: MatrixClient,
     private val clipboardHelper: ClipboardHelper,
     private val htmlConverterProvider: HtmlConverterProvider,
     private val buildMeta: BuildMeta,
@@ -123,6 +126,7 @@ class MessagesPresenter(
     private val featureFlagService: FeatureFlagService,
     private val addRecentEmoji: AddRecentEmoji,
     private val markAsFullyRead: MarkAsFullyRead,
+    private val appPreferencesStore: AppPreferencesStore,
     @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
 ) : Presenter<MessagesState> {
     @AssistedFactory
@@ -171,8 +175,30 @@ class MessagesPresenter(
             perms.userEventPermissions()
         }
 
+        var contactDisplayName by remember(room.roomId.value) { mutableStateOf<String?>(null) }
+        LaunchedEffect(room.roomId.value) {
+            contactDisplayName = withContext(dispatchers.io) {
+                matrixClient.getContactList()
+                    .getOrNull()
+                    ?.firstOrNull { it.roomId == room.roomId }
+                    ?.displayName
+                    ?.takeIf { it.isNotBlank() }
+            }
+        }
+
+        val effectiveRoomName by remember(roomInfo.name, roomInfo.isDm, contactDisplayName) {
+            derivedStateOf {
+                if (roomInfo.isDm) contactDisplayName ?: roomInfo.name else roomInfo.name
+            }
+        }
+
         val roomAvatar by remember {
-            derivedStateOf { roomInfo.avatarData() }
+            derivedStateOf { roomInfo.avatarData(overrideName = effectiveRoomName) }
+        }
+        val roomWallpaperStyleOverride by appPreferencesStore.getRoomWallpaperFlow(room.roomId.value).collectAsState(initial = null)
+        val defaultRoomWallpaperStyle by appPreferencesStore.getCustomizationDefaultRoomWallpaperStyleFlow().collectAsState(initial = null)
+        val roomWallpaperStyle by remember(roomWallpaperStyleOverride, defaultRoomWallpaperStyle) {
+            derivedStateOf { roomWallpaperStyleOverride ?: defaultRoomWallpaperStyle }
         }
         val heroes by remember {
             derivedStateOf { roomInfo.heroes().toImmutableList() }
@@ -277,7 +303,7 @@ class MessagesPresenter(
 
         return MessagesState(
             roomId = room.roomId,
-            roomName = roomInfo.name,
+            roomName = effectiveRoomName,
             roomAvatar = roomAvatar,
             heroes = heroes,
             userEventPermissions = userEventPermissions,
@@ -298,6 +324,7 @@ class MessagesPresenter(
             enableTextFormatting = MessageComposerConfig.ENABLE_RICH_TEXT_EDITING,
             roomCallState = roomCallState,
             appName = buildMeta.applicationName,
+            roomWallpaperStyle = roomWallpaperStyle,
             pinnedMessagesBannerState = pinnedMessagesBannerState,
             dmUserVerificationState = dmUserVerificationState,
             roomMemberModerationState = roomMemberModerationState,
@@ -319,10 +346,10 @@ class MessagesPresenter(
         return SharedHistoryIcon.NONE
     }
 
-    private fun RoomInfo.avatarData(): AvatarData {
+    private fun RoomInfo.avatarData(overrideName: String?): AvatarData {
         return AvatarData(
             id = id.value,
-            name = name,
+            name = overrideName ?: name,
             url = avatarUrl,
             size = AvatarSize.TimelineRoom
         )

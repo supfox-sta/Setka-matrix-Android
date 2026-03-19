@@ -24,6 +24,7 @@ import io.element.android.features.home.impl.components.RoomListMenuAction
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.model.RoomSummaryDisplayType
 import io.element.android.libraries.matrix.api.core.RoomId
+import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.tests.testutils.EnsureNeverCalled
 import io.element.android.tests.testutils.EnsureNeverCalledWithParam
@@ -269,6 +270,7 @@ class RoomListViewTest {
 private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomListView(
     state: RoomListState,
     onRoomClick: (RoomId) -> Unit = EnsureNeverCalledWithParam(),
+    onUserProfileClick: (UserId) -> Unit = EnsureNeverCalledWithParam(),
     onSettingsClick: () -> Unit = EnsureNeverCalled(),
     onSetUpRecoveryClick: () -> Unit = EnsureNeverCalled(),
     onConfirmRecoveryKeyClick: () -> Unit = EnsureNeverCalled(),
@@ -283,10 +285,14 @@ private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomL
         HomeView(
             homeState = aHomeState(roomListState = state),
             onRoomClick = onRoomClick,
+            onUserProfileClick = onUserProfileClick,
             onSettingsClick = onSettingsClick,
             onSetUpRecoveryClick = onSetUpRecoveryClick,
             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
             onStartChatClick = onCreateRoomClick,
+            onSearchUsers = { emptyList() },
+            onAddContact = { _, _ -> false },
+            onUpdateContactName = { _, _ -> false },
             onCreateSpaceClick = onCreateSpaceClick,
             onRoomSettingsClick = onRoomSettingsClick,
             onMenuActionClick = onMenuActionClick,

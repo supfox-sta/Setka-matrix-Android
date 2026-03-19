@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shape
@@ -44,6 +47,8 @@ import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.text.toDp
 import io.element.android.libraries.designsystem.text.toPx
+import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
+import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.messageFromMeBackground
 import io.element.android.libraries.designsystem.theme.messageFromOtherBackground
@@ -51,8 +56,8 @@ import io.element.android.libraries.testtags.TestTags
 import io.element.android.libraries.testtags.testTag
 import io.element.android.libraries.ui.utils.time.isTalkbackActive
 
-private val BUBBLE_RADIUS = 12.dp
 private val avatarRadius = AvatarSize.TimelineSender.dp / 2
+val LocalBubbleBaseColor = staticCompositionLocalOf { Color.Transparent }
 
 private val MIN_BUBBLE_WIDTH = 80.dp
 
@@ -79,8 +84,18 @@ fun MessageEventBubble(
     }
 
     // Ignore state.isHighlighted for now, we need a design decision on it.
-    val backgroundBubbleColor = MessageEventBubbleDefaults.backgroundBubbleColor(state.isMine)
-    val bubbleShape = remember(state) { MessageEventBubbleDefaults.shape(state.cutTopStart, state.groupPosition, state.isMine) }
+    val bubbleRadius = LocalSetkaCustomization.current.bubbleRadiusDp.dp
+    val bubbleWidthRatio = LocalSetkaCustomization.current.bubbleWidthPercent / 100f
+    val backgroundBubbleBrush = MessageEventBubbleDefaults.backgroundBubbleBrush(state.isMine)
+    val bubbleBaseColor = MessageEventBubbleDefaults.backgroundBubbleColor(state.isMine)
+    val bubbleShape = remember(state, bubbleRadius) {
+        MessageEventBubbleDefaults.shape(
+            cutTopStart = state.cutTopStart,
+            groupPosition = state.groupPosition,
+            isMine = state.isMine,
+            bubbleRadius = bubbleRadius,
+        )
+    }
     val radiusPx = (avatarRadius + SENDER_AVATAR_BORDER_WIDTH).toPx()
     val yOffsetPx = -(NEGATIVE_MARGIN_FOR_BUBBLE + avatarRadius).toPx()
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -92,7 +107,7 @@ fun MessageEventBubble(
                 compositingStrategy = CompositingStrategy.Offscreen
             }
             .drawWithContent {
-                drawRect(backgroundBubbleColor)
+                drawRect(backgroundBubbleBrush)
                 drawContent()
                 if (state.cutTopStart) {
                     drawCircle(
@@ -115,56 +130,75 @@ fun MessageEventBubble(
                 .testTag(TestTags.messageBubble)
                 .widthIn(
                     min = MIN_BUBBLE_WIDTH,
-                    max = (constraints.maxWidth * MessageEventBubbleDefaults.BUBBLE_WIDTH_RATIO)
+                    max = (constraints.maxWidth * bubbleWidthRatio)
                         .toInt()
                         .toDp()
                 )
                 .then(clickableModifier),
-            content = content,
-        )
+        ) {
+            CompositionLocalProvider(LocalBubbleBaseColor provides bubbleBaseColor) {
+                content()
+            }
+        }
     }
 }
 
 object MessageEventBubbleDefaults {
-    fun shape(cutTopStart: Boolean, groupPosition: TimelineItemGroupPosition, isMine: Boolean): Shape {
-        val topLeftCorner = if (cutTopStart) 0.dp else BUBBLE_RADIUS
+    fun shape(
+        cutTopStart: Boolean,
+        groupPosition: TimelineItemGroupPosition,
+        isMine: Boolean,
+        bubbleRadius: androidx.compose.ui.unit.Dp,
+    ): Shape {
+        val topLeftCorner = if (cutTopStart) 0.dp else bubbleRadius
         return when (groupPosition) {
             TimelineItemGroupPosition.First -> if (isMine) {
-                RoundedCornerShape(BUBBLE_RADIUS, BUBBLE_RADIUS, 0.dp, BUBBLE_RADIUS)
+                RoundedCornerShape(bubbleRadius, bubbleRadius, 0.dp, bubbleRadius)
             } else {
-                RoundedCornerShape(topLeftCorner, BUBBLE_RADIUS, BUBBLE_RADIUS, 0.dp)
+                RoundedCornerShape(topLeftCorner, bubbleRadius, bubbleRadius, 0.dp)
             }
             TimelineItemGroupPosition.Middle -> if (isMine) {
-                RoundedCornerShape(BUBBLE_RADIUS, 0.dp, 0.dp, BUBBLE_RADIUS)
+                RoundedCornerShape(bubbleRadius, 0.dp, 0.dp, bubbleRadius)
             } else {
-                RoundedCornerShape(0.dp, BUBBLE_RADIUS, BUBBLE_RADIUS, 0.dp)
+                RoundedCornerShape(0.dp, bubbleRadius, bubbleRadius, 0.dp)
             }
             TimelineItemGroupPosition.Last -> if (isMine) {
-                RoundedCornerShape(BUBBLE_RADIUS, 0.dp, BUBBLE_RADIUS, BUBBLE_RADIUS)
+                RoundedCornerShape(bubbleRadius, 0.dp, bubbleRadius, bubbleRadius)
             } else {
-                RoundedCornerShape(0.dp, BUBBLE_RADIUS, BUBBLE_RADIUS, BUBBLE_RADIUS)
+                RoundedCornerShape(0.dp, bubbleRadius, bubbleRadius, bubbleRadius)
             }
             TimelineItemGroupPosition.None ->
                 RoundedCornerShape(
                     topLeftCorner,
-                    BUBBLE_RADIUS,
-                    BUBBLE_RADIUS,
-                    BUBBLE_RADIUS
+                    bubbleRadius,
+                    bubbleRadius,
+                    bubbleRadius
                 )
         }
     }
 
     @Composable
     fun backgroundBubbleColor(isMine: Boolean): Color {
+        val customization = LocalSetkaCustomization.current
         return if (isMine) {
-            ElementTheme.colors.messageFromMeBackground
+            parseSetkaColorOrNull(customization.outgoingBubbleColorHex) ?: ElementTheme.colors.messageFromMeBackground
         } else {
-            ElementTheme.colors.messageFromOtherBackground
+            parseSetkaColorOrNull(customization.incomingBubbleColorHex) ?: ElementTheme.colors.messageFromOtherBackground
         }
     }
 
-    // Design says: The maximum width of a bubble is still 3/4 of the screen width. But try with 78% now.
-    const val BUBBLE_WIDTH_RATIO = 0.78f
+    @Composable
+    fun backgroundBubbleBrush(isMine: Boolean): Brush {
+        val customization = LocalSetkaCustomization.current
+        val from = backgroundBubbleColor(isMine)
+        val to = if (isMine) {
+            parseSetkaColorOrNull(customization.outgoingBubbleGradientToColorHex)
+        } else {
+            parseSetkaColorOrNull(customization.incomingBubbleGradientToColorHex)
+        } ?: from
+        return Brush.verticalGradient(colors = listOf(from, to))
+    }
+
 }
 
 @PreviewsDayNight

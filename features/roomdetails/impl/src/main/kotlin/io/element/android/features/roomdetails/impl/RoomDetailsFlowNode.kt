@@ -232,6 +232,16 @@ class RoomDetailsFlowNode(
                         elementCallEntryPoint.startCall(inputs)
                     }
 
+                    override fun navigateToRoomAudioCall() {
+                        val inputs = CallType.RoomCall(
+                            sessionId = room.sessionId,
+                            roomId = room.roomId,
+                            isAudioOnly = true,
+                        )
+                        analyticsService.captureInteraction(Interaction.Name.MobileRoomCallButton)
+                        elementCallEntryPoint.startCall(inputs)
+                    }
+
                     override fun navigateToReportRoom() {
                         backstack.push(NavTarget.ReportRoom)
                     }
