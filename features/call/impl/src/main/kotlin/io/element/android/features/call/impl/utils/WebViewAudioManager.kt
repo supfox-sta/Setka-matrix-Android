@@ -14,6 +14,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
 import android.os.PowerManager
+import android.os.SystemClock
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.annotation.RequiresApi
@@ -43,7 +44,11 @@ import kotlin.time.Duration.Companion.seconds
 class WebViewAudioManager(
     private val webView: WebView,
     private val coroutineScope: CoroutineScope,
+    private val preferEarpieceOnStart: Boolean,
+    private val proximitySensorEnabled: Boolean,
     private val onInvalidAudioDeviceAdded: (InvalidAudioDeviceReason) -> Unit,
+    private val onSpeakerModeChanged: (Boolean) -> Unit = {},
+    private val onRemoteVideoStateChanged: (Boolean) -> Unit = {},
 ) {
     private val json by lazy {
         Json {
@@ -66,7 +71,23 @@ class WebViewAudioManager(
     /**
      * The list of device types that are considered as communication devices, sorted by likelihood of it being used for communication.
      */
-    private val wantedDeviceTypes = listOf(
+    private val wantedDeviceTypes = if (preferEarpieceOnStart) {
+        listOf(
+            // Paired bluetooth device with microphone
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            // USB devices which can play or record audio
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_ACCESSORY,
+            // Wired audio devices
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            // For audio-only calls, favor handset mode before loudspeaker so proximity sensor can work immediately.
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        )
+    } else {
+        listOf(
         // Paired bluetooth device with microphone
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
         // USB devices which can play or record audio
@@ -80,7 +101,8 @@ class WebViewAudioManager(
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
         // The built-in earpiece of the device
         AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
-    )
+        )
+    }
 
     private val audioDeviceComparator = Comparator<AudioDeviceInfo> { a, b ->
         // If the device type is not in the wantedDeviceTypes list, we give it a high index, (i.e. low priority)
@@ -241,7 +263,8 @@ class WebViewAudioManager(
         audioManager.mode = AudioManager.MODE_NORMAL
 
         if (!hasRegisteredCallbacks) {
-            Timber.w("Audio: tried to disable webview in-call audio mode without registering callbacks")
+            Timber.d("Audio: stop requested before callbacks registration; skipping callback unregister")
+            onSpeakerModeChanged(false)
             return
         }
 
@@ -251,6 +274,7 @@ class WebViewAudioManager(
         }
 
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+        onSpeakerModeChanged(false)
     }
 
     /**
@@ -282,7 +306,8 @@ class WebViewAudioManager(
 
                     hasRegisteredCallbacks = true
                 }
-            }
+            },
+            onRemoteVideoStateChangedCallback = onRemoteVideoStateChanged,
         )
         Timber.d("Setting androidNativeBridge javascript interface in webview")
         webView.addJavascriptInterface(webViewAudioDeviceSelectedCallback, "androidNativeBridge")
@@ -298,6 +323,80 @@ class WebViewAudioManager(
         webView.evaluateJavascript("controls.onAudioPlaybackStarted = () => { androidNativeBridge.onTrackReady(); };", null)
         Timber.d("Adding callback in controls.onOutputDeviceSelect")
         webView.evaluateJavascript("controls.onOutputDeviceSelect = (id) => { androidNativeBridge.setOutputDevice(id); };", null)
+        Timber.d("Adding callback in controls.onRemoteVideoStateChanged")
+        webView.evaluateJavascript(
+            """
+            (function () {
+                if (window.__setkaRenderedVideoObserverInstalled) return;
+                window.__setkaRenderedVideoObserverInstalled = true;
+                const observedVideos = new WeakSet();
+                const report = (enabled) => {
+                    try {
+                        androidNativeBridge.onRemoteVideoStateChanged(Boolean(enabled));
+                    } catch (e) {}
+                };
+                const isVisible = (video) => {
+                    const style = window.getComputedStyle(video);
+                    if (style.display === 'none' || style.visibility === 'hidden') return false;
+                    const rect = video.getBoundingClientRect();
+                    return rect.width > 1 && rect.height > 1;
+                };
+                const hasActiveVideoTrack = (video) => {
+                    const stream = video.srcObject;
+                    const tracks = stream?.getVideoTracks?.() ?? [];
+                    if (tracks.some((track) => track.readyState === 'live')) {
+                        return true;
+                    }
+                    return video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || video.videoWidth > 0;
+                };
+                const hasRenderedVideo = () => {
+                    const videos = Array.from(document.querySelectorAll('[data-testid="video"]'));
+                    return videos.some((video) => {
+                        return isVisible(video) && hasActiveVideoTrack(video);
+                    });
+                };
+                const scheduleNotify = () => {
+                    window.requestAnimationFrame(notifyIfChanged);
+                };
+                const attachVideoListeners = () => {
+                    document.querySelectorAll('[data-testid="video"]').forEach((video) => {
+                        if (observedVideos.has(video)) return;
+                        observedVideos.add(video);
+                        ['loadedmetadata', 'loadeddata', 'canplay', 'playing', 'pause', 'emptied', 'resize'].forEach((eventName) => {
+                            video.addEventListener(eventName, scheduleNotify);
+                        });
+                    });
+                };
+                let previous = null;
+                const notifyIfChanged = () => {
+                    attachVideoListeners();
+                    const next = hasRenderedVideo();
+                    if (next !== previous) {
+                        previous = next;
+                        report(next);
+                    }
+                };
+                notifyIfChanged();
+                const observerTarget = document.body || document.documentElement;
+                if (observerTarget) {
+                    new MutationObserver(() => scheduleNotify()).observe(observerTarget, {
+                        childList: true,
+                        subtree: true,
+                        attributes: true,
+                        attributeFilter: ['style', 'class', 'data-visible', 'src'],
+                    });
+                }
+                // Fallback polling for late-attached streams.
+                window.setInterval(notifyIfChanged, 300);
+                window.controls = window.controls || {};
+                window.controls.onRemoteVideoStateChanged = (enabled) => {
+                    previous = Boolean(enabled);
+                    report(previous);
+                };
+            })();
+            """.trimIndent(),
+            null,
+        )
     }
 
     /**
@@ -355,6 +454,8 @@ class WebViewAudioManager(
         coroutineScope.launch(Dispatchers.Main) {
             webView.evaluateJavascript("controls.setOutputDevice('$deviceId');", null)
         }
+        val selectedType = listAudioDevices().firstOrNull { it.id.toString() == deviceId }?.type
+        onSpeakerModeChanged(selectedType == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
     }
 
     /**
@@ -410,9 +511,16 @@ class WebViewAudioManager(
         }
 
         expectedNewCommunicationDeviceId = null
+        onSpeakerModeChanged(device?.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)
 
         coroutineScope.launch {
             proximitySensorMutex.withLock {
+                if (!proximitySensorEnabled) {
+                    if (proximitySensorWakeLock?.isHeld == true) {
+                        proximitySensorWakeLock?.release()
+                    }
+                    return@withLock
+                }
                 @Suppress("WakeLock", "WakeLockTimeout")
                 if (device?.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE && proximitySensorWakeLock?.isHeld == false) {
                     // If the device is the built-in earpiece, we need to acquire the proximity sensor wake lock
@@ -437,6 +545,32 @@ class WebViewAudioManager(
             }
         }
     }
+
+    /**
+     * Toggle between built-in speaker (loud) and built-in earpiece (quiet).
+     * Returns true when loud speaker is active after the toggle.
+     */
+    fun toggleSpeakerMode(): Boolean {
+        val devices = listAudioDevices()
+        val speaker = devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+        val earpiece = devices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+        val currentType = devices.firstOrNull { it.id == currentDeviceId }?.type
+        val target = if (currentType == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
+            earpiece ?: speaker
+        } else {
+            speaker ?: earpiece
+        } ?: return currentType == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+
+        expectedNewCommunicationDeviceId = target.id
+        audioManager.selectAudioDevice(target)
+        updateSelectedAudioDeviceInWebView(target.id.toString())
+        // Enforce output route immediately to reduce perceived lag on some devices.
+        @Suppress("DEPRECATION")
+        runCatching {
+            audioManager.isSpeakerphoneOn = target.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        }
+        return target.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+    }
 }
 
 /**
@@ -446,7 +580,11 @@ class WebViewAudioManager(
 private class AndroidWebViewAudioBridge(
     private val onAudioDeviceSelected: (String) -> Unit,
     private val onAudioPlaybackStarted: () -> Unit,
+    private val onRemoteVideoStateChangedCallback: (Boolean) -> Unit,
 ) {
+    private var lastRemoteVideoState: Boolean? = null
+    private var lastRemoteVideoStateTimestampMs: Long = 0L
+
     @JavascriptInterface
     fun setOutputDevice(id: String) {
         Timber.d("Audio device selected in webview, id: $id")
@@ -460,6 +598,20 @@ private class AndroidWebViewAudioBridge(
         Timber.d("Audio track is ready")
 
         onAudioPlaybackStarted()
+    }
+
+    @JavascriptInterface
+    fun onRemoteVideoStateChanged(enabled: Boolean) {
+        val now = SystemClock.elapsedRealtime()
+        if (lastRemoteVideoState == enabled && now - lastRemoteVideoStateTimestampMs < 600) {
+            // The web layer can emit bursts of identical state updates.
+            // Dropping duplicates reduces UI thrash and callback pressure.
+            return
+        }
+        lastRemoteVideoState = enabled
+        lastRemoteVideoStateTimestampMs = now
+        Timber.d("Remote video state changed: $enabled")
+        onRemoteVideoStateChangedCallback(enabled)
     }
 }
 

@@ -308,6 +308,7 @@ dependencies {
     implementation(libs.coil)
 
     implementation(platform(libs.network.okhttp.bom))
+    implementation(libs.network.okhttp)
     implementation(libs.network.okhttp.logging)
     implementation(libs.serialization.json)
 

@@ -11,7 +11,10 @@ package io.element.android.features.call.impl.ui
 import io.element.android.features.call.impl.utils.WidgetMessageInterceptor
 
 sealed interface CallScreenEvents {
+    data object JoinCall : CallScreenEvents
     data object Hangup : CallScreenEvents
+    data class SetMicrophoneEnabled(val enabled: Boolean) : CallScreenEvents
+    data class SetVideoEnabled(val enabled: Boolean) : CallScreenEvents
     data class SetupMessageChannels(val widgetMessageInterceptor: WidgetMessageInterceptor) : CallScreenEvents
     data class OnWebViewError(val description: String?) : CallScreenEvents
 }

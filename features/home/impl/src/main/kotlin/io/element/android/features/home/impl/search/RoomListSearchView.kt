@@ -14,6 +14,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -111,6 +113,10 @@ private fun RoomListSearchContent(
         containerColor = if (transparentBackground) Color.Transparent else backgroundColor,
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (transparentBackground) Color.Transparent else backgroundColor,
+                    scrolledContainerColor = if (transparentBackground) Color.Transparent else backgroundColor,
+                ),
                 navigationIcon = { BackButton(onClick = ::onBackButtonClick) },
                 title = {
                     // The stateSaver will keep the selection state when returning to this UI
@@ -163,6 +169,9 @@ private fun RoomListSearchContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .let {
+                    if (transparentBackground) it else it.background(backgroundColor)
+                }
                 .padding(padding)
                 .consumeWindowInsets(padding)
         ) {

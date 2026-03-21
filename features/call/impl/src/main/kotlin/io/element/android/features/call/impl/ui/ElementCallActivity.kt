@@ -145,8 +145,8 @@ class ElementCallActivity :
         audioFocus.requestAudioFocus(
             requester = AudioFocusRequester.ElementCall,
             onFocusLost = {
-                // If the audio focus is lost, we do not stop the call.
-                Timber.tag(loggerTag.value).w("Audio focus lost")
+                // Audio focus can be transiently stolen by system/other apps; keep call alive.
+                Timber.tag(loggerTag.value).d("Audio focus lost")
             }
         )
         CallForegroundService.start(this)

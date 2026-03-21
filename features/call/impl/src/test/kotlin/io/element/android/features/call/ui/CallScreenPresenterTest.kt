@@ -14,9 +14,11 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.features.call.api.CallType
+import io.element.android.features.call.impl.ui.CallConnectionState
 import io.element.android.features.call.impl.ui.CallScreenEvents
 import io.element.android.features.call.impl.ui.CallScreenNavigator
 import io.element.android.features.call.impl.ui.CallScreenPresenter
+import io.element.android.features.call.impl.data.WidgetMessage
 import io.element.android.features.call.impl.utils.WidgetMessageSerializer
 import io.element.android.features.call.utils.FakeActiveCallManager
 import io.element.android.features.call.utils.FakeCallWidgetProvider
@@ -24,14 +26,18 @@ import io.element.android.features.call.utils.FakeWidgetMessageInterceptor
 import io.element.android.libraries.androidutils.json.DefaultJsonProvider
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
+import io.element.android.libraries.matrix.test.A_USER_ID_2
 import io.element.android.libraries.matrix.api.sync.SyncState
 import io.element.android.libraries.matrix.test.A_ROOM_ID
 import io.element.android.libraries.matrix.test.A_SESSION_ID
 import io.element.android.libraries.matrix.test.FakeMatrixClient
 import io.element.android.libraries.matrix.test.FakeMatrixClientProvider
+import io.element.android.libraries.matrix.test.room.FakeBaseRoom
+import io.element.android.libraries.matrix.test.room.aRoomInfo
 import io.element.android.libraries.matrix.test.sync.FakeSyncService
 import io.element.android.libraries.matrix.test.widget.FakeMatrixWidgetDriver
 import io.element.android.libraries.network.useragent.UserAgentProvider
+import io.element.android.libraries.preferences.test.InMemoryAppPreferencesStore
 import io.element.android.services.analytics.api.ScreenTracker
 import io.element.android.services.analytics.test.FakeScreenTracker
 import io.element.android.services.appnavstate.test.FakeAppForegroundStateService
@@ -116,6 +122,33 @@ class CallScreenPresenterTest {
             skipItems(1)
 
             assertThat(awaitItem().urlState).isInstanceOf(AsyncData.Success::class.java)
+        }
+    }
+
+    @Test
+    fun `present - room call url forces native embedded params`() = runTest {
+        val widgetProvider = FakeCallWidgetProvider(
+            url = "https://appassets.androidplatform.net/element-call/index.html#/room?showControls=true&header=app_bar&preload=false&skipLobby=false"
+        )
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            widgetProvider = widgetProvider,
+            screenTracker = FakeScreenTracker {},
+        )
+
+        moleculeFlow(RecompositionMode.Immediate) {
+            presenter.present()
+        }.test {
+            advanceTimeBy(1.seconds)
+            var state = awaitItem()
+            while (state.urlState !is AsyncData.Success) {
+                state = awaitItem()
+            }
+            val url = (state.urlState as AsyncData.Success).data
+            assertThat(url).contains("header=none")
+            assertThat(url).contains("showControls=false")
+            assertThat(url).contains("preload=true")
+            assertThat(url).contains("skipLobby=true")
         }
     }
 
@@ -253,6 +286,204 @@ class CallScreenPresenterTest {
             val finalState = awaitItem()
             assertThat(finalState.isCallActive).isTrue()
         }
+    }
+
+    @Test
+    fun `present - status stays calling until another participant joins the room call`() = runTest {
+        val room = FakeBaseRoom(
+            initialRoomInfo = aRoomInfo(
+                isDirect = true,
+                hasRoomCall = true,
+                activeRoomCallParticipants = listOf(A_SESSION_ID),
+            )
+        )
+        val matrixClient = FakeMatrixClient().apply {
+            givenGetRoomResult(A_ROOM_ID, room)
+        }
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            matrixClientsProvider = FakeMatrixClientProvider(getClient = { Result.success(matrixClient) }),
+            screenTracker = FakeScreenTracker {},
+        )
+        val messageInterceptor = FakeWidgetMessageInterceptor()
+        var latestState = moleculeFlow(RecompositionMode.Immediate) {
+            presenter.present()
+        }
+
+        val collectedStates = mutableListOf<io.element.android.features.call.impl.ui.CallScreenState>()
+        val job = launch {
+            latestState.collect { collectedStates.add(it) }
+        }
+
+        runCurrent()
+        val currentState = collectedStates.last()
+        currentState.eventSink(CallScreenEvents.SetupMessageChannels(messageInterceptor))
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        messageInterceptor.givenInterceptedMessage(
+            """
+                {
+                    "action":"content_loaded",
+                    "api":"fromWidget",
+                    "widgetId":"1",
+                    "requestId":"1"
+                }
+            """.trimIndent()
+        )
+
+        runCurrent()
+        assertThat(collectedStates.last().callConnectionState).isEqualTo(CallConnectionState.Calling)
+
+        room.givenRoomInfo(
+            aRoomInfo(
+                isDirect = true,
+                hasRoomCall = true,
+                activeRoomCallParticipants = listOf(A_SESSION_ID, A_USER_ID_2),
+            )
+        )
+
+        runCurrent()
+        assertThat(collectedStates.last().callConnectionState).isEqualTo(CallConnectionState.Connected)
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `present - native join action stays visible until local join arrives`() = runTest {
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            screenTracker = FakeScreenTracker {},
+        )
+        val messageInterceptor = FakeWidgetMessageInterceptor()
+        val collectedStates = mutableListOf<io.element.android.features.call.impl.ui.CallScreenState>()
+        val job = launch {
+            moleculeFlow(RecompositionMode.Immediate) {
+                presenter.present()
+            }.collect { collectedStates.add(it) }
+        }
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val initialState = collectedStates.last()
+        initialState.eventSink(CallScreenEvents.SetupMessageChannels(messageInterceptor))
+        runCurrent()
+        messageInterceptor.givenInterceptedMessage(
+            """
+                {
+                    "action":"content_loaded",
+                    "api":"fromWidget",
+                    "widgetId":"1",
+                    "requestId":"1"
+                }
+            """.trimIndent()
+        )
+
+        runCurrent()
+        assertThat(collectedStates.last().showJoinCallAction).isTrue()
+
+        messageInterceptor.givenInterceptedMessage("""{"action":"io.element.join","api":"fromWidget","widgetId":"1","requestId":"2"}""")
+        runCurrent()
+        assertThat(collectedStates.last().showJoinCallAction).isFalse()
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `present - join call event sends native join widget action`() = runTest {
+        val serializer = WidgetMessageSerializer(DefaultJsonProvider())
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            screenTracker = FakeScreenTracker {},
+        )
+        val messageInterceptor = FakeWidgetMessageInterceptor()
+        val collectedStates = mutableListOf<io.element.android.features.call.impl.ui.CallScreenState>()
+        val job = launch {
+            moleculeFlow(RecompositionMode.Immediate) {
+                presenter.present()
+            }.collect { collectedStates.add(it) }
+        }
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val initialState = collectedStates.last()
+        initialState.eventSink(CallScreenEvents.SetupMessageChannels(messageInterceptor))
+        runCurrent()
+        messageInterceptor.givenInterceptedMessage("""{"action":"content_loaded","api":"fromWidget","widgetId":"1","requestId":"1"}""")
+
+        runCurrent()
+        collectedStates.last().eventSink(CallScreenEvents.JoinCall)
+
+        val sentMessage = serializer.deserialize(messageInterceptor.sentMessages.last()).getOrThrow()
+        assertThat(sentMessage.action).isEqualTo(WidgetMessage.Action.Join)
+        assertThat(sentMessage.data.toString()).contains("\"audioInput\":null")
+        assertThat(sentMessage.data.toString()).contains("\"videoInput\":null")
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `present - set video enabled event sends device mute widget action`() = runTest {
+        val serializer = WidgetMessageSerializer(DefaultJsonProvider())
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            screenTracker = FakeScreenTracker {},
+        )
+        val messageInterceptor = FakeWidgetMessageInterceptor()
+        val collectedStates = mutableListOf<io.element.android.features.call.impl.ui.CallScreenState>()
+        val job = launch {
+            moleculeFlow(RecompositionMode.Immediate) {
+                presenter.present()
+            }.collect { collectedStates.add(it) }
+        }
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val initialState = collectedStates.last()
+        initialState.eventSink(CallScreenEvents.SetupMessageChannels(messageInterceptor))
+        runCurrent()
+        messageInterceptor.givenInterceptedMessage("""{"action":"content_loaded","api":"fromWidget","widgetId":"1","requestId":"1"}""")
+
+        runCurrent()
+        collectedStates.last().eventSink(CallScreenEvents.SetVideoEnabled(true))
+
+        val sentMessage = serializer.deserialize(messageInterceptor.sentMessages.last()).getOrThrow()
+        assertThat(sentMessage.action).isEqualTo(WidgetMessage.Action.DeviceMute)
+        assertThat(sentMessage.data.toString()).contains("\"video_enabled\":true")
+
+        job.cancelAndJoin()
+    }
+
+    @Test
+    fun `present - set microphone enabled event sends device mute widget action`() = runTest {
+        val serializer = WidgetMessageSerializer(DefaultJsonProvider())
+        val presenter = createCallScreenPresenter(
+            callType = CallType.RoomCall(A_SESSION_ID, A_ROOM_ID),
+            screenTracker = FakeScreenTracker {},
+        )
+        val messageInterceptor = FakeWidgetMessageInterceptor()
+        val collectedStates = mutableListOf<io.element.android.features.call.impl.ui.CallScreenState>()
+        val job = launch {
+            moleculeFlow(RecompositionMode.Immediate) {
+                presenter.present()
+            }.collect { collectedStates.add(it) }
+        }
+
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        val initialState = collectedStates.last()
+        initialState.eventSink(CallScreenEvents.SetupMessageChannels(messageInterceptor))
+        runCurrent()
+        messageInterceptor.givenInterceptedMessage("""{"action":"content_loaded","api":"fromWidget","widgetId":"1","requestId":"1"}""")
+
+        runCurrent()
+        collectedStates.last().eventSink(CallScreenEvents.SetMicrophoneEnabled(false))
+
+        val sentMessage = serializer.deserialize(messageInterceptor.sentMessages.last()).getOrThrow()
+        assertThat(sentMessage.action).isEqualTo(WidgetMessage.Action.DeviceMute)
+        assertThat(sentMessage.data.toString()).contains("\"audio_enabled\":false")
+
+        job.cancelAndJoin()
     }
 
     @Test
@@ -412,6 +643,7 @@ class CallScreenPresenterTest {
             screenTracker = screenTracker,
             languageTagProvider = FakeLanguageTagProvider("en-US"),
             appForegroundStateService = appForegroundStateService,
+            appPreferencesStore = InMemoryAppPreferencesStore(),
             appCoroutineScope = backgroundScope,
             widgetMessageSerializer = WidgetMessageSerializer(DefaultJsonProvider()),
         )

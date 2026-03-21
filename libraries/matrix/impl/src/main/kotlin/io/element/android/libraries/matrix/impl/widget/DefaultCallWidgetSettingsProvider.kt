@@ -30,7 +30,14 @@ class DefaultCallWidgetSettingsProvider(
     private val callAnalyticsCredentialsProvider: CallAnalyticCredentialsProvider,
     private val analyticsService: AnalyticsService,
 ) : CallWidgetSettingsProvider {
-    override suspend fun provide(baseUrl: String, widgetId: String, encrypted: Boolean, direct: Boolean, hasActiveCall: Boolean): MatrixWidgetSettings {
+    override suspend fun provide(
+        baseUrl: String,
+        widgetId: String,
+        encrypted: Boolean,
+        direct: Boolean,
+        hasActiveCall: Boolean,
+        audioOnly: Boolean,
+    ): MatrixWidgetSettings {
         val isAnalyticsEnabled = analyticsService.userConsentFlow.first()
         val properties = VirtualElementCallWidgetProperties(
             elementCallUrl = baseUrl,
@@ -52,6 +59,8 @@ class DefaultCallWidgetSettingsProvider(
             // TODO remove this once we have the next EC version
             skipLobby = null,
             intent = when {
+                audioOnly && direct && hasActiveCall -> CallIntent.JOIN_EXISTING_DM_VOICE
+                audioOnly && direct -> CallIntent.START_CALL_DM_VOICE
                 direct && hasActiveCall -> CallIntent.JOIN_EXISTING_DM
                 hasActiveCall -> CallIntent.JOIN_EXISTING
                 direct -> CallIntent.START_CALL_DM

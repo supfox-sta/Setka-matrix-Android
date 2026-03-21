@@ -245,6 +245,11 @@ class DefaultActiveCallManager(
 
     override suspend fun joinedCall(callType: CallType) = mutex.withLock {
         Timber.tag(tag).d("Joined call: $callType")
+        val existingCall = activeCall.value
+        if (existingCall?.callType == callType && existingCall.callState is CallState.InCall) {
+            Timber.tag(tag).d("Call is already marked as in-call, skipping duplicate join registration")
+            return@withLock
+        }
         cancelIncomingCallNotification()
         if (activeWakeLock?.isHeld == true) {
             Timber.tag(tag).d("Releasing partial wakelock after joining call")

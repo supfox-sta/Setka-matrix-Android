@@ -32,6 +32,9 @@ sealed interface CustomizationEvents {
     data class SetDefaultRoomWallpaperStyle(val style: String?) : CustomizationEvents
     data class SetEnableChatAnimations(val enabled: Boolean) : CustomizationEvents
     data class SetEnableBlurEffects(val enabled: Boolean) : CustomizationEvents
+    data class SetCallAudioBackgroundStyle(val style: String) : CustomizationEvents
+    data class SetCallPreferEarpieceByDefault(val enabled: Boolean) : CustomizationEvents
+    data class SetCallProximitySensorEnabled(val enabled: Boolean) : CustomizationEvents
     data class SetInitialTimelineItemCount(val count: Int) : CustomizationEvents
     data class ImportTheme(val theme: SetkaThemeFile) : CustomizationEvents
     data object ResetToDefault : CustomizationEvents

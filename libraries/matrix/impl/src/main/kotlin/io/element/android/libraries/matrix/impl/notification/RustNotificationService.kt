@@ -55,7 +55,14 @@ class RustNotificationService(
                                 when (val status = result.status) {
                                     is NotificationStatus.Event -> {
                                         val result = notificationMapper.map(sessionId, eventId, roomId, status.item)
-                                        result.onFailure { Timber.e(it, "Could not map notification event $eventId") }
+                                        result.onFailure {
+                                            val message = it.message.orEmpty()
+                                            if (message.contains("Unsupported Event Type: \"org.matrix.msc4075.call.notify\"")) {
+                                                Timber.d("Skipping unsupported call notify event $eventId for notifications")
+                                            } else {
+                                                Timber.e(it, "Could not map notification event $eventId")
+                                            }
+                                        }
                                         put(eventId, result)
                                     }
                                     is NotificationStatus.EventNotFound -> {

@@ -60,6 +60,7 @@ fun PreferencesRootView(
     onOpenLockScreenSettings: () -> Unit,
     onOpenAbout: () -> Unit,
     onOpenCustomization: () -> Unit,
+    onOpenCallSettings: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
     onOpenLabs: () -> Unit,
@@ -112,6 +113,7 @@ fun PreferencesRootView(
             state = state,
             onOpenAbout = onOpenAbout,
             onOpenCustomization = onOpenCustomization,
+            onOpenCallSettings = onOpenCallSettings,
             onOpenAnalytics = onOpenAnalytics,
             onOpenRageShake = onOpenRageShake,
             onOpenAdvancedSettings = onOpenAdvancedSettings,
@@ -243,6 +245,7 @@ private fun ColumnScope.GeneralSection(
     state: PreferencesRootState,
     onOpenAbout: () -> Unit,
     onOpenCustomization: () -> Unit,
+    onOpenCallSettings: () -> Unit,
     onOpenAnalytics: () -> Unit,
     onOpenRageShake: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
@@ -280,6 +283,12 @@ private fun ColumnScope.GeneralSection(
         supportingContent = { Text(stringResource(id = R.string.screen_preferences_customization_description)) },
         leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Settings())),
         onClick = onOpenCustomization,
+    )
+    ListItem(
+        headlineContent = { Text(stringResource(id = R.string.screen_preferences_call_settings_title)) },
+        supportingContent = { Text(stringResource(id = R.string.screen_preferences_call_settings_description)) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.VideoCall())),
+        onClick = onOpenCallSettings,
     )
 
     if (state.showLabsItem) {
@@ -371,6 +380,7 @@ private fun ContentToPreview(matrixUser: MatrixUser) {
         onOpenLabs = {},
         onOpenAbout = {},
         onOpenCustomization = {},
+        onOpenCallSettings = {},
         onSecureBackupClick = {},
         onManageAccountClick = {},
         onLinkNewDeviceClick = {},

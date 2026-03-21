@@ -114,6 +114,15 @@ interface AppPreferencesStore {
     suspend fun setCustomizationEnableBlurEffects(enabled: Boolean)
     fun getCustomizationEnableBlurEffectsFlow(): Flow<Boolean>
 
+    suspend fun setCustomizationCallAudioBackgroundStyle(style: String)
+    fun getCustomizationCallAudioBackgroundStyleFlow(): Flow<String>
+
+    suspend fun setCallPreferEarpieceByDefault(enabled: Boolean)
+    fun getCallPreferEarpieceByDefaultFlow(): Flow<Boolean>
+
+    suspend fun setCallEnableProximitySensor(enabled: Boolean)
+    fun getCallEnableProximitySensorFlow(): Flow<Boolean>
+
     suspend fun setCustomizationInitialTimelineItemCount(count: Int)
     fun getCustomizationInitialTimelineItemCountFlow(): Flow<Int>
 

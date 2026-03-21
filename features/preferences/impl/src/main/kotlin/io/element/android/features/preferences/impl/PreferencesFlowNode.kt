@@ -29,6 +29,7 @@ import io.element.android.features.preferences.impl.about.AboutNode
 import io.element.android.features.preferences.impl.advanced.AdvancedSettingsNode
 import io.element.android.features.preferences.impl.analytics.AnalyticsSettingsNode
 import io.element.android.features.preferences.impl.blockedusers.BlockedUsersNode
+import io.element.android.features.preferences.impl.callsettings.CallSettingsNode
 import io.element.android.features.preferences.impl.customization.CustomizationNode
 import io.element.android.features.preferences.impl.developer.DeveloperSettingsNode
 import io.element.android.features.preferences.impl.labs.LabsNode
@@ -88,6 +89,9 @@ class PreferencesFlowNode(
         data object Customization : NavTarget
 
         @Parcelize
+        data object CallSettings : NavTarget
+
+        @Parcelize
         data object About : NavTarget
 
         @Parcelize
@@ -145,6 +149,10 @@ class PreferencesFlowNode(
 
                     override fun navigateToCustomization() {
                         backstack.push(NavTarget.Customization)
+                    }
+
+                    override fun navigateToCallSettings() {
+                        backstack.push(NavTarget.CallSettings)
                     }
 
                     override fun navigateToAbout() {
@@ -226,6 +234,9 @@ class PreferencesFlowNode(
             }
             NavTarget.Customization -> {
                 createNode<CustomizationNode>(buildContext)
+            }
+            NavTarget.CallSettings -> {
+                createNode<CallSettingsNode>(buildContext)
             }
             NavTarget.NotificationSettings -> {
                 val notificationSettingsCallback = object : NotificationSettingsNode.Callback {

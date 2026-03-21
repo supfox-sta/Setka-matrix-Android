@@ -12,6 +12,7 @@ import io.element.android.libraries.matrix.api.media.MediaPreviewValue
 import io.element.android.libraries.matrix.api.tracing.LogLevel
 import io.element.android.libraries.matrix.api.tracing.TraceLogPack
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
+import io.element.android.libraries.preferences.api.store.CallAudioBackgroundStyles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -57,6 +58,9 @@ class InMemoryAppPreferencesStore(
     private val customizationDefaultRoomWallpaperStyle = MutableStateFlow<String?>(null)
     private val customizationEnableChatAnimations = MutableStateFlow(true)
     private val customizationEnableBlurEffects = MutableStateFlow(true)
+    private val customizationCallAudioBackgroundStyle = MutableStateFlow(CallAudioBackgroundStyles.GRADIENT)
+    private val callPreferEarpieceByDefault = MutableStateFlow(true)
+    private val callEnableProximitySensor = MutableStateFlow(true)
     private val customizationInitialTimelineItemCount = MutableStateFlow(5)
 
     override suspend fun setDeveloperModeEnabled(enabled: Boolean) {
@@ -326,6 +330,30 @@ class InMemoryAppPreferencesStore(
 
     override fun getCustomizationEnableBlurEffectsFlow(): Flow<Boolean> {
         return customizationEnableBlurEffects
+    }
+
+    override suspend fun setCustomizationCallAudioBackgroundStyle(style: String) {
+        customizationCallAudioBackgroundStyle.value = style
+    }
+
+    override fun getCustomizationCallAudioBackgroundStyleFlow(): Flow<String> {
+        return customizationCallAudioBackgroundStyle
+    }
+
+    override suspend fun setCallPreferEarpieceByDefault(enabled: Boolean) {
+        callPreferEarpieceByDefault.value = enabled
+    }
+
+    override fun getCallPreferEarpieceByDefaultFlow(): Flow<Boolean> {
+        return callPreferEarpieceByDefault
+    }
+
+    override suspend fun setCallEnableProximitySensor(enabled: Boolean) {
+        callEnableProximitySensor.value = enabled
+    }
+
+    override fun getCallEnableProximitySensorFlow(): Flow<Boolean> {
+        return callEnableProximitySensor
     }
 
     override suspend fun setCustomizationInitialTimelineItemCount(count: Int) {

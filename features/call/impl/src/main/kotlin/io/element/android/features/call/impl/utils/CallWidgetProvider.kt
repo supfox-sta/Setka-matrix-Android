@@ -16,6 +16,7 @@ interface CallWidgetProvider {
     suspend fun getWidget(
         sessionId: SessionId,
         roomId: RoomId,
+        isAudioOnly: Boolean,
         clientId: String,
         languageTag: String?,
         theme: String?,
@@ -24,5 +25,6 @@ interface CallWidgetProvider {
     data class GetWidgetResult(
         val driver: MatrixWidgetDriver,
         val url: String,
+        val shouldAutoJoin: Boolean,
     )
 }

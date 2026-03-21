@@ -32,6 +32,9 @@ data class CustomizationState(
     val defaultRoomWallpaperStyle: String?,
     val enableChatAnimations: Boolean,
     val enableBlurEffects: Boolean,
+    val callAudioBackgroundStyle: String,
+    val callPreferEarpieceByDefault: Boolean,
+    val callProximitySensorEnabled: Boolean,
     val initialTimelineItemCount: Int,
     val eventSink: (CustomizationEvents) -> Unit,
 )

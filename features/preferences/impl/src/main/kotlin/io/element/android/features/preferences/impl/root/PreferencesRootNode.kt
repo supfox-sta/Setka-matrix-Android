@@ -39,6 +39,7 @@ class PreferencesRootNode(
         fun navigateToBugReport()
         fun navigateToSecureBackup()
         fun navigateToCustomization()
+        fun navigateToCallSettings()
         fun navigateToAnalyticsSettings()
         fun navigateToAbout()
         fun navigateToDeveloperSettings()
@@ -83,6 +84,7 @@ class PreferencesRootNode(
             onOpenAnalytics = callback::navigateToAnalyticsSettings,
             onOpenAbout = callback::navigateToAbout,
             onOpenCustomization = callback::navigateToCustomization,
+            onOpenCallSettings = callback::navigateToCallSettings,
             onSecureBackupClick = callback::navigateToSecureBackup,
             onOpenDeveloperSettings = callback::navigateToDeveloperSettings,
             onOpenAdvancedSettings = callback::navigateToAdvancedSettings,

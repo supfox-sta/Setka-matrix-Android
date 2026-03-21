@@ -33,8 +33,7 @@
             android:exported="true"
             android:label="@string/element_call"
             android:launchMode="singleTask"
-            android:supportsPictureInPicture="true"
-            android:taskAffinity="io.element.android.features.call">
+            android:supportsPictureInPicture="true">
 
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
@@ -74,8 +73,7 @@
             android:configChanges="screenSize|screenLayout|orientation|keyboardHidden|keyboard|navigation|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="io.element.android.features.call" />
+            android:launchMode="singleTask" />
 
         <service
             android:name=".services.CallForegroundService"

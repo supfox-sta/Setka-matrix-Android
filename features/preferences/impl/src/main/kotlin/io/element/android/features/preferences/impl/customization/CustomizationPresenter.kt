@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import dev.zacsweers.metro.Inject
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
+import io.element.android.libraries.preferences.api.store.CallAudioBackgroundStyles
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -98,6 +99,15 @@ class CustomizationPresenter(
         val enableBlurEffects by remember {
             appPreferencesStore.getCustomizationEnableBlurEffectsFlow()
         }.collectAsState(initial = true)
+        val callAudioBackgroundStyle by remember {
+            appPreferencesStore.getCustomizationCallAudioBackgroundStyleFlow()
+        }.collectAsState(initial = CallAudioBackgroundStyles.GRADIENT)
+        val callPreferEarpieceByDefault by remember {
+            appPreferencesStore.getCallPreferEarpieceByDefaultFlow()
+        }.collectAsState(initial = true)
+        val callProximitySensorEnabled by remember {
+            appPreferencesStore.getCallEnableProximitySensorFlow()
+        }.collectAsState(initial = true)
         val initialTimelineItemCount by remember {
             appPreferencesStore.getCustomizationInitialTimelineItemCountFlow()
         }.collectAsState(initial = 12)
@@ -177,6 +187,15 @@ class CustomizationPresenter(
                     is CustomizationEvents.SetEnableBlurEffects -> {
                         appPreferencesStore.setCustomizationEnableBlurEffects(event.enabled)
                     }
+                    is CustomizationEvents.SetCallAudioBackgroundStyle -> {
+                        appPreferencesStore.setCustomizationCallAudioBackgroundStyle(event.style)
+                    }
+                    is CustomizationEvents.SetCallPreferEarpieceByDefault -> {
+                        appPreferencesStore.setCallPreferEarpieceByDefault(event.enabled)
+                    }
+                    is CustomizationEvents.SetCallProximitySensorEnabled -> {
+                        appPreferencesStore.setCallEnableProximitySensor(event.enabled)
+                    }
                     is CustomizationEvents.SetInitialTimelineItemCount -> {
                         appPreferencesStore.setCustomizationInitialTimelineItemCount(event.count)
                     }
@@ -205,6 +224,9 @@ class CustomizationPresenter(
                         appPreferencesStore.setCustomizationDefaultRoomWallpaperStyle(event.theme.defaultRoomWallpaperStyle)
                         appPreferencesStore.setCustomizationEnableChatAnimations(event.theme.enableChatAnimations)
                         appPreferencesStore.setCustomizationEnableBlurEffects(event.theme.enableBlurEffects)
+                        appPreferencesStore.setCustomizationCallAudioBackgroundStyle(event.theme.callAudioBackgroundStyle)
+                        appPreferencesStore.setCallPreferEarpieceByDefault(event.theme.callPreferEarpieceByDefault)
+                        appPreferencesStore.setCallEnableProximitySensor(event.theme.callProximitySensorEnabled)
                         appPreferencesStore.setCustomizationInitialTimelineItemCount(event.theme.initialTimelineItemCount)
                     }
                     CustomizationEvents.ResetToDefault -> {
@@ -232,6 +254,9 @@ class CustomizationPresenter(
                         appPreferencesStore.setCustomizationDefaultRoomWallpaperStyle(null)
                         appPreferencesStore.setCustomizationEnableChatAnimations(true)
                         appPreferencesStore.setCustomizationEnableBlurEffects(true)
+                        appPreferencesStore.setCustomizationCallAudioBackgroundStyle(CallAudioBackgroundStyles.GRADIENT)
+                        appPreferencesStore.setCallPreferEarpieceByDefault(true)
+                        appPreferencesStore.setCallEnableProximitySensor(true)
                         appPreferencesStore.setCustomizationInitialTimelineItemCount(12)
                     }
                 }
@@ -263,6 +288,9 @@ class CustomizationPresenter(
             defaultRoomWallpaperStyle = defaultRoomWallpaperStyle,
             enableChatAnimations = enableChatAnimations,
             enableBlurEffects = enableBlurEffects,
+            callAudioBackgroundStyle = callAudioBackgroundStyle,
+            callPreferEarpieceByDefault = callPreferEarpieceByDefault,
+            callProximitySensorEnabled = callProximitySensorEnabled,
             initialTimelineItemCount = initialTimelineItemCount,
             eventSink = ::handleEvent,
         )

@@ -16,5 +16,28 @@ data class CallScreenState(
     val userAgent: String,
     val isCallActive: Boolean,
     val isInWidgetMode: Boolean,
+    val isAudioOnly: Boolean,
+    val isMicrophoneEnabled: Boolean,
+    val isVideoEnabled: Boolean,
+    val showJoinCallAction: Boolean,
+    val callConnectionState: CallConnectionState,
+    val callPeerId: String?,
+    val callPeerName: String?,
+    val callPeerAvatarUrl: String?,
+    val callAccentColorHex: String?,
+    val callTopBarBackgroundColorHex: String?,
+    val callTopBarTextColorHex: String?,
+    val callBlurEnabled: Boolean,
+    val callAnimationsEnabled: Boolean,
+    val callAudioBackgroundImageUrl: String?,
+    val callPreferEarpieceByDefault: Boolean,
+    val callProximitySensorEnabled: Boolean,
     val eventSink: (CallScreenEvents) -> Unit,
 )
+
+enum class CallConnectionState {
+    Calling,
+    Connecting,
+    Connected,
+    Ended,
+}

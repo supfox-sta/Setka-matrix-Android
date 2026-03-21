@@ -34,6 +34,9 @@ data class WidgetMessage(
         @SerialName("io.element.join")
         Join,
 
+        @SerialName("io.element.device_mute")
+        DeviceMute,
+
         @SerialName("im.vector.hangup")
         HangUp,
 

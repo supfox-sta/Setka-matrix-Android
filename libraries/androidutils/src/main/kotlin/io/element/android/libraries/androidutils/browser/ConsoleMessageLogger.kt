@@ -46,6 +46,19 @@ class DefaultConsoleMessageLogger : ConsoleMessageLogger {
             return
         }
 
+        // Self-hosted LiveKit stacks can reject E2EE setup while the call still proceeds with unencrypted media.
+        // Do not spam error logs for this known non-fatal web console message.
+        if (message.contains("Failed to set E2EE enabled on room")) {
+            return
+        }
+
+        // Element Call can emit this before local tracks are created; this is noisy and non-fatal.
+        if (message.contains("No track found for source microphone to resume upstream") ||
+            message.contains("No track found for source camera to resume upstream")
+        ) {
+            return
+        }
+
         Timber.tag(tag).log(
             priority = priority,
             message = buildString {

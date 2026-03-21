@@ -99,8 +99,10 @@ import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeView(
@@ -131,10 +133,13 @@ fun HomeView(
         ?: ElementTheme.colors.bgCanvasDefault
     val homeBackgroundImageUri = customization.homeBackgroundImageUri
     val context = LocalContext.current
-    val homeBackgroundBitmap: ImageBitmap? = remember(homeBackgroundImageUri) {
+    var homeBackgroundBitmap by remember(homeBackgroundImageUri) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(homeBackgroundImageUri) {
         if (homeBackgroundImageUri.isNullOrBlank()) {
-            null
-        } else {
+            homeBackgroundBitmap = null
+            return@LaunchedEffect
+        }
+        homeBackgroundBitmap = withContext(Dispatchers.IO) {
             runCatching {
                 context.contentResolver.openInputStream(Uri.parse(homeBackgroundImageUri))?.use { stream ->
                     BitmapFactory.decodeStream(stream)?.asImageBitmap()
@@ -144,19 +149,6 @@ fun HomeView(
     }
     val contactNameMap = remember(homeState.contacts) {
         homeState.contacts.associateBy({ it.roomId.value }, { it.displayName })
-    }
-    val searchQuery = state.searchState.query.text.toString().trim().lowercase()
-    val decoratedSearchState = remember(state.searchState, contactNameMap, searchQuery) {
-        val decoratedResults = state.searchState.results
-            .map { summary ->
-                summary.withContactName(contactNameMap[summary.roomId.value])
-            }
-            .filter { summary ->
-                searchQuery.isBlank() ||
-                    summary.name.orEmpty().lowercase().contains(searchQuery)
-            }
-            .toImmutableList()
-        state.searchState.copy(results = decoratedResults)
     }
     Box(modifier) {
         if (state.contextMenu is RoomListState.ContextMenu.Shown) {
@@ -198,7 +190,7 @@ fun HomeView(
         // This overlaid view will only be visible when state.displaySearchResults is true
         if (state.searchState.isSearchActive) {
             RoomListSearchView(
-                state = decoratedSearchState,
+                state = state.searchState,
                 eventSink = state.eventSink,
                 hideInvitesAvatars = state.hideInvitesAvatars,
                 onRoomClick = { if (firstThrottler.canHandle()) onRoomClick(it) },
@@ -666,17 +658,6 @@ private fun decorateRoomListStateWithContacts(
         }
         else -> content
     }
-    val searchQuery = source.searchState.query.text.toString().trim().lowercase()
-    val decoratedSearchResults = source.searchState.results.map { summary ->
-        summary.withContactName(contactNamesByRoomId[summary.roomId.value])
-    }.filter { summary ->
-        if (searchQuery.isBlank()) {
-            true
-        } else {
-            summary.name.orEmpty().lowercase().contains(searchQuery)
-        }
-    }.toImmutableList()
-    val decoratedSearchState = source.searchState.copy(results = decoratedSearchResults)
     val decoratedContextMenu = when (val menu = source.contextMenu) {
         is RoomListState.ContextMenu.Shown -> {
             menu.copy(roomName = contactNamesByRoomId[menu.roomId.value] ?: menu.roomName)
@@ -685,7 +666,6 @@ private fun decorateRoomListStateWithContacts(
     }
     return source.copy(
         contentState = decoratedContentState,
-        searchState = decoratedSearchState,
         contextMenu = decoratedContextMenu,
     )
 }

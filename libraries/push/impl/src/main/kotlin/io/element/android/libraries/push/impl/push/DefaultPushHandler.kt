@@ -153,15 +153,21 @@ class DefaultPushHandler(
                                 null
                             }
                             else -> {
-                                Timber.tag(loggerTag.value).e(exception, "Failed to resolve push event")
-                                ResolvedPushEvent.Event(
-                                    fallbackNotificationFactory.create(
-                                        sessionId = request.sessionId,
-                                        roomId = request.roomId,
-                                        eventId = request.eventId,
-                                        cause = exception.message,
+                                val message = exception.message.orEmpty()
+                                if (message.contains("Unsupported Event Type: \"org.matrix.msc4075.call.notify\"")) {
+                                    Timber.tag(loggerTag.value).d("Ignoring unsupported call.notify push event")
+                                    null
+                                } else {
+                                    Timber.tag(loggerTag.value).e(exception, "Failed to resolve push event")
+                                    ResolvedPushEvent.Event(
+                                        fallbackNotificationFactory.create(
+                                            sessionId = request.sessionId,
+                                            roomId = request.roomId,
+                                            eventId = request.eventId,
+                                            cause = exception.message,
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     }.getOrNull() ?: continue

@@ -32,6 +32,7 @@ class DefaultCallWidgetProvider(
     override suspend fun getWidget(
         sessionId: SessionId,
         roomId: RoomId,
+        isAudioOnly: Boolean,
         clientId: String,
         languageTag: String?,
         theme: String?,
@@ -46,11 +47,15 @@ class DefaultCallWidgetProvider(
 
         val roomInfo = room.info()
         val isEncrypted = roomInfo.isEncrypted ?: room.getUpdatedIsEncrypted().getOrThrow()
+        // Some one-to-one rooms are not marked as direct in account data.
+        // For audio calls we still want DM voice intent in this case.
+        val isDirectForCallIntent = room.isDm() || (isAudioOnly && room.isOneToOne)
         val widgetSettings = callWidgetSettingsProvider.provide(
             baseUrl = baseUrl,
             encrypted = isEncrypted,
-            direct = room.isDm(),
+            direct = isDirectForCallIntent,
             hasActiveCall = roomInfo.hasRoomCall,
+            audioOnly = isAudioOnly,
         )
         val callUrl = room.generateWidgetWebViewUrl(
             widgetSettings = widgetSettings,
@@ -64,6 +69,10 @@ class DefaultCallWidgetProvider(
         CallWidgetProvider.GetWidgetResult(
             driver = driver,
             url = callUrl,
+            // The user opened the dedicated call screen from the app, so we should
+            // immediately try to join and only fall back to the native join button
+            // if the embedded widget does not acknowledge the join in time.
+            shouldAutoJoin = true,
         )
     }
 }

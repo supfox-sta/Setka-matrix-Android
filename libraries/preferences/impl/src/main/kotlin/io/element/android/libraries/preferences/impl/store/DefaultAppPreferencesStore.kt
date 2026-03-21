@@ -24,6 +24,7 @@ import io.element.android.libraries.matrix.api.media.MediaPreviewValue
 import io.element.android.libraries.matrix.api.tracing.LogLevel
 import io.element.android.libraries.matrix.api.tracing.TraceLogPack
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
+import io.element.android.libraries.preferences.api.store.CallAudioBackgroundStyles
 import io.element.android.libraries.preferences.api.store.PreferenceDataStoreFactory
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -60,6 +61,9 @@ private val customizationHomeBackgroundImageUriKey = stringPreferencesKey("custo
 private val customizationDefaultRoomWallpaperStyleKey = stringPreferencesKey("customizationDefaultRoomWallpaperStyle")
 private val customizationEnableChatAnimationsKey = booleanPreferencesKey("customizationEnableChatAnimations")
 private val customizationEnableBlurEffectsKey = booleanPreferencesKey("customizationEnableBlurEffects")
+private val customizationCallAudioBackgroundStyleKey = stringPreferencesKey("customizationCallAudioBackgroundStyle")
+private val callPreferEarpieceByDefaultKey = booleanPreferencesKey("callPreferEarpieceByDefault")
+private val callEnableProximitySensorKey = booleanPreferencesKey("callEnableProximitySensor")
 private val customizationInitialTimelineItemCountKey = intPreferencesKey("customizationInitialTimelineItemCount")
 
 @ContributesBinding(AppScope::class)
@@ -91,6 +95,9 @@ class DefaultAppPreferencesStore(
         private const val MAX_WALLPAPER_BLUR_DP = 20
         private const val DEFAULT_ENABLE_CHAT_ANIMATIONS = true
         private const val DEFAULT_ENABLE_BLUR_EFFECTS = true
+        private const val DEFAULT_CALL_AUDIO_BACKGROUND_STYLE = CallAudioBackgroundStyles.GRADIENT
+        private const val DEFAULT_CALL_PREFER_EARPIECE = true
+        private const val DEFAULT_CALL_ENABLE_PROXIMITY_SENSOR = true
         private const val DEFAULT_INITIAL_TIMELINE_ITEM_COUNT = 12
         private const val MIN_INITIAL_TIMELINE_ITEM_COUNT = 1
         private const val MAX_INITIAL_TIMELINE_ITEM_COUNT = 50
@@ -564,6 +571,44 @@ class DefaultAppPreferencesStore(
     override fun getCustomizationEnableBlurEffectsFlow(): Flow<Boolean> {
         return store.data.map { prefs ->
             prefs[customizationEnableBlurEffectsKey] ?: DEFAULT_ENABLE_BLUR_EFFECTS
+        }
+    }
+
+    override suspend fun setCustomizationCallAudioBackgroundStyle(style: String) {
+        store.edit { prefs ->
+            prefs[customizationCallAudioBackgroundStyleKey] = style.trim().ifBlank {
+                DEFAULT_CALL_AUDIO_BACKGROUND_STYLE
+            }
+        }
+    }
+
+    override fun getCustomizationCallAudioBackgroundStyleFlow(): Flow<String> {
+        return store.data.map { prefs ->
+            prefs[customizationCallAudioBackgroundStyleKey] ?: DEFAULT_CALL_AUDIO_BACKGROUND_STYLE
+        }
+    }
+
+    override suspend fun setCallPreferEarpieceByDefault(enabled: Boolean) {
+        store.edit { prefs ->
+            prefs[callPreferEarpieceByDefaultKey] = enabled
+        }
+    }
+
+    override fun getCallPreferEarpieceByDefaultFlow(): Flow<Boolean> {
+        return store.data.map { prefs ->
+            prefs[callPreferEarpieceByDefaultKey] ?: DEFAULT_CALL_PREFER_EARPIECE
+        }
+    }
+
+    override suspend fun setCallEnableProximitySensor(enabled: Boolean) {
+        store.edit { prefs ->
+            prefs[callEnableProximitySensorKey] = enabled
+        }
+    }
+
+    override fun getCallEnableProximitySensorFlow(): Flow<Boolean> {
+        return store.data.map { prefs ->
+            prefs[callEnableProximitySensorKey] ?: DEFAULT_CALL_ENABLE_PROXIMITY_SENSOR
         }
     }
 

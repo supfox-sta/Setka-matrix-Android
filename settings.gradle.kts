@@ -69,6 +69,25 @@ includeProjects(File(rootDir, "features"), ":features")
 includeProjects(File(rootDir, "libraries"), ":libraries")
 includeProjects(File(rootDir, "services"), ":services")
 
+// Optional local override for embedded Element Call (checkouts/element-call).
+// Keep disabled by default because a version mismatch with matrix-rust-sdk can break call signaling.
+val useLocalElementCallEmbedded = providers
+    .gradleProperty("useLocalElementCallEmbedded")
+    .orNull
+    ?.toBooleanStrictOrNull() == true
+if (useLocalElementCallEmbedded) {
+    val localElementCallPath = File(rootDir, "checkouts/element-call/embedded/android")
+    if (localElementCallPath.exists()) {
+        includeBuild(localElementCallPath.path) {
+            dependencySubstitution {
+                substitute(module("io.element.android:element-call-embedded")).using(project(":lib"))
+            }
+        }
+    } else {
+        logger.warn("Local element-call override requested, but path does not exist: ${localElementCallPath.path}")
+    }
+}
+
 // Uncomment to include the compound-android module as a local dependency so you can work on it locally.
 // You will also need to clone it in the specified folder.
 // includeBuild("checkouts/compound-android") {

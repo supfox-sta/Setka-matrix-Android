@@ -17,5 +17,6 @@ interface CallWidgetSettingsProvider {
         encrypted: Boolean,
         direct: Boolean,
         hasActiveCall: Boolean,
+        audioOnly: Boolean = false,
     ): MatrixWidgetSettings
 }

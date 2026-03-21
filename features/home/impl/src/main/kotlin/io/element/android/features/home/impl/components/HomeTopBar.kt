@@ -206,7 +206,7 @@ fun HomeTopBar(
         if (displayFilters) {
             TopAppBarScrollBehaviorLayout(
                 scrollBehavior = scrollBehavior,
-                backgroundColor = Color.Transparent,
+                backgroundColor = searchEntryBackgroundColor,
             ) {
                 SearchEntryRow(
                     onClick = onToggleSearch,

@@ -17,13 +17,18 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.os.SystemClock
 import androidx.core.net.toUri
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import io.element.android.features.call.impl.BuildConfig
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import timber.log.Timber
+import java.io.ByteArrayInputStream
+import org.json.JSONObject
 
 class WebViewWidgetMessageInterceptor(
     private val webView: WebView,
@@ -37,8 +42,14 @@ class WebViewWidgetMessageInterceptor(
         const val LISTENER_NAME = "elementX"
     }
 
-    // It's important to have extra capacity here to make sure we don't drop any messages
-    override val interceptedMessages = MutableSharedFlow<String>(extraBufferCapacity = 10)
+    // Keep widget protocol messages lossless. Dropping responses causes call widget state desync.
+    private val messageChannel = Channel<String>(capacity = Channel.UNLIMITED)
+    override val interceptedMessages: Flow<String> = messageChannel.receiveAsFlow()
+
+    // Deduplicate bridge retries/listener duplicates while preserving request/response pairs.
+    // Key shape: "<api>|<responseFlag>|<requestId>"
+    private val seenBridgeMessageKeys = LinkedHashMap<String, Long>(512, 0.75f, true)
+    private val seenBridgeMessageKeysLock = Any()
 
     init {
         val assetLoader = WebViewAssetLoader.Builder()
@@ -76,17 +87,26 @@ class WebViewWidgetMessageInterceptor(
                 // - Element X -> EC widget API (message.data.api == "toWidget"), we should ignore these
                 view.evaluateJavascript(
                     """
-                        window.addEventListener('message', function(event) {
-                            let message = {data: event.data, origin: event.origin}
-                            if (message.data.response && message.data.api == "toWidget"
-                                || !message.data.response && message.data.api == "fromWidget") {
-                                let json = JSON.stringify(event.data) 
-                                ${"console.log('message sent: ' + json);".takeIf { BuildConfig.DEBUG }}
-                                $LISTENER_NAME.postMessage(json);
-                            } else {
-                                ${"console.log('message received (ignored): ' + JSON.stringify(event.data));".takeIf { BuildConfig.DEBUG }}
-                            }
-                        });
+                        (() => {
+                            if (window.__elementXMessageBridgeInstalled) return;
+                            window.__elementXMessageBridgeInstalled = true;
+                            window.addEventListener('message', function(event) {
+                                const message = { data: event.data, origin: event.origin };
+                                const api = message?.data?.api;
+                                const isResponse = Boolean(message?.data?.response);
+                                // Forward:
+                                // - requests from widget -> app ("fromWidget")
+                                // - responses to app -> widget requests ("toWidget" + response=true)
+                                // Ignore everything else to avoid feedback loops.
+                                if (api === "fromWidget" || (api === "toWidget" && isResponse)) {
+                                    let json = JSON.stringify(event.data);
+                                    ${"console.log('message sent: ' + json);".takeIf { BuildConfig.DEBUG }}
+                                    $LISTENER_NAME.postMessage(json);
+                                } else {
+                                    ${"console.log('message received (ignored): ' + JSON.stringify(event.data));".takeIf { BuildConfig.DEBUG }}
+                                }
+                            });
+                        })();
                     """.trimIndent(),
                     null
                 )
@@ -97,6 +117,10 @@ class WebViewWidgetMessageInterceptor(
             }
 
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame != true) {
+                    super.onReceivedError(view, request, error)
+                    return
+                }
                 // No network for instance, transmit the error
                 Timber.e("onReceivedError error: ${error?.errorCode} ${error?.description}")
 
@@ -109,6 +133,10 @@ class WebViewWidgetMessageInterceptor(
             }
 
             override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, errorResponse: WebResourceResponse?) {
+                if (request?.isForMainFrame != true) {
+                    super.onReceivedHttpError(view, request, errorResponse)
+                    return
+                }
                 Timber.e("onReceivedHttpError error: ${errorResponse?.statusCode} ${errorResponse?.reasonPhrase}")
 
                 // Only propagate the error if it happens while loading the current page
@@ -131,11 +159,18 @@ class WebViewWidgetMessageInterceptor(
             }
 
             override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest): WebResourceResponse? {
+                if (request.url.lastPathSegment == "favicon.ico") {
+                    return emptyIconResponse()
+                }
                 return assetLoader.shouldInterceptRequest(request.url)
             }
 
             @Suppress("OVERRIDE_DEPRECATION")
             override fun shouldInterceptRequest(view: WebView?, url: String): WebResourceResponse? {
+                val uri = url.toUri()
+                if (uri.lastPathSegment == "favicon.ico") {
+                    return emptyIconResponse()
+                }
                 return assetLoader.shouldInterceptRequest(url.toUri())
             }
         }
@@ -164,11 +199,51 @@ class WebViewWidgetMessageInterceptor(
     }
 
     override fun sendMessage(message: String) {
-        webView.evaluateJavascript("postMessage($message, '*')", null)
+        webView.evaluateJavascript("window.postMessage($message, '*')", null)
     }
 
     private fun onMessageReceived(json: String?) {
-        // Here is where we would handle the messages from the WebView, passing them to the Rust SDK
-        json?.let { interceptedMessages.tryEmit(it) }
+        val payload = json ?: return
+        if (!shouldForward(payload)) return
+        val result = messageChannel.trySend(payload)
+        if (result.isFailure) {
+            Timber.w("Failed to enqueue widget message for Matrix driver")
+        }
+    }
+
+    private fun shouldForward(json: String): Boolean {
+        val key = runCatching {
+            val jsonObject = JSONObject(json)
+            val requestId = jsonObject.optString("requestId").takeIf { it.isNotBlank() } ?: return true
+            val api = jsonObject.optString("api").takeIf { it.isNotBlank() } ?: return true
+            val isResponse = jsonObject.optBoolean("response", false)
+            "$api|$isResponse|$requestId"
+        }.getOrElse {
+            // If parsing fails we should not block the message; let the matrix driver decide.
+            return true
+        }
+        synchronized(seenBridgeMessageKeysLock) {
+            if (seenBridgeMessageKeys.containsKey(key)) {
+                Timber.d("Dropping duplicate widget bridge message: $key")
+                return false
+            }
+            seenBridgeMessageKeys[key] = SystemClock.elapsedRealtime()
+            while (seenBridgeMessageKeys.size > 1024) {
+                val oldestKey = seenBridgeMessageKeys.entries.firstOrNull()?.key ?: break
+                seenBridgeMessageKeys.remove(oldestKey)
+            }
+        }
+        return true
+    }
+
+    private fun emptyIconResponse(): WebResourceResponse {
+        return WebResourceResponse(
+            "image/x-icon",
+            "utf-8",
+            200,
+            "OK",
+            mapOf("Cache-Control" to "public, max-age=86400"),
+            ByteArrayInputStream(byteArrayOf()),
+        )
     }
 }

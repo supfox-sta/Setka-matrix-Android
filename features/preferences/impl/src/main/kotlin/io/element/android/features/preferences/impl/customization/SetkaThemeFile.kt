@@ -7,8 +7,10 @@
 
 package io.element.android.features.preferences.impl.customization
 
+import io.element.android.libraries.preferences.api.store.CallAudioBackgroundStyles
+
 data class SetkaThemeFile(
-    val version: Int = 5,
+    val version: Int = 6,
     val themeMode: String? = null,
     val accentColorHex: String? = null,
     val uiScale: Float = 1.0f,
@@ -33,5 +35,8 @@ data class SetkaThemeFile(
     val defaultRoomWallpaperStyle: String? = null,
     val enableChatAnimations: Boolean = true,
     val enableBlurEffects: Boolean = true,
+    val callAudioBackgroundStyle: String = CallAudioBackgroundStyles.GRADIENT,
+    val callPreferEarpieceByDefault: Boolean = true,
+    val callProximitySensorEnabled: Boolean = true,
     val initialTimelineItemCount: Int = 12,
 )

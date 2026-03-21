@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <string name="full_screen_intent_banner_message">"To ensure you never miss an important call, please change your settings to allow full-screen notifications when your phone is locked."</string>
   <string name="full_screen_intent_banner_title">"Enhance your call experience"</string>
@@ -26,7 +26,7 @@
   <string name="screen_advanced_settings_send_read_receipts">"Read receipts"</string>
   <string name="screen_advanced_settings_send_read_receipts_description">"If turned off, your read receipts won\'t be sent to anyone. You will still receive read receipts from other users."</string>
   <string name="screen_advanced_settings_share_presence">"Share presence"</string>
-  <string name="screen_advanced_settings_share_presence_description">"If turned off, you won’t be able to send or receive read receipts or typing notifications."</string>
+  <string name="screen_advanced_settings_share_presence_description">"If turned off, you wonвЂ™t be able to send or receive read receipts or typing notifications."</string>
   <string name="screen_advanced_settings_show_media_timeline_always_hide">"Always hide"</string>
   <string name="screen_advanced_settings_show_media_timeline_always_show">"Always show"</string>
   <string name="screen_advanced_settings_show_media_timeline_private_rooms">"In private rooms"</string>
@@ -37,20 +37,27 @@
   <string name="screen_blocked_users_unblock_alert_action">"Unblock"</string>
   <string name="screen_blocked_users_unblock_alert_description">"You\'ll be able to see all messages from them again."</string>
   <string name="screen_blocked_users_unblock_alert_title">"Unblock user"</string>
-  <string name="screen_blocked_users_unblocking">"Unblocking…"</string>
+  <string name="screen_blocked_users_unblocking">"UnblockingвЂ¦"</string>
   <string name="screen_edit_profile_display_name">"Display name"</string>
   <string name="screen_edit_profile_display_name_placeholder">"Your display name"</string>
   <string name="screen_edit_profile_error">"An unknown error was encountered and the information couldn\'t be changed."</string>
   <string name="screen_edit_profile_error_title">"Unable to update profile"</string>
   <string name="screen_edit_profile_title">"Edit profile"</string>
-  <string name="screen_edit_profile_updating_details">"Updating profile…"</string>
+  <string name="screen_edit_profile_updating_details">"Updating profileвЂ¦"</string>
   <string name="screen_labs_enable_threads">"Enable thread replies"</string>
   <string name="screen_labs_enable_threads_description">"The app will restart to apply this change."</string>
   <string name="screen_labs_header_description">"Try out our latest ideas in development. These features are not finalised; they may be unstable, may change."</string>
   <string name="screen_labs_header_title">"Feeling experimental?"</string>
   <string name="screen_labs_title">"Labs"</string>
-  <string name="screen_preferences_customization_title">"Кастомизация чата"</string>
-  <string name="screen_preferences_customization_description">"Цвета, обои, стиль сообщений и анимации."</string>
+  <string name="screen_preferences_customization_title">"РљР°СЃС‚РѕРјРёР·Р°С†РёСЏ С‡Р°С‚Р°"</string>
+  <string name="screen_preferences_customization_description">"Р¦РІРµС‚Р+, РѕР±РѕРё, СЃС‚РёР»СЊ СЃРѕРѕР±С‰РµРЅРёР№ Рё Р°РЅРёРјР°С†РёРё."</string>
+  <string name="screen_preferences_call_settings_title">"Настройки звонков"</string>
+  <string name="screen_preferences_call_settings_description">"Фон и внешний вид аудио-звонков."</string>
+  <string name="screen_preferences_call_settings_audio_routing">"Audio routing"</string>
+  <string name="screen_preferences_call_settings_prefer_earpiece">"Prefer earpiece in audio calls"</string>
+  <string name="screen_preferences_call_settings_prefer_earpiece_description">"Use the top earpiece instead of loud speaker by default."</string>
+  <string name="screen_preferences_call_settings_proximity">"Use proximity sensor"</string>
+  <string name="screen_preferences_call_settings_proximity_description">"Turn the screen off near the ear when using earpiece."</string>
   <string name="screen_preferences_customization_colors_category">"Colors"</string>
   <string name="screen_preferences_customization_messages_category">"Messages"</string>
   <string name="screen_preferences_customization_background_category">"Background &amp; composer"</string>
@@ -72,7 +79,7 @@
   <string name="screen_notification_settings_additional_settings_section_title">"Additional settings"</string>
   <string name="screen_notification_settings_calls_label">"Audio and video calls"</string>
   <string name="screen_notification_settings_configuration_mismatch">"Configuration mismatch"</string>
-  <string name="screen_notification_settings_configuration_mismatch_description">"We’ve simplified Notifications Settings to make options easier to find. Some custom settings you’ve chosen in the past are not shown here, but they’re still active.
+  <string name="screen_notification_settings_configuration_mismatch_description">"WeвЂ™ve simplified Notifications Settings to make options easier to find. Some custom settings youвЂ™ve chosen in the past are not shown here, but theyвЂ™re still active.
 
 If you proceed, some of your settings may change."</string>
   <string name="screen_notification_settings_direct_chats">"Direct chats"</string>
@@ -100,3 +107,4 @@ If you proceed, some of your settings may change."</string>
   <string name="troubleshoot_notifications_entry_point_section">"Troubleshoot"</string>
   <string name="troubleshoot_notifications_entry_point_title">"Troubleshoot notifications"</string>
 </resources>
+

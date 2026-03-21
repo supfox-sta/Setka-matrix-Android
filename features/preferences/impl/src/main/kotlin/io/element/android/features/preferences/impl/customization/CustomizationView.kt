@@ -65,6 +65,7 @@ import io.element.android.libraries.designsystem.theme.components.Slider
 import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
+import io.element.android.libraries.preferences.api.store.CallAudioBackgroundStyles
 import io.element.android.libraries.preferences.api.store.RoomWallpaperStyles
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.mhssn.colorpicker.ColorPickerDialog
@@ -75,6 +76,7 @@ import org.json.JSONObject
 private enum class CustomizationCategory(val title: String) {
     Themes("Темы чатов"),
     Chat("Дизайн чата"),
+    Calls("Звонки"),
     Wallpapers("Обои чатов"),
     TextSize("Размер сообщений"),
     Optimization("Оптимизация"),
@@ -310,6 +312,9 @@ fun CustomizationView(
             defaultRoomWallpaperStyle = state.defaultRoomWallpaperStyle,
             enableChatAnimations = state.enableChatAnimations,
             enableBlurEffects = state.enableBlurEffects,
+            callAudioBackgroundStyle = state.callAudioBackgroundStyle,
+            callPreferEarpieceByDefault = state.callPreferEarpieceByDefault,
+            callProximitySensorEnabled = state.callProximitySensorEnabled,
             initialTimelineItemCount = state.initialTimelineItemCount,
         )
     }
@@ -383,6 +388,10 @@ fun CustomizationView(
 
             CustomizationCategory.Chat -> {
                 AdvancedChatAppearanceSection(state)
+            }
+
+            CustomizationCategory.Calls -> {
+                CallsAppearanceSection(state)
             }
 
             CustomizationCategory.Wallpapers -> {
@@ -1193,6 +1202,53 @@ private fun ChatPreviewCard(
 }
 
 @Composable
+private fun CallsAppearanceSection(state: CustomizationState) {
+    PreferenceCategory(title = "Звонки") {
+        SectionHint("Настройки применяются к экрану звонка и embedded Element Call.")
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ChoiceTile(
+                modifier = Modifier.weight(1f),
+                text = "Градиент",
+                selected = state.callAudioBackgroundStyle == CallAudioBackgroundStyles.GRADIENT,
+                onClick = { state.eventSink(CustomizationEvents.SetCallAudioBackgroundStyle(CallAudioBackgroundStyles.GRADIENT)) },
+            )
+            ChoiceTile(
+                modifier = Modifier.weight(1f),
+                text = "Обои чата",
+                selected = state.callAudioBackgroundStyle == CallAudioBackgroundStyles.WALLPAPER,
+                onClick = { state.eventSink(CustomizationEvents.SetCallAudioBackgroundStyle(CallAudioBackgroundStyles.WALLPAPER)) },
+            )
+        }
+        SwitchPreference(
+            title = "Размытие панелей звонка",
+            checked = state.enableBlurEffects,
+            onCheckedChange = { state.eventSink(CustomizationEvents.SetEnableBlurEffects(it)) },
+        )
+        SwitchPreference(
+            title = "Анимации в звонке",
+            checked = state.enableChatAnimations,
+            onCheckedChange = { state.eventSink(CustomizationEvents.SetEnableChatAnimations(it)) },
+        )
+        SwitchPreference(
+            title = "Тихая связь по умолчанию",
+            checked = state.callPreferEarpieceByDefault,
+            onCheckedChange = { state.eventSink(CustomizationEvents.SetCallPreferEarpieceByDefault(it)) },
+        )
+        SwitchPreference(
+            title = "Датчик приближения",
+            checked = state.callProximitySensorEnabled,
+            onCheckedChange = { state.eventSink(CustomizationEvents.SetCallProximitySensorEnabled(it)) },
+        )
+        SectionHint("Кнопка громкой/тихой связи размещена в нижней панели управления звонком.")
+    }
+}
+
+@Composable
 private fun SectionHint(text: String) {
     Text(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -1378,6 +1434,9 @@ private fun encodeThemeFile(theme: SetkaThemeFile): String {
     json.put("defaultRoomWallpaperStyle", theme.defaultRoomWallpaperStyle)
     json.put("enableChatAnimations", theme.enableChatAnimations)
     json.put("enableBlurEffects", theme.enableBlurEffects)
+    json.put("callAudioBackgroundStyle", theme.callAudioBackgroundStyle)
+    json.put("callPreferEarpieceByDefault", theme.callPreferEarpieceByDefault)
+    json.put("callProximitySensorEnabled", theme.callProximitySensorEnabled)
     json.put("initialTimelineItemCount", theme.initialTimelineItemCount)
     return json.toString(2)
 }
@@ -1386,7 +1445,7 @@ private fun decodeThemeFile(content: String): SetkaThemeFile? {
     return runCatching {
         val json = JSONObject(content)
         SetkaThemeFile(
-            version = json.optInt("version", 5),
+            version = json.optInt("version", 6),
             themeMode = json.optString("themeMode").takeIf { it.isNotBlank() && it != "null" },
             accentColorHex = json.optString("accentColorHex").takeIf { it.isNotBlank() && it != "null" },
             uiScale = json.optDouble("uiScale", 1.0).toFloat(),
@@ -1411,6 +1470,9 @@ private fun decodeThemeFile(content: String): SetkaThemeFile? {
             defaultRoomWallpaperStyle = json.optString("defaultRoomWallpaperStyle").takeIf { it.isNotBlank() && it != "null" },
             enableChatAnimations = json.optBoolean("enableChatAnimations", true),
             enableBlurEffects = json.optBoolean("enableBlurEffects", true),
+            callAudioBackgroundStyle = json.optString("callAudioBackgroundStyle", CallAudioBackgroundStyles.GRADIENT),
+            callPreferEarpieceByDefault = json.optBoolean("callPreferEarpieceByDefault", true),
+            callProximitySensorEnabled = json.optBoolean("callProximitySensorEnabled", true),
             initialTimelineItemCount = json.optInt("initialTimelineItemCount", 12),
         )
     }.getOrNull()
