@@ -15,6 +15,7 @@ import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
+import io.element.android.libraries.matrix.api.user.MatrixUser
 
 class UserProfileNodeHelper(
     private val userId: UserId,
@@ -25,6 +26,7 @@ class UserProfileNodeHelper(
         fun startAudioCall(dmRoomId: RoomId)
         fun startVideoCall(dmRoomId: RoomId)
         fun startVerifyUserFlow(userId: UserId)
+        fun navigateToEditProfile(matrixUser: MatrixUser)
     }
 
     fun onShareUser(

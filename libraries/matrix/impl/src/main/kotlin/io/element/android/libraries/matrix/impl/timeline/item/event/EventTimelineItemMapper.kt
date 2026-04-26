@@ -15,18 +15,24 @@ import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.timeline.item.TimelineItemDebugInfo
 import io.element.android.libraries.matrix.api.timeline.item.event.EventReaction
 import io.element.android.libraries.matrix.api.timeline.item.event.EventTimelineItem
+import io.element.android.libraries.matrix.api.timeline.item.event.FormattedBody
 import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.matrix.api.timeline.item.event.MessageContent
+import io.element.android.libraries.matrix.api.timeline.item.event.MessageFormat
 import io.element.android.libraries.matrix.api.timeline.item.event.MessageShield
+import io.element.android.libraries.matrix.api.timeline.item.event.EmoteMessageType
+import io.element.android.libraries.matrix.api.timeline.item.event.NoticeMessageType
 import io.element.android.libraries.matrix.api.timeline.item.event.ProfileDetails
 import io.element.android.libraries.matrix.api.timeline.item.event.ReactionSender
 import io.element.android.libraries.matrix.api.timeline.item.event.Receipt
+import io.element.android.libraries.matrix.api.timeline.item.event.TextMessageType
 import io.element.android.libraries.matrix.api.timeline.item.event.TimelineItemEventOrigin
 import io.element.android.libraries.matrix.api.timeline.item.event.VideoMessageType
 import io.element.android.libraries.matrix.impl.core.RustSendHandle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import org.json.JSONObject
 import org.matrix.rustcomponents.sdk.EventOrTransactionId
 import org.matrix.rustcomponents.sdk.QueueWedgeError
 import org.matrix.rustcomponents.sdk.Reaction
@@ -58,7 +64,7 @@ class EventTimelineItemMapper(
                     mapped
                 }
             }
-        }
+        }.restoreSetkaCustomEmojiFormatting(debugInfoProvider = debugInfoLazy)
         EventTimelineItem(
             eventId = eventOrTransactionId.eventId(),
             transactionId = eventOrTransactionId.transactionId(),
@@ -230,4 +236,47 @@ private fun VideoMessageType.isLikelyVideoNote(
     val json = debugInfoProvider.value.latestEditedJson ?: debugInfoProvider.value.originalJson ?: return false
     return json.contains("\"io.setka.video_note\"", ignoreCase = true) ||
         json.contains("\"io.element.video_note\"", ignoreCase = true)
+}
+
+private fun io.element.android.libraries.matrix.api.timeline.item.event.EventContent.restoreSetkaCustomEmojiFormatting(
+    debugInfoProvider: Lazy<TimelineItemDebugInfo>,
+): io.element.android.libraries.matrix.api.timeline.item.event.EventContent {
+    val message = this as? MessageContent ?: return this
+    val recoveredFormattedBody = recoverSetkaCustomEmojiFormattedBody(debugInfoProvider.value) ?: return this
+    val updatedType = when (val type = message.type) {
+        is TextMessageType -> {
+            if (type.formatted.hasSetkaCustomEmojiHtml()) type else type.copy(formatted = recoveredFormattedBody)
+        }
+        is NoticeMessageType -> {
+            if (type.formatted.hasSetkaCustomEmojiHtml()) type else type.copy(formatted = recoveredFormattedBody)
+        }
+        is EmoteMessageType -> {
+            if (type.formatted.hasSetkaCustomEmojiHtml()) type else type.copy(formatted = recoveredFormattedBody)
+        }
+        else -> return this
+    }
+    return if (updatedType == message.type) this else message.copy(type = updatedType)
+}
+
+private fun recoverSetkaCustomEmojiFormattedBody(debugInfo: TimelineItemDebugInfo): FormattedBody? {
+    val rawJson = debugInfo.latestEditedJson ?: debugInfo.originalJson ?: return null
+    val content = runCatching { JSONObject(rawJson).optJSONObject("content") }.getOrNull() ?: return null
+    val formattedBody = content.optString("formatted_body")
+        .trim()
+        .takeIf { it.isNotBlank() && it.contains("data-mx-emoticon", ignoreCase = true) }
+        ?: return null
+    val rawFormat = content.optString("format").trim()
+    val format = if (rawFormat.contains("html", ignoreCase = true)) {
+        MessageFormat.HTML
+    } else {
+        MessageFormat.UNKNOWN
+    }
+    return FormattedBody(
+        format = format,
+        body = formattedBody,
+    )
+}
+
+private fun FormattedBody?.hasSetkaCustomEmojiHtml(): Boolean {
+    return this?.body?.contains("data-mx-emoticon", ignoreCase = true) == true
 }

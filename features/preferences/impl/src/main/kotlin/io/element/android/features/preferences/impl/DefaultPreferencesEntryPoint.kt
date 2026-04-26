@@ -34,4 +34,5 @@ internal fun PreferencesEntryPoint.InitialTarget.toNavTarget() = when (this) {
     is PreferencesEntryPoint.InitialTarget.Root -> PreferencesFlowNode.NavTarget.Root
     is PreferencesEntryPoint.InitialTarget.NotificationSettings -> PreferencesFlowNode.NavTarget.NotificationSettings
     PreferencesEntryPoint.InitialTarget.NotificationTroubleshoot -> PreferencesFlowNode.NavTarget.TroubleshootNotifications
+    is PreferencesEntryPoint.InitialTarget.UserProfile -> PreferencesFlowNode.NavTarget.UserProfile(matrixUser)
 }

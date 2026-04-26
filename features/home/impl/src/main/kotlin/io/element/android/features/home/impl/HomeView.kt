@@ -10,28 +10,51 @@
 
 package io.element.android.features.home.impl
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.ContactsContract
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TextButton
@@ -44,8 +67,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -53,9 +78,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import io.element.android.libraries.ui.strings.CommonStrings
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
@@ -69,6 +96,7 @@ import io.element.android.features.home.impl.components.RoomListContentView
 import io.element.android.features.home.impl.components.RoomListMenuAction
 import io.element.android.features.home.impl.model.HomeContact
 import io.element.android.features.home.impl.model.RoomListRoomSummary
+import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.features.home.impl.roomlist.RoomListContextMenu
 import io.element.android.features.home.impl.roomlist.RoomListDeclineInviteMenu
 import io.element.android.features.home.impl.roomlist.RoomListContentState
@@ -79,11 +107,16 @@ import io.element.android.features.home.impl.spacefilters.SpaceFiltersEvent
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersView
 import io.element.android.features.home.impl.spaces.HomeSpacesView
+import io.element.android.features.logout.api.direct.DirectLogoutEvents
 import io.element.android.libraries.androidutils.throttler.FirstThrottler
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.designsystem.components.avatar.Avatar
+import io.element.android.libraries.designsystem.components.avatar.AvatarSize
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.theme.components.FloatingActionButton
 import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.NavigationBar
 import io.element.android.libraries.designsystem.theme.components.NavigationBarIcon
 import io.element.android.libraries.designsystem.theme.components.NavigationBarItem
@@ -97,7 +130,10 @@ import io.element.android.libraries.designsystem.utils.snackbar.rememberSnackbar
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.user.MatrixUser
+import io.element.android.libraries.matrix.ui.model.getAvatarData
+import androidx.core.content.ContextCompat
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -114,8 +150,8 @@ fun HomeView(
     onConfirmRecoveryKeyClick: () -> Unit,
     onStartChatClick: () -> Unit,
     onSearchUsers: suspend (String) -> List<MatrixUser>,
-    onAddContact: suspend (MatrixUser, String) -> Boolean,
-    onUpdateContactName: suspend (HomeContact, String) -> Boolean,
+    onAddContact: suspend (MatrixUser, String, String?, String?) -> Boolean,
+    onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
     onRoomSettingsClick: (roomId: RoomId) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
@@ -171,22 +207,22 @@ fun HomeView(
 
         leaveRoomView()
 
-        HomeScaffold(
-            state = homeState,
-            onSetUpRecoveryClick = onSetUpRecoveryClick,
-            onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
-            onRoomClick = { if (firstThrottler.canHandle()) onRoomClick(it) },
-            onUserProfileClick = { if (firstThrottler.canHandle()) onUserProfileClick(it) },
-            onOpenSettings = { if (firstThrottler.canHandle()) onSettingsClick() },
-            onStartChatClick = { if (firstThrottler.canHandle()) onStartChatClick() },
-            onSearchUsers = onSearchUsers,
-            onAddContact = onAddContact,
-            onUpdateContactName = onUpdateContactName,
-            onCreateSpaceClick = { if (firstThrottler.canHandle()) onCreateSpaceClick() },
-            onMenuActionClick = onMenuActionClick,
-            homeBackgroundColor = homeBackgroundColor,
-            homeBackgroundBitmap = homeBackgroundBitmap,
-        )
+            HomeScaffold(
+                state = homeState,
+                onSetUpRecoveryClick = onSetUpRecoveryClick,
+                onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
+                onRoomClick = { if (firstThrottler.canHandle()) onRoomClick(it) },
+                onUserProfileClick = { if (firstThrottler.canHandle()) onUserProfileClick(it) },
+                onOpenSettings = { if (firstThrottler.canHandle()) onSettingsClick() },
+                onStartChatClick = { if (firstThrottler.canHandle()) onStartChatClick() },
+                onSearchUsers = onSearchUsers,
+                onAddContact = onAddContact,
+                onUpdateContact = onUpdateContact,
+                onCreateSpaceClick = { if (firstThrottler.canHandle()) onCreateSpaceClick() },
+                onMenuActionClick = onMenuActionClick,
+                homeBackgroundColor = homeBackgroundColor,
+                homeBackgroundBitmap = homeBackgroundBitmap,
+            )
         // This overlaid view will only be visible when state.displaySearchResults is true
         if (state.searchState.isSearchActive) {
             RoomListSearchView(
@@ -216,8 +252,8 @@ private fun HomeScaffold(
     onOpenSettings: () -> Unit,
     onStartChatClick: () -> Unit,
     onSearchUsers: suspend (String) -> List<MatrixUser>,
-    onAddContact: suspend (MatrixUser, String) -> Boolean,
-    onUpdateContactName: suspend (HomeContact, String) -> Boolean,
+    onAddContact: suspend (MatrixUser, String, String?, String?) -> Boolean,
+    onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     homeBackgroundColor: Color,
@@ -249,9 +285,25 @@ private fun HomeScaffold(
     val spacesLazyListState = rememberLazyListState()
     val contactsLazyListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var suggestedUsers by remember { mutableStateOf<ImmutableList<MatrixUser>>(persistentListOf()) }
+    var didSyncPhonebook by remember { mutableStateOf(false) }
+    var hasContactsPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasContactsPermission = granted
+    }
     var showCreateContactDialog by remember { mutableStateOf(false) }
     var editingContact by remember { mutableStateOf<HomeContact?>(null) }
     var editingName by remember { mutableStateOf("") }
+    var editingEmail by remember { mutableStateOf("") }
+    var editingPhone by remember { mutableStateOf("") }
+    var showSetkaPlusDialog by remember { mutableStateOf(false) }
     val customization = LocalSetkaCustomization.current
     val bottomBarColor = parseSetkaColorOrNull(customization.topBarBackgroundColorHex)
         ?: ElementTheme.colors.bgSubtlePrimary
@@ -265,8 +317,28 @@ private fun HomeScaffold(
     val contactNameMap = remember(state.contacts) {
         state.contacts.associateBy({ it.roomId.value }, { it.displayName })
     }
+    val currentUser = remember(state.currentUserAndNeighbors) {
+        state.currentUserAndNeighbors.getOrNull(state.currentUserAndNeighbors.size / 2)
+            ?: state.currentUserAndNeighbors.firstOrNull()
+    }
     val decoratedRoomListState = remember(state.roomListState, contactNameMap) {
         decorateRoomListStateWithContacts(state.roomListState, contactNameMap)
+    }
+
+    LaunchedEffect(Unit) {
+        // Telegram-like: offer to sync phone contacts early so user can discover people immediately.
+        if (!hasContactsPermission) {
+            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+        }
+    }
+
+    LaunchedEffect(hasContactsPermission, didSyncPhonebook) {
+        if (!hasContactsPermission || didSyncPhonebook) return@LaunchedEffect
+        didSyncPhonebook = true
+        suggestedUsers = loadPhonebookSuggestions(
+            context = context,
+            onSearchUsers = onSearchUsers,
+        )
     }
 
     Box(
@@ -295,7 +367,15 @@ private fun HomeScaffold(
                 areSearchResultsDisplayed = roomListState.searchState.isSearchActive,
                 onToggleSearch = { roomListState.eventSink(RoomListEvent.ToggleSearchResults) },
                 onMenuActionClick = onMenuActionClick,
+                onOpenMyProfile = {
+                    currentUser?.userId?.let(onUserProfileClick)
+                },
+                onOpenSetkaPlus = {
+                    showSetkaPlusDialog = true
+                    state.eventSink(HomeEvent.RefreshSetkaPlus)
+                },
                 onOpenSettings = onOpenSettings,
+                onLogout = { state.directLogoutState.eventSink(DirectLogoutEvents.Logout(ignoreSdkError = false)) },
                 onAccountSwitch = {
                     state.eventSink(HomeEvent.SwitchToAccount(it))
                 },
@@ -401,12 +481,25 @@ private fun HomeScaffold(
                     HomeNavigationBarItem.Contacts -> {
                         ContactsContentView(
                             contacts = state.contacts,
+                            suggestedUsers = suggestedUsers,
+                            onSuggestedUserClick = { user -> onUserProfileClick(user.userId) },
+                            onSuggestedUserAdd = { user ->
+                                coroutineScope.launch {
+                                    val name = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
+                                    val success = onAddContact(user, name, null, null)
+                                    if (success) {
+                                        state.eventSink(HomeEvent.RefreshContacts)
+                                    }
+                                }
+                            },
                             onContactClick = { contact ->
                                 contact.userId?.let(onUserProfileClick) ?: onRoomClick(contact.roomId)
                             },
                             onContactLongClick = { contact ->
                                 editingContact = contact
                                 editingName = contact.displayName
+                                editingEmail = contact.email.orEmpty()
+                                editingPhone = contact.phone.orEmpty()
                             },
                             lazyListState = contactsLazyListState,
                             contentPadding = PaddingValues(
@@ -463,13 +556,29 @@ private fun HomeScaffold(
     )
     }
 
-    if (showCreateContactDialog) {
-        AddContactDialog(
+    BackHandler(enabled = showCreateContactDialog) {
+        showCreateContactDialog = false
+    }
+    AnimatedVisibility(
+        visible = showCreateContactDialog,
+        enter = if (enableAnimations) {
+            slideInVertically(initialOffsetY = { it }) + fadeIn()
+        } else {
+            fadeIn(animationSpec = tween(durationMillis = 120))
+        },
+        exit = if (enableAnimations) {
+            slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        } else {
+            fadeOut(animationSpec = tween(durationMillis = 120))
+        },
+        label = "setkaAddContactOverlay",
+    ) {
+        AddContactFullScreen(
             onDismiss = { showCreateContactDialog = false },
             onSearchUsers = onSearchUsers,
-            onAddContact = { user, displayName ->
+            onAddContact = { user, displayName, email, phone ->
                 coroutineScope.launch {
-                    val success = onAddContact(user, displayName)
+                    val success = onAddContact(user, displayName, email, phone)
                     if (success) {
                         showCreateContactDialog = false
                         state.eventSink(HomeEvent.RefreshContacts)
@@ -479,43 +588,240 @@ private fun HomeScaffold(
         )
     }
 
-    editingContact?.let { contact ->
-        AlertDialog(
-            onDismissRequest = { editingContact = null },
-            title = { Text("Edit contact name") },
-            text = {
-                OutlinedTextField(
-                    value = editingName,
-                    onValueChange = { value -> editingName = value },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+    BackHandler(enabled = showSetkaPlusDialog) {
+        showSetkaPlusDialog = false
+    }
+    AnimatedVisibility(
+        visible = showSetkaPlusDialog,
+        enter = if (enableAnimations) {
+            slideInVertically(initialOffsetY = { it }) + fadeIn()
+        } else {
+            fadeIn(animationSpec = tween(durationMillis = 120))
+        },
+        exit = if (enableAnimations) {
+            slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        } else {
+            fadeOut(animationSpec = tween(durationMillis = 120))
+        },
+        label = "setkaPlusOverlay",
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(ElementTheme.colors.bgCanvasDefault)
+                .safeDrawingPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.screen_home_setka_plus_title),
+                    style = ElementTheme.typography.fontHeadingMdBold,
+                    modifier = Modifier.weight(1f),
                 )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            val success = onUpdateContactName(contact, editingName.trim())
-                            if (success) {
-                                editingContact = null
-                                state.eventSink(HomeEvent.RefreshContacts)
-                            }
+                IconButton(onClick = { showSetkaPlusDialog = false }) {
+                    Icon(
+                        imageVector = CompoundIcons.Close(),
+                        contentDescription = stringResource(CommonStrings.action_close),
+                    )
+                }
+            }
+
+            if (state.setkaPlusState.isLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item(key = "setka-plus-promo") {
+                    HomeSetkaPlusPromoCard()
+                }
+
+                item(key = "setka-plus-status") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.screen_home_setka_plus_subscription_status),
+                            style = ElementTheme.typography.fontBodyLgMedium,
+                        )
+                        Text(state.setkaPlusState.subscription?.status ?: stringResource(R.string.screen_home_setka_plus_inactive))
+                        Text(
+                            text = state.setkaPlusState.subscription?.planName ?: stringResource(R.string.screen_home_setka_plus_title),
+                            color = ElementTheme.colors.textSecondary,
+                        )
+                    }
+                }
+
+                state.setkaPlusState.errorMessage?.let { errorMessage ->
+                    item(key = "setka-plus-error") {
+                        Text(
+                            text = errorMessage,
+                            color = ElementTheme.colors.textCriticalPrimary,
+                        )
+                    }
+                }
+
+                if (state.setkaPlusState.plans.isEmpty() && !state.setkaPlusState.isLoading) {
+                    item(key = "setka-plus-no-plans") {
+                        Text(
+                            text = stringResource(R.string.screen_home_setka_plus_no_plans),
+                            color = ElementTheme.colors.textSecondary,
+                        )
+                    }
+                }
+
+                items(state.setkaPlusState.plans.filter { it.active }, key = { it.id }) { plan ->
+                    val isOwned = state.setkaPlusState.subscription?.isActive == true &&
+                        state.setkaPlusState.subscription?.tier == plan.id
+                    val hasActiveSubscription = state.setkaPlusState.subscription?.isActive == true
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(plan.name, style = ElementTheme.typography.fontBodyLgMedium)
+                        Text(
+                            text = stringResource(
+                                R.string.screen_home_setka_plus_plan_price,
+                                plan.priceRub,
+                                plan.durationDays,
+                            ),
+                            color = ElementTheme.colors.textSecondary,
+                        )
+                        plan.features.forEach { feature ->
+                            Text(
+                                text = "- $feature",
+                                color = ElementTheme.colors.textSecondary,
+                            )
                         }
-                    },
-                    enabled = editingName.trim().isNotEmpty(),
-                ) {
-                    Text("Save")
+                        FilledTonalButton(
+                            onClick = { state.eventSink(HomeEvent.BuySetkaPlusPlan(plan.id)) },
+                            enabled = !hasActiveSubscription && !isOwned && state.setkaPlusState.busyPlanId == null,
+                        ) {
+                            Text(
+                                if (isOwned) {
+                                    stringResource(R.string.screen_home_setka_plus_plan_current)
+                                } else if (state.setkaPlusState.busyPlanId == plan.id) {
+                                    stringResource(R.string.screen_home_setka_plus_processing)
+                                } else {
+                                    stringResource(R.string.screen_home_setka_plus_plan_buy)
+                                }
+                            )
+                        }
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingContact = null }) {
-                    Text("Cancel")
+
+                item(key = "setka-plus-actions") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                    ) {
+                        TextButton(onClick = { state.eventSink(HomeEvent.RefreshSetkaPlus) }) {
+                            Text(stringResource(R.string.screen_home_setka_plus_refresh))
+                        }
+                    }
                 }
-            },
-        )
+            }
+        }
     }
 
+    BackHandler(enabled = editingContact != null) {
+        editingContact = null
+    }
+    AnimatedVisibility(
+        visible = editingContact != null,
+        enter = if (enableAnimations) {
+            slideInVertically(initialOffsetY = { it }) + fadeIn()
+        } else {
+            fadeIn(animationSpec = tween(durationMillis = 120))
+        },
+        exit = if (enableAnimations) {
+            slideOutVertically(targetOffsetY = { it }) + fadeOut()
+        } else {
+            fadeOut(animationSpec = tween(durationMillis = 120))
+        },
+        label = "setkaEditContactOverlay",
+    ) {
+        val contact = editingContact
+        if (contact != null) {
+            EditContactFullScreen(
+                initialDisplayName = editingName,
+                initialEmail = editingEmail,
+                initialPhone = editingPhone,
+                onDismiss = { editingContact = null },
+                onSave = { newName, newEmail, newPhone ->
+                    coroutineScope.launch {
+                        val success = onUpdateContact(contact, newName, newEmail, newPhone)
+                        if (success) {
+                            editingContact = null
+                            state.eventSink(HomeEvent.RefreshContacts)
+                        }
+                    }
+                },
+            )
+        }
+    }
+
+}
+
+@Composable
+private fun HomeSetkaPlusPromoCard(
+    modifier: Modifier = Modifier,
+) {
+    val gradient = Brush.linearGradient(
+        colors = listOf(
+            ElementTheme.colors.bgSubtlePrimary,
+            ElementTheme.colors.bgSubtleSecondary,
+        )
+    )
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(gradient, RoundedCornerShape(24.dp))
+            .border(1.dp, ElementTheme.colors.borderDisabled, RoundedCornerShape(24.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.screen_home_setka_plus_promo_title),
+            style = ElementTheme.typography.fontHeadingMdBold,
+        )
+        Text(
+            text = stringResource(R.string.screen_home_setka_plus_promo_subtitle),
+            style = ElementTheme.typography.fontBodyMdRegular,
+            color = ElementTheme.colors.textSecondary,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "- " + stringResource(R.string.screen_home_setka_plus_promo_feature_1),
+                style = ElementTheme.typography.fontBodySmRegular,
+            )
+            Text(
+                text = "- " + stringResource(R.string.screen_home_setka_plus_promo_feature_2),
+                style = ElementTheme.typography.fontBodySmRegular,
+            )
+            Text(
+                text = "- " + stringResource(R.string.screen_home_setka_plus_promo_feature_3),
+                style = ElementTheme.typography.fontBodySmRegular,
+            )
+        }
+    }
 }
 
 @Composable
@@ -554,13 +860,15 @@ private fun HomeBottomBar(
 }
 
 @Composable
-private fun AddContactDialog(
+private fun AddContactFullScreen(
     onDismiss: () -> Unit,
     onSearchUsers: suspend (String) -> List<MatrixUser>,
-    onAddContact: (MatrixUser, String) -> Unit,
+    onAddContact: (MatrixUser, String, String?, String?) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var contactName by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<MatrixUser>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var selectedUser by remember { mutableStateOf<MatrixUser?>(null) }
@@ -577,71 +885,315 @@ private fun AddContactDialog(
         isSearching = false
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(text = "Add contact")
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("Matrix user") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = ElementTheme.colors.bgCanvasDefault,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = CompoundIcons.Close(),
+                        contentDescription = stringResource(CommonStrings.action_close),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.screen_home_add_contact_title),
+                    style = ElementTheme.typography.fontHeadingMdBold,
+                    modifier = Modifier.weight(1f),
                 )
-                OutlinedTextField(
-                    value = contactName,
-                    onValueChange = { contactName = it },
-                    label = { Text("Contact name") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                )
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 240.dp),
+                TextButton(
+                    onClick = {
+                        val user = selectedUser ?: return@TextButton
+                        val name = contactName.trim()
+                        if (name.isBlank()) return@TextButton
+                        onAddContact(
+                            user,
+                            name,
+                            email.trim().takeIf { it.isNotBlank() },
+                            phone.trim().takeIf { it.isNotBlank() },
+                        )
+                    },
+                    enabled = selectedUser != null && contactName.trim().isNotEmpty(),
                 ) {
-                    items(results, key = { it.userId.value }) { user ->
-                        TextButton(
-                            onClick = {
-                                selectedUser = user
-                                if (contactName.isBlank()) {
-                                    contactName = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            val label = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
-                            Text(text = label)
-                        }
+                    Text(text = stringResource(R.string.screen_home_add_contact_add))
+                }
+            }
+
+            OutlinedTextField(
+                value = query,
+                onValueChange = { newValue ->
+                    query = newValue
+                    val trimmed = newValue.trim()
+                    if (trimmed.contains("@") && email.isBlank()) email = trimmed
+                    if (trimmed.startsWith("+") && trimmed.drop(1).all { it.isDigit() } && phone.isBlank()) phone = trimmed
+                },
+                label = { Text(stringResource(R.string.screen_home_add_contact_query_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (isSearching) {
+                Text(
+                    text = stringResource(R.string.screen_home_add_contact_searching),
+                    color = ElementTheme.colors.textSecondary,
+                    style = ElementTheme.typography.fontBodySmRegular,
+                )
+            }
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = true)
+                    .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(18.dp))
+                    .padding(vertical = 6.dp),
+            ) {
+                items(results, key = { it.userId.value }) { user ->
+                    TextButton(
+                        onClick = {
+                            selectedUser = user
+                            if (contactName.isBlank()) {
+                                contactName = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        val label = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
+                        Text(text = label)
                     }
                 }
-                if (isSearching) {
-                    Text(text = "Searching...")
-                }
-                selectedUser?.let { user ->
-                    Text(text = "Selected: ${user.displayName ?: user.userId.value}")
-                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { selectedUser?.let { onAddContact(it, contactName.trim()) } },
-                enabled = selectedUser != null && contactName.trim().isNotEmpty(),
+
+            selectedUser?.let { user ->
+                Text(
+                    text = stringResource(
+                        R.string.screen_home_add_contact_selected,
+                        user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
+                    ),
+                    color = ElementTheme.colors.textSecondary,
+                    style = ElementTheme.typography.fontBodySmRegular,
+                )
+            }
+
+            OutlinedTextField(
+                value = contactName,
+                onValueChange = { contactName = it },
+                label = { Text(stringResource(R.string.screen_home_add_contact_name_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text(stringResource(R.string.screen_home_contact_field_email)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { phone = it },
+                label = { Text(stringResource(R.string.screen_home_contact_field_phone)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun EditContactFullScreen(
+    initialDisplayName: String,
+    initialEmail: String,
+    initialPhone: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String?, String?) -> Unit,
+) {
+    var name by remember(initialDisplayName) { mutableStateOf(initialDisplayName) }
+    var email by remember(initialEmail) { mutableStateOf(initialEmail) }
+    var phone by remember(initialPhone) { mutableStateOf(initialPhone) }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = ElementTheme.colors.bgCanvasDefault,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text(text = "Add")
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = CompoundIcons.Close(),
+                        contentDescription = stringResource(CommonStrings.action_close),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.screen_home_edit_contact_title_full),
+                    style = ElementTheme.typography.fontHeadingMdBold,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        val trimmed = name.trim()
+                        if (trimmed.isBlank()) return@TextButton
+                        onSave(
+                            trimmed,
+                            email.trim().takeIf { it.isNotBlank() },
+                            phone.trim().takeIf { it.isNotBlank() },
+                        )
+                    },
+                    enabled = name.trim().isNotEmpty(),
+                ) {
+                    Text(text = stringResource(R.string.screen_home_edit_contact_save))
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "Cancel")
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.screen_home_edit_contact_name_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text(stringResource(R.string.screen_home_contact_field_email)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { phone = it },
+                label = { Text(stringResource(R.string.screen_home_contact_field_phone)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(modifier = Modifier.weight(1f))
+            FilledTonalButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.screen_home_edit_contact_cancel))
             }
-        },
-    )
+        }
+    }
+}
+
+private suspend fun loadPhonebookSuggestions(
+    context: Context,
+    onSearchUsers: suspend (String) -> List<MatrixUser>,
+): ImmutableList<MatrixUser> = withContext(Dispatchers.IO) {
+    val (phones, emails) = readPhonebookPhonesAndEmails(context = context, limit = 160)
+    val queries = (phones.take(40) + emails.take(30))
+        .map { it.trim() }
+        .filter { it.length >= 3 }
+        .distinct()
+        .take(60)
+
+    val results = buildList {
+        for (query in queries) {
+            val users = runCatching { onSearchUsers(query) }.getOrDefault(emptyList())
+            users.firstOrNull()?.let { add(it) }
+        }
+    }
+
+    results.distinctBy { it.userId.value }.toImmutableList()
+}
+
+private fun readPhonebookPhonesAndEmails(
+    context: Context,
+    limit: Int,
+): Pair<List<String>, List<String>> {
+    val phones = LinkedHashSet<String>()
+    val emails = LinkedHashSet<String>()
+
+    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        return emptyList<String>() to emptyList<String>()
+    }
+
+    runCatching {
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (cursor.moveToNext() && phones.size < limit) {
+                val raw = cursor.getString(index) ?: continue
+                normalizePhone(raw)?.let(phones::add)
+            }
+        }
+    }
+
+    runCatching {
+        context.contentResolver.query(
+            ContactsContract.CommonDataKinds.Email.CONTENT_URI,
+            arrayOf(ContactsContract.CommonDataKinds.Email.ADDRESS),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            val index = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Email.ADDRESS)
+            while (cursor.moveToNext() && emails.size < limit) {
+                val raw = cursor.getString(index) ?: continue
+                val value = raw.trim()
+                if (value.contains("@") && value.contains(".")) {
+                    emails.add(value)
+                }
+            }
+        }
+    }
+
+    return phones.toList() to emails.toList()
+}
+
+private fun normalizePhone(raw: String): String? {
+    val digits = raw.filter { it.isDigit() || it == '+' }
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("(", "")
+        .replace(")", "")
+    if (digits.isBlank()) return null
+
+    val cleaned = digits.filter { it.isDigit() || it == '+' }
+    if (cleaned.startsWith("+")) {
+        val rest = cleaned.drop(1)
+        if (rest.isNotBlank() && rest.all { it.isDigit() } && rest.length >= 8) return "+$rest"
+        return null
+    }
+
+    val justDigits = cleaned.filter { it.isDigit() }
+    if (justDigits.length < 8) return null
+
+    // RU-friendly best effort (8XXXXXXXXXX -> +7XXXXXXXXXX).
+    return when {
+        justDigits.length == 11 && justDigits.startsWith("8") -> "+7" + justDigits.drop(1)
+        justDigits.length == 11 && justDigits.startsWith("7") -> "+$justDigits"
+        else -> null
+    }
 }
 
 private fun decorateRoomListStateWithContacts(
@@ -693,8 +1245,8 @@ internal fun HomeViewPreview(@PreviewParameter(HomeStateProvider::class) state: 
         onConfirmRecoveryKeyClick = {},
         onStartChatClick = {},
         onSearchUsers = { emptyList() },
-        onAddContact = { _, _ -> false },
-        onUpdateContactName = { _, _ -> false },
+        onAddContact = { _, _, _, _ -> false },
+        onUpdateContact = { _, _, _, _ -> false },
         onCreateSpaceClick = {},
         onRoomSettingsClick = {},
         onReportRoomClick = {},
@@ -717,8 +1269,8 @@ internal fun HomeViewA11yPreview() = ElementPreview {
         onConfirmRecoveryKeyClick = {},
         onStartChatClick = {},
         onSearchUsers = { emptyList() },
-        onAddContact = { _, _ -> false },
-        onUpdateContactName = { _, _ -> false },
+        onAddContact = { _, _, _, _ -> false },
+        onUpdateContact = { _, _, _, _ -> false },
         onCreateSpaceClick = {},
         onRoomSettingsClick = {},
         onReportRoomClick = {},

@@ -222,6 +222,27 @@ class TimelineItemContentMessageFactoryTest {
     }
 
     @Test
+    fun `test create TextMessageType with custom emoji formatted body uses alt as body fallback when body is blank`() = runTest {
+        val sut = createTimelineItemContentMessageFactory()
+        val html = "<img data-mx-emoticon src=\"mxc://example.org/abc\" alt=\":element_logo:\" title=\"element_logo\" width=\"50\" height=\"50\" />"
+        val result = sut.create(
+            content = createMessageContent(
+                type = TextMessageType(
+                    body = "",
+                    formatted = FormattedBody(MessageFormat.HTML, html)
+                )
+            ),
+            senderDisambiguatedDisplayName = "Bob",
+            eventId = AN_EVENT_ID,
+        ) as TimelineItemTextContent
+
+        // Even if images are stripped by the text converter, the message must not be empty.
+        assertThat(result.body).isEqualTo(":element_logo:")
+        assertThat(result.plainText).isEqualTo(":element_logo:")
+        assertThat(result.rawHtmlBody).isEqualTo(html)
+    }
+
+    @Test
     fun `test create VideoMessageType`() = runTest {
         val sut = createTimelineItemContentMessageFactory()
         val result = sut.create(

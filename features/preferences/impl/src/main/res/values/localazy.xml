@@ -38,12 +38,21 @@
   <string name="screen_blocked_users_unblock_alert_description">"You\'ll be able to see all messages from them again."</string>
   <string name="screen_blocked_users_unblock_alert_title">"Unblock user"</string>
   <string name="screen_blocked_users_unblocking">"UnblockingвЂ¦"</string>
-  <string name="screen_edit_profile_display_name">"Display name"</string>
-  <string name="screen_edit_profile_display_name_placeholder">"Your display name"</string>
-  <string name="screen_edit_profile_error">"An unknown error was encountered and the information couldn\'t be changed."</string>
-  <string name="screen_edit_profile_error_title">"Unable to update profile"</string>
-  <string name="screen_edit_profile_title">"Edit profile"</string>
-  <string name="screen_edit_profile_updating_details">"Updating profileвЂ¦"</string>
+  <string name="screen_edit_profile_display_name">"Отображаемое имя"</string>
+  <string name="screen_edit_profile_display_name_placeholder">"Ваше имя"</string>
+  <string name="screen_edit_profile_bio_label">"О себе"</string>
+  <string name="screen_edit_profile_bio_placeholder">"Коротко расскажите о себе"</string>
+  <string name="screen_edit_profile_profile_color_label">"Цвет профиля"</string>
+  <string name="screen_edit_profile_profile_color_placeholder">"#7B61FF"</string>
+  <string name="screen_edit_profile_badge_label">"Статус"</string>
+  <string name="screen_edit_profile_badge_choose">"Выбрать"</string>
+  <string name="screen_edit_profile_badge_clear">"Убрать"</string>
+  <string name="screen_edit_profile_badge_plus_required">"Чтобы поставить статус, нужен Setka Plus"</string>
+  <string name="screen_edit_profile_badge_picker_title">"Выберите статус"</string>
+  <string name="screen_edit_profile_error">"Не удалось сохранить изменения профиля."</string>
+  <string name="screen_edit_profile_error_title">"Ошибка обновления профиля"</string>
+  <string name="screen_edit_profile_title">"Мой профиль"</string>
+  <string name="screen_edit_profile_updating_details">"Сохраняем профиль…"</string>
   <string name="screen_labs_enable_threads">"Enable thread replies"</string>
   <string name="screen_labs_enable_threads_description">"The app will restart to apply this change."</string>
   <string name="screen_labs_header_description">"Try out our latest ideas in development. These features are not finalised; they may be unstable, may change."</string>
@@ -106,5 +115,49 @@ If you proceed, some of your settings may change."</string>
   <string name="troubleshoot_notifications_entry_point_push_history_title">"Push history"</string>
   <string name="troubleshoot_notifications_entry_point_section">"Troubleshoot"</string>
   <string name="troubleshoot_notifications_entry_point_title">"Troubleshoot notifications"</string>
+
+  <string name="screen_preferences_contacts_privacy_title">"Контакты и приватность"</string>
+  <string name="screen_preferences_contacts_privacy_subtitle">"Email, телефон, поиск по номеру, контакты"</string>
+
+  <string name="screen_setka_privacy_section_title">"Приватность"</string>
+  <string name="screen_setka_privacy_visibility_section_title">"Кто видит мои данные"</string>
+  <string name="screen_setka_privacy_search_section_title">"Поиск и обнаружение"</string>
+  <string name="screen_setka_privacy_discoverable_email_title">"Разрешить искать меня по email"</string>
+  <string name="screen_setka_privacy_discoverable_email_subtitle">"Если выключено, поиск по email не найдет ваш аккаунт"</string>
+  <string name="screen_setka_privacy_discoverable_msisdn_title">"Разрешить искать меня по номеру"</string>
+  <string name="screen_setka_privacy_discoverable_msisdn_subtitle">"Если выключено, поиск по номеру не найдет ваш аккаунт"</string>
+  <string name="screen_setka_privacy_last_seen_title">"Время последнего входа"</string>
+  <string name="screen_setka_privacy_phone_visibility_title">"Телефон"</string>
+  <string name="screen_setka_privacy_email_visibility_title">"Почта"</string>
+  <string name="screen_setka_privacy_everyone">"Все"</string>
+  <string name="screen_setka_privacy_contacts">"Контакты"</string>
+  <string name="screen_setka_privacy_nobody">"Никто"</string>
+
+  <string name="screen_setka_threepids_email_section_title">"Email"</string>
+  <string name="screen_setka_threepids_phone_section_title">"Телефон"</string>
+  <string name="screen_setka_threepids_add_email">"Добавить email"</string>
+  <string name="screen_setka_threepids_add_phone">"Добавить номер"</string>
+  <string name="screen_setka_threepids_empty">"Не добавлено"</string>
+  <string name="screen_setka_threepids_verified">"Подтверждено"</string>
+  <string name="screen_setka_threepids_unverified">"Не подтверждено"</string>
+  <string name="screen_setka_threepids_refresh">"Обновить"</string>
+
+  <string name="screen_setka_add_email_title">"Добавить email"</string>
+  <string name="screen_setka_add_email_email_label">"Email"</string>
+  <string name="screen_setka_add_email_password_label">"Пароль"</string>
+  <string name="screen_setka_add_email_request">"Отправить письмо"</string>
+  <string name="screen_setka_add_email_confirm_hint">"Проверьте почту и подтвердите email. Потом введите пароль и нажмите Добавить."</string>
+  <string name="screen_setka_add_threepid_add">"Добавить"</string>
+
+  <string name="screen_setka_add_phone_title">"Добавить номер"</string>
+  <string name="screen_setka_add_phone_country_label">"Страна (ISO)"</string>
+  <string name="screen_setka_add_phone_number_label">"Номер"</string>
+  <string name="screen_setka_add_phone_code_label">"Код из почты"</string>
+  <string name="screen_setka_add_phone_send_code">"Отправить код"</string>
+  <string name="screen_setka_add_phone_submit_code">"Подтвердить код"</string>
+  <string name="screen_setka_add_phone_hint">"Введите код из почты и нажмите Подтвердить код."</string>
+
+  <string name="screen_setka_delete_threepid_title">"Удалить?"</string>
+  <string name="screen_setka_delete_threepid_confirm">"Удалить"</string>
 </resources>
 

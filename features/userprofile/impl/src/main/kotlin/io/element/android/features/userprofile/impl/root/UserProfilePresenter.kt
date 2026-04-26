@@ -8,6 +8,7 @@
 
 package io.element.android.features.userprofile.impl.root
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -27,22 +28,28 @@ import io.element.android.features.userprofile.api.UserProfileEvents
 import io.element.android.features.userprofile.api.UserProfileState
 import io.element.android.features.userprofile.api.UserProfileState.ConfirmationDialog
 import io.element.android.features.userprofile.api.UserProfileVerificationState
+import io.element.android.libraries.androidutils.clipboard.ClipboardHelper
 import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.core.bool.orFalse
+import io.element.android.libraries.designsystem.utils.snackbar.LocalSnackbarDispatcher
+import io.element.android.libraries.designsystem.utils.snackbar.SnackbarMessage
+import io.element.android.libraries.designsystem.utils.snackbar.collectSnackbarMessageAsState
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.room.powerlevels.canCall
 import io.element.android.libraries.matrix.api.room.powerlevels.use
 import io.element.android.libraries.matrix.api.user.MatrixUser
+import io.element.android.libraries.ui.strings.CommonStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 @AssistedInject
 class UserProfilePresenter(
@@ -50,6 +57,7 @@ class UserProfilePresenter(
     private val client: MatrixClient,
     private val startDMAction: StartDMAction,
     private val sessionEnterpriseService: SessionEnterpriseService,
+    private val clipboardHelper: ClipboardHelper,
 ) : Presenter<UserProfileState> {
     @AssistedFactory
     interface Factory {
@@ -72,13 +80,12 @@ class UserProfilePresenter(
             value = when {
                 isElementCallAvailable.not() -> false
                 client.isMe(userId) -> false
-                else ->
-                    roomId
-                        ?.let { client.getRoom(it) }
-                        ?.use { room ->
-                            room.roomPermissions().use(false) { perms -> perms.canCall() }
-                        }
-                        .orFalse()
+                else -> roomId
+                    ?.let { client.getRoom(it) }
+                    ?.use { room ->
+                        room.roomPermissions().use(false) { perms -> perms.canCall() }
+                    }
+                    .orFalse()
             }
         }
     }
@@ -86,12 +93,15 @@ class UserProfilePresenter(
     @Composable
     override fun present(): UserProfileState {
         val coroutineScope = rememberCoroutineScope()
+        val snackbarDispatcher = LocalSnackbarDispatcher.current
+        val snackbarMessage by snackbarDispatcher.collectSnackbarMessageAsState()
         val isCurrentUser = remember { client.isMe(userId) }
         var confirmationDialog by remember { mutableStateOf<ConfirmationDialog?>(null) }
         val startDmActionState: MutableState<AsyncAction<RoomId>> = remember { mutableStateOf(AsyncAction.Uninitialized) }
         val isBlocked: MutableState<AsyncData<Boolean>> = remember { mutableStateOf(AsyncData.Uninitialized) }
         val dmRoomId by getDmRoomId()
         val canCall by getCanCall(dmRoomId)
+
         LaunchedEffect(Unit) {
             client.ignoredUsersFlow
                 .map { ignoredUsers -> userId in ignoredUsers }
@@ -99,7 +109,24 @@ class UserProfilePresenter(
                 .onEach { isBlocked.value = AsyncData.Success(it) }
                 .launchIn(this)
         }
-        val userProfile by produceState<MatrixUser?>(null) { value = client.getProfile(userId).getOrNull() }
+
+        val userProfile by produceState<MatrixUser?>(null) {
+            value = client.getProfile(userId).getOrNull()
+        }
+        val setkaProfile by produceState<JSONObject?>(null, userId, isCurrentUser) {
+            val encoded = Uri.encode(userId.value)
+            val path = if (isCurrentUser) {
+                "/_matrix/client/v3/user/$encoded/setka_profile"
+            } else {
+                "/_matrix/client/v3/profile/$encoded/setka_profile"
+            }
+            value = client.executeAuthenticatedRequest(
+                method = "GET",
+                path = path,
+            ).getOrNull()
+                ?.decodeToString()
+                ?.let { raw -> runCatching { JSONObject(raw) }.getOrNull() }
+        }
 
         fun handleEvent(event: UserProfileEvents) {
             when (event) {
@@ -111,6 +138,7 @@ class UserProfilePresenter(
                         coroutineScope.blockUser(isBlocked)
                     }
                 }
+
                 is UserProfileEvents.UnblockUser -> {
                     if (event.needsConfirmation) {
                         confirmationDialog = ConfirmationDialog.Unblock
@@ -119,10 +147,12 @@ class UserProfilePresenter(
                         coroutineScope.unblockUser(isBlocked)
                     }
                 }
+
                 UserProfileEvents.ClearConfirmationDialog -> confirmationDialog = null
                 UserProfileEvents.ClearBlockUserError -> {
                     isBlocked.value = AsyncData.Success(isBlocked.value.dataOrNull().orFalse())
                 }
+
                 UserProfileEvents.StartDM -> {
                     coroutineScope.launch {
                         startDMAction.execute(
@@ -132,12 +162,17 @@ class UserProfilePresenter(
                         )
                     }
                 }
+
                 UserProfileEvents.ClearStartDMState -> {
                     startDmActionState.value = AsyncAction.Uninitialized
                 }
-                // Do nothing for other event as they are handled by the RoomMemberDetailsPresenter if needed
-                UserProfileEvents.WithdrawVerification,
-                is UserProfileEvents.CopyToClipboard -> Unit
+
+                UserProfileEvents.WithdrawVerification -> Unit
+
+                is UserProfileEvents.CopyToClipboard -> {
+                    clipboardHelper.copyPlainText(event.text)
+                    snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_copied_to_clipboard))
+                }
             }
         }
 
@@ -145,6 +180,14 @@ class UserProfilePresenter(
             userId = userId,
             userName = userProfile?.displayName,
             avatarUrl = userProfile?.avatarUrl,
+            bio = setkaProfile?.optString("bio")?.takeIf { it.isNotBlank() },
+            profileColorHex = setkaProfile?.optString("color")?.takeIf { it.isNotBlank() },
+            badgeEmojiMxcUrl = setkaProfile?.optString("badge_emoji_mxc")?.takeIf { it.isNotBlank() },
+            statusEmojiMxcUrl = setkaProfile?.optString("status_emoji_mxc")?.takeIf { it.isNotBlank() },
+            profileBackgroundMxcUrl = setkaProfile?.optString("background_mxc")?.takeIf { it.isNotBlank() },
+            email = setkaProfile?.optString("email")?.takeIf { it.isNotBlank() },
+            phone = setkaProfile?.optString("phone")?.takeIf { it.isNotBlank() },
+            lastSeenText = setkaProfile.toSetkaPresenceText(),
             isBlocked = isBlocked.value,
             verificationState = UserProfileVerificationState.UNKNOWN,
             startDmActionState = startDmActionState.value,
@@ -152,7 +195,7 @@ class UserProfilePresenter(
             isCurrentUser = isCurrentUser,
             dmRoomId = dmRoomId,
             canCall = canCall,
-            snackbarMessage = null,
+            snackbarMessage = snackbarMessage,
             eventSink = ::handleEvent,
         )
     }
@@ -165,7 +208,6 @@ class UserProfilePresenter(
             .onFailure {
                 isBlockedState.value = AsyncData.Failure(it, false)
             }
-        // Note: on success, ignoredUsersFlow will emit new item.
     }
 
     private fun CoroutineScope.unblockUser(
@@ -176,6 +218,16 @@ class UserProfilePresenter(
             .onFailure {
                 isBlockedState.value = AsyncData.Failure(it, true)
             }
-        // Note: on success, ignoredUsersFlow will emit new item.
+    }
+}
+
+private fun JSONObject?.toSetkaPresenceText(): String? {
+    val json = this ?: return null
+    return when (json.optString("presence_state").trim()) {
+        "online" -> "В сети"
+        "recently" -> "Был(-а) недавно"
+        "this_week" -> "Был(-а) на этой неделе"
+        "long_ago" -> "Был(-а) давно"
+        else -> null
     }
 }

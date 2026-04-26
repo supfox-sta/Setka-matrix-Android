@@ -153,6 +153,13 @@ interface MatrixClient {
      * Execute generic GET requests through the SDKs internal HTTP client.
      */
     suspend fun getUrl(url: String): Result<ByteArray>
+    suspend fun executeAuthenticatedRequest(
+        method: String,
+        path: String,
+        body: ByteArray? = null,
+        contentType: String = "application/json",
+        accept: String = "application/json",
+    ): Result<ByteArray>
     suspend fun getContactList(): Result<List<MatrixContact>>
     suspend fun putContact(roomId: RoomId, displayName: String?, email: String?, phone: String?): Result<Unit>
     suspend fun deleteContact(roomId: RoomId): Result<Unit>

@@ -71,6 +71,9 @@ class TimelineItemContentMessageFactory(
         return when (val messageType = content.type) {
             is EmoteMessageType -> {
                 val emoteBody = "* $senderDisambiguatedDisplayName ${messageType.body.trimEnd()}"
+                val rawHtmlBody = messageType.formatted?.body?.takeIf {
+                    it.contains("data-mx-emoticon", ignoreCase = true)
+                }
                 val dom = messageType.formatted?.toHtmlDocument(
                     permalinkParser = permalinkParser,
                     prefix = "* $senderDisambiguatedDisplayName",
@@ -82,6 +85,7 @@ class TimelineItemContentMessageFactory(
                     htmlDocument = dom,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
+                    rawHtmlBody = rawHtmlBody,
                 )
             }
             is ImageMessageType -> {
@@ -232,29 +236,45 @@ class TimelineItemContentMessageFactory(
                 )
             }
             is NoticeMessageType -> {
-                val body = messageType.body.trimEnd()
+                val rawBody = messageType.body.trimEnd()
+                val body = rawBody.takeIf { it.isNotBlank() }
+                    ?: setkaCustomEmojiFallbackBodyFromHtml(messageType.formatted?.body)
+                    ?: rawBody
+                val rawHtmlBody = messageType.formatted?.body?.takeIf {
+                    it.contains("data-mx-emoticon", ignoreCase = true)
+                }
                 val dom = messageType.formatted?.toHtmlDocument(permalinkParser = permalinkParser)
-                val formattedBody = dom?.let(::parseHtml)
+                // If the HTML contains only images (custom emoji), the converter may return a non-null but
+                // empty CharSequence. Falling back avoids rendering empty bubbles.
+                val formattedBody = dom?.let(::parseHtml)?.takeUnless { it.toString().isBlank() }
                     ?: textPillificationHelper.pillify(body).safeLinkify()
-                val htmlDocument = messageType.formatted?.toHtmlDocument(permalinkParser = permalinkParser)
                 TimelineItemNoticeContent(
                     body = body,
-                    htmlDocument = htmlDocument,
+                    htmlDocument = dom,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
+                    rawHtmlBody = rawHtmlBody,
                 )
             }
             is TextMessageType -> {
-                val body = messageType.body.trimEnd()
+                val rawBody = messageType.body.trimEnd()
+                val body = rawBody.takeIf { it.isNotBlank() }
+                    ?: setkaCustomEmojiFallbackBodyFromHtml(messageType.formatted?.body)
+                    ?: rawBody
+                val rawHtmlBody = messageType.formatted?.body?.takeIf {
+                    it.contains("data-mx-emoticon", ignoreCase = true)
+                }
                 val dom = messageType.formatted?.toHtmlDocument(permalinkParser = permalinkParser)
-                val formattedBody = dom?.let(::parseHtml)
+                // If the HTML contains only images (custom emoji), the converter may return a non-null but
+                // empty CharSequence. Falling back avoids rendering empty bubbles.
+                val formattedBody = dom?.let(::parseHtml)?.takeUnless { it.toString().isBlank() }
                     ?: textPillificationHelper.pillify(body).safeLinkify()
-                val htmlDocument = messageType.formatted?.toHtmlDocument(permalinkParser = permalinkParser)
                 TimelineItemTextContent(
                     body = body,
-                    htmlDocument = htmlDocument,
+                    htmlDocument = dom,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
+                    rawHtmlBody = rawHtmlBody,
                 )
             }
             is OtherMessageType -> {
@@ -285,6 +305,43 @@ class TimelineItemContentMessageFactory(
             .let { textPillificationHelper.pillify(it) }
             .safeLinkify()
     }
+}
+
+private fun setkaCustomEmojiFallbackBodyFromHtml(htmlBody: String?): String? {
+    if (htmlBody.isNullOrBlank()) return null
+    if (!htmlBody.contains("data-mx-emoticon", ignoreCase = true)) return null
+    // Extract alt/title from data-mx-emoticon images.
+    // We avoid relying on strict HTML parsing here: different clients may generate slightly
+    // different quoting/ordering and we just want a non-empty fallback body.
+    val imgRegex = Regex(
+        pattern = "<img[^>]*data-mx-emoticon[^>]*>",
+        options = setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL),
+    )
+    val attrRegex = Regex(
+        pattern = """(alt|title)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))""",
+        options = setOf(RegexOption.IGNORE_CASE),
+    )
+    val tokens = buildList {
+        for (match in imgRegex.findAll(htmlBody)) {
+            val tag = match.value
+            val attrs = attrRegex.findAll(tag).toList()
+            fun firstAttr(name: String): String? {
+                val m = attrs.firstOrNull { it.groupValues[1].equals(name, ignoreCase = true) } ?: return null
+                return listOf(m.groupValues[2], m.groupValues[3], m.groupValues[4]).firstOrNull { it.isNotBlank() }?.trim()
+            }
+            val alt = firstAttr("alt")
+            val title = firstAttr("title")
+            val raw = alt?.takeIf { it.isNotBlank() } ?: title?.takeIf { it.isNotBlank() }
+            val token = if (!raw.isNullOrBlank()) {
+                if (raw.startsWith(":") && raw.endsWith(":")) raw else ":$raw:"
+            } else {
+                // No usable shortcode available: still generate a placeholder to avoid empty bubbles.
+                ":emoji_${size + 1}:"
+            }
+            add(token)
+        }
+    }
+    return tokens.takeIf { it.isNotEmpty() }?.joinToString(separator = " ")
 }
 
 @Suppress("USELESS_ELVIS")

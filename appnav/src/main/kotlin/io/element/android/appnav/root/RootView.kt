@@ -14,14 +14,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import io.element.android.appnav.R
 import io.element.android.features.rageshake.api.crash.CrashDetectionEvent
 import io.element.android.features.rageshake.api.crash.CrashDetectionView
 import io.element.android.features.rageshake.api.detection.RageshakeDetectionEvent
 import io.element.android.features.rageshake.api.detection.RageshakeDetectionView
+import io.element.android.libraries.designsystem.components.dialogs.ErrorDialog
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.services.apperror.impl.AppErrorView
 
 @Composable
@@ -55,6 +59,16 @@ fun RootView(
         AppErrorView(
             state = state.errorState,
         )
+
+        if (state.showLegacyAndroidCompatibilityWarning) {
+            ErrorDialog(
+                title = null,
+                content = stringResource(R.string.app_legacy_android_compatibility_warning),
+                submitText = stringResource(CommonStrings.action_continue),
+                onSubmit = state.dismissLegacyAndroidCompatibilityWarning,
+                onDismiss = state.dismissLegacyAndroidCompatibilityWarning,
+            )
+        }
     }
 }
 

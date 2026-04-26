@@ -80,6 +80,20 @@ class FakeTimeline(
         sendMessageLambda(body, htmlBody, intentionalMentions)
     }
 
+    var sendRawLambda: (
+        eventType: String,
+        content: String,
+    ) -> Result<Unit> = { _, _ ->
+        lambdaError()
+    }
+
+    override suspend fun sendRaw(
+        eventType: String,
+        content: String,
+    ): Result<Unit> = simulateLongTask {
+        sendRawLambda(eventType, content)
+    }
+
     var redactEventLambda: (eventOrTransactionId: EventOrTransactionId, reason: String?) -> Result<Unit> = { _, _ ->
         lambdaError()
     }

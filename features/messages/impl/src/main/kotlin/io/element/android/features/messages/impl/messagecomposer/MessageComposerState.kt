@@ -9,6 +9,8 @@
 package io.element.android.features.messages.impl.messagecomposer
 
 import androidx.compose.runtime.Stable
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerState
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaComposerState
 import io.element.android.libraries.textcomposer.mentions.ResolvedSuggestion
 import io.element.android.libraries.textcomposer.model.MessageComposerMode
 import io.element.android.libraries.textcomposer.model.TextEditorState
@@ -24,6 +26,8 @@ data class MessageComposerState(
     val showTextFormatting: Boolean,
     val canShareLocation: Boolean,
     val suggestions: ImmutableList<ResolvedSuggestion>,
+    val legacyGalleryPickerState: LegacyGalleryPickerState?,
+    val setkaState: SetkaComposerState,
     val resolveMentionDisplay: (String, String) -> TextDisplay,
     val resolveAtRoomMentionDisplay: () -> TextDisplay,
     val eventSink: (MessageComposerEvent) -> Unit,

@@ -9,6 +9,7 @@
 package io.element.android.features.messages.impl
 
 import android.os.Build
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -93,6 +94,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicBoolean
 
 @AssistedInject
@@ -176,9 +178,10 @@ class MessagesPresenter(
         }
 
         var contactDisplayName by remember(room.roomId.value) { mutableStateOf<String?>(null) }
-        LaunchedEffect(room.roomId.value) {
+        LaunchedEffect(room.roomId.value, roomInfo.isDm) {
             contactDisplayName = withContext(dispatchers.io) {
-                matrixClient.getContactList()
+                if (!roomInfo.isDm) return@withContext null
+                runCatching { matrixClient.getContactList().getOrNull() }
                     .getOrNull()
                     ?.firstOrNull { it.roomId == room.roomId }
                     ?.displayName
@@ -232,6 +235,7 @@ class MessagesPresenter(
         val snackbarMessage by snackbarDispatcher.collectSnackbarMessageAsState()
 
         var dmUserVerificationState by remember { mutableStateOf<IdentityState?>(null) }
+        var dmUserPresenceText by remember { mutableStateOf<String?>(null) }
 
         val membersState by room.membersStateFlow.collectAsState()
         val dmRoomMember by room.getDirectRoomMember(membersState)
@@ -255,6 +259,21 @@ class MessagesPresenter(
                 }
             }
             onPauseOrDispose {}
+        }
+
+        LaunchedEffect(dmRoomMember?.userId, roomInfo.isDm) {
+            if (!roomInfo.isDm) {
+                dmUserPresenceText = null
+                return@LaunchedEffect
+            }
+            val userId = dmRoomMember?.userId?.value
+            if (userId.isNullOrBlank()) {
+                dmUserPresenceText = null
+                return@LaunchedEffect
+            }
+            dmUserPresenceText = withContext(dispatchers.io) {
+                fetchPresenceText(matrixClient, userId)
+            }
         }
 
         fun handleEvent(event: MessagesEvent) {
@@ -327,6 +346,7 @@ class MessagesPresenter(
             roomWallpaperStyle = roomWallpaperStyle,
             pinnedMessagesBannerState = pinnedMessagesBannerState,
             dmUserVerificationState = dmUserVerificationState,
+            dmUserPresenceText = dmUserPresenceText,
             roomMemberModerationState = roomMemberModerationState,
             topBarSharedHistoryIcon = topBarSharedHistoryIcon,
             successorRoom = roomInfo.successorRoom,
@@ -453,7 +473,13 @@ class MessagesPresenter(
     ) = launch(dispatchers.io) {
         timelineController.invokeOnCurrentTimeline {
             toggleReaction(emoji, eventOrTransactionId)
-                .flatMap { added -> if (added) addRecentEmoji(emoji) else Result.success(Unit) }
+                .flatMap { added ->
+                    when {
+                        !added -> Result.success(Unit)
+                        emoji.startsWith("mxc://") -> Result.success(Unit)
+                        else -> addRecentEmoji(emoji)
+                    }
+                }
                 .onFailure { Timber.e(it) }
         }
     }
@@ -614,4 +640,20 @@ class MessagesPresenter(
             snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_copied_to_clipboard))
         }
     }
+}
+
+private suspend fun fetchPresenceText(client: MatrixClient, userId: String): String? {
+    val raw = client.executeAuthenticatedRequest(
+        method = "GET",
+        path = "/_matrix/client/v3/presence/${Uri.encode(userId)}/status",
+    ).getOrNull()?.decodeToString() ?: return null
+
+    val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    val presence = json.optString("presence").lowercase()
+    val currentlyActive = json.optBoolean("currently_active", false)
+    val lastActiveAgoMs = json.optLong("last_active_ago", -1L)
+
+    if (presence == "online" || currentlyActive) return "В сети"
+    if (lastActiveAgoMs in 0..(24L * 60L * 60L * 1000L)) return "Был(-а) недавно"
+    return "Был(-а) давно"
 }

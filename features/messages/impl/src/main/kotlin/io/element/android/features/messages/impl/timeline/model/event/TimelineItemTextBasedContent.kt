@@ -31,6 +31,10 @@ sealed interface TimelineItemTextBasedContent :
     /** The plain text version of the event body. This is the Markdown version without actual Markdown formatting. */
     val plainText: String
 
+    /** The original raw HTML body when we need to preserve markup that may be normalized away by the DOM parser. */
+    val rawHtmlBody: String?
+        get() = htmlBody
+
     /** The raw HTML body of the event. */
     val htmlBody: String?
         get() = htmlDocument?.body()?.html()

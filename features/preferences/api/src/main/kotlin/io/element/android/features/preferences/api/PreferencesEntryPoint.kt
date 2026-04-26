@@ -16,6 +16,7 @@ import io.element.android.libraries.architecture.FeatureEntryPoint
 import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
+import io.element.android.libraries.matrix.api.user.MatrixUser
 import kotlinx.parcelize.Parcelize
 
 interface PreferencesEntryPoint : FeatureEntryPoint {
@@ -28,6 +29,9 @@ interface PreferencesEntryPoint : FeatureEntryPoint {
 
         @Parcelize
         data object NotificationTroubleshoot : InitialTarget
+
+        @Parcelize
+        data class UserProfile(val matrixUser: MatrixUser) : InitialTarget
     }
 
     data class Params(val initialElement: InitialTarget) : NodeInputs

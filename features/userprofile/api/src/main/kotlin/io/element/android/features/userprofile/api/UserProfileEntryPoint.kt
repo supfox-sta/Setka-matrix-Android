@@ -15,12 +15,14 @@ import io.element.android.libraries.architecture.FeatureEntryPoint
 import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.user.MatrixUser
 
 interface UserProfileEntryPoint : FeatureEntryPoint {
     data class Params(val userId: UserId) : NodeInputs
 
     interface Callback : Plugin {
         fun navigateToRoom(roomId: RoomId)
+        fun navigateToEditProfile(matrixUser: MatrixUser)
     }
 
     fun createNode(

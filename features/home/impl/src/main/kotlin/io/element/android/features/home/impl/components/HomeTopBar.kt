@@ -92,7 +92,10 @@ fun HomeTopBar(
     areSearchResultsDisplayed: Boolean,
     onToggleSearch: () -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
+    onOpenMyProfile: () -> Unit,
+    onOpenSetkaPlus: () -> Unit,
     onOpenSettings: () -> Unit,
+    onLogout: () -> Unit,
     onAccountSwitch: (SessionId) -> Unit,
     onCreateSpace: () -> Unit,
     onToggleTheme: () -> Unit,
@@ -179,7 +182,10 @@ fun HomeTopBar(
                     currentUserAndNeighbors = currentUserAndNeighbors,
                     showAvatarIndicator = showAvatarIndicator,
                     onAccountSwitch = onAccountSwitch,
-                    onClick = onOpenSettings,
+                    onOpenMyProfile = onOpenMyProfile,
+                    onOpenSetkaPlus = onOpenSetkaPlus,
+                    onOpenSettings = onOpenSettings,
+                    onLogout = onLogout,
                 )
             },
             actions = {
@@ -375,14 +381,20 @@ private fun NavigationIcon(
     currentUserAndNeighbors: ImmutableList<MatrixUser>,
     showAvatarIndicator: Boolean,
     onAccountSwitch: (SessionId) -> Unit,
-    onClick: () -> Unit,
+    onOpenMyProfile: () -> Unit,
+    onOpenSetkaPlus: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onLogout: () -> Unit,
 ) {
     if (currentUserAndNeighbors.size == 1) {
         AccountIcon(
             matrixUser = currentUserAndNeighbors.single(),
             isCurrentAccount = true,
             showAvatarIndicator = showAvatarIndicator,
-            onClick = onClick,
+            onOpenMyProfile = onOpenMyProfile,
+            onOpenSetkaPlus = onOpenSetkaPlus,
+            onOpenSettings = onOpenSettings,
+            onLogout = onLogout,
         )
     } else {
         // Render a vertical pager
@@ -402,8 +414,23 @@ private fun NavigationIcon(
                 matrixUser = currentUserAndNeighbors[page],
                 isCurrentAccount = page == 1,
                 showAvatarIndicator = page == 1 && showAvatarIndicator,
-                onClick = if (page == 1) {
-                    onClick
+                onOpenMyProfile = if (page == 1) {
+                    onOpenMyProfile
+                } else {
+                    {}
+                },
+                onOpenSetkaPlus = if (page == 1) {
+                    onOpenSetkaPlus
+                } else {
+                    {}
+                },
+                onOpenSettings = if (page == 1) {
+                    onOpenSettings
+                } else {
+                    {}
+                },
+                onLogout = if (page == 1) {
+                    onLogout
                 } else {
                     {}
                 },
@@ -417,13 +444,17 @@ private fun AccountIcon(
     matrixUser: MatrixUser,
     isCurrentAccount: Boolean,
     showAvatarIndicator: Boolean,
-    onClick: () -> Unit,
+    onOpenMyProfile: () -> Unit,
+    onOpenSetkaPlus: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     val testTag = if (isCurrentAccount) Modifier.testTag(TestTags.homeScreenSettings) else Modifier
     IconButton(
         modifier = modifier.then(testTag),
-        onClick = onClick,
+        onClick = { showMenu = true },
     ) {
         Box {
             val avatarData by remember(matrixUser) {
@@ -443,6 +474,63 @@ private fun AccountIcon(
             }
         }
     }
+    DropdownMenu(
+        expanded = showMenu,
+        onDismissRequest = { showMenu = false },
+    ) {
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.screen_home_my_profile_title)) },
+            onClick = {
+                showMenu = false
+                onOpenMyProfile()
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = CompoundIcons.UserProfile(),
+                    contentDescription = null,
+                )
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.screen_home_menu_setka_plus)) },
+            onClick = {
+                showMenu = false
+                onOpenSetkaPlus()
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = CompoundIcons.Sticker(),
+                    contentDescription = null,
+                )
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.screen_home_menu_settings)) },
+            onClick = {
+                showMenu = false
+                onOpenSettings()
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = CompoundIcons.Settings(),
+                    contentDescription = null,
+                )
+            },
+        )
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.screen_home_menu_logout)) },
+            onClick = {
+                showMenu = false
+                onLogout()
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = CompoundIcons.Close(),
+                    contentDescription = null,
+                )
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -455,7 +543,10 @@ internal fun HomeTopBarPreview() = ElementPreview {
         showAvatarIndicator = false,
         areSearchResultsDisplayed = false,
         scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState()),
+        onOpenMyProfile = {},
+        onOpenSetkaPlus = {},
         onOpenSettings = {},
+        onLogout = {},
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
@@ -479,7 +570,10 @@ internal fun HomeTopBarSpaceFiltersSelectedPreview() = ElementPreview {
         showAvatarIndicator = false,
         areSearchResultsDisplayed = false,
         scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState()),
+        onOpenMyProfile = {},
+        onOpenSetkaPlus = {},
         onOpenSettings = {},
+        onLogout = {},
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
@@ -503,7 +597,10 @@ internal fun HomeTopBarSpacesPreview() = ElementPreview {
         showAvatarIndicator = false,
         areSearchResultsDisplayed = false,
         scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState()),
+        onOpenMyProfile = {},
+        onOpenSetkaPlus = {},
         onOpenSettings = {},
+        onLogout = {},
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
@@ -527,7 +624,10 @@ internal fun HomeTopBarWithIndicatorPreview() = ElementPreview {
         showAvatarIndicator = true,
         areSearchResultsDisplayed = false,
         scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState()),
+        onOpenMyProfile = {},
+        onOpenSetkaPlus = {},
         onOpenSettings = {},
+        onLogout = {},
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
@@ -551,7 +651,10 @@ internal fun HomeTopBarMultiAccountPreview() = ElementPreview {
         showAvatarIndicator = false,
         areSearchResultsDisplayed = false,
         scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState()),
+        onOpenMyProfile = {},
+        onOpenSetkaPlus = {},
         onOpenSettings = {},
+        onLogout = {},
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},

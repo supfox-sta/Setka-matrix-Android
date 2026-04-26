@@ -36,6 +36,7 @@ import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.api.verification.VerificationRequest
 import io.element.android.libraries.mediaviewer.api.MediaViewerEntryPoint
 import kotlinx.parcelize.Parcelize
@@ -93,6 +94,10 @@ class UserProfileFlowNode(
 
                     override fun startVerifyUserFlow(userId: UserId) {
                         backstack.push(NavTarget.VerifyUser(userId))
+                    }
+
+                    override fun navigateToEditProfile(matrixUser: MatrixUser) {
+                        callback.navigateToEditProfile(matrixUser)
                     }
                 }
                 val params = UserProfileNode.UserProfileInputs(userId = inputs.userId)

@@ -105,4 +105,58 @@ class ToHtmlDocumentTest {
         })
         assertThat(document?.text()).isEqualTo("Hey Alice!")
     }
+
+    @Test
+    fun `toHtmlDocument - preserves Matrix custom emoji img tags`() {
+        val body = FormattedBody(
+            format = MessageFormat.HTML,
+            body = "<img data-mx-emoticon src=\"mxc://example.org/abc\" alt=\":element_logo:\" title=\"element_logo\" width=\"50\" height=\"50\" />",
+        )
+
+        val document = body.toHtmlDocument(permalinkParser = FakePermalinkParser())
+        assertThat(document).isNotNull()
+        val imgs = document!!.getElementsByTag("img")
+        assertThat(imgs.size).isEqualTo(1)
+        assertThat(imgs.first()!!.attr("src")).contains("mxc://")
+        assertThat(imgs.first()!!.hasAttr("data-mx-emoticon")).isTrue()
+    }
+
+    @Test
+    fun `toHtmlDocument - preserves custom emoji when mxc src contains whitespace and line breaks`() {
+        val body = FormattedBody(
+            format = MessageFormat.HTML,
+            body = """
+                <img data-mx-emoticon
+                     src="mxc://
+                         example.org/
+                         abcDEF123"
+                     alt=":element_logo:"
+                     title="element_logo"
+                     width="50"
+                     height="50" />
+            """.trimIndent(),
+        )
+
+        val document = body.toHtmlDocument(permalinkParser = FakePermalinkParser())
+        assertThat(document).isNotNull()
+        val imgs = document!!.getElementsByTag("img")
+        assertThat(imgs.size).isEqualTo(1)
+        // The parsed document should keep the src attribute (we normalize whitespace later when rendering).
+        assertThat(imgs.first()!!.hasAttr("src")).isTrue()
+        assertThat(imgs.first()!!.hasAttr("data-mx-emoticon")).isTrue()
+    }
+
+    @Test
+    fun `toHtmlDocument - parses custom emoji even when format is UNKNOWN`() {
+        val body = FormattedBody(
+            format = MessageFormat.UNKNOWN,
+            body = "<img data-mx-emoticon src=\"mxc://example.org/abc\" alt=\":element_logo:\" />",
+        )
+
+        val document = body.toHtmlDocument(permalinkParser = FakePermalinkParser())
+        assertThat(document).isNotNull()
+        val imgs = document!!.getElementsByTag("img")
+        assertThat(imgs.size).isEqualTo(1)
+        assertThat(imgs.first()!!.hasAttr("data-mx-emoticon")).isTrue()
+    }
 }

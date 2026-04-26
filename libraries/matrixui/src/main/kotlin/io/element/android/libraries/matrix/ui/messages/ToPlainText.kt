@@ -76,7 +76,33 @@ private class PlainTextNodeVisitor : NodeVisitor {
                 }
                 builder.append("$actualIndex. ")
             } else {
-                builder.append("• ")
+                // ASCII fallback to avoid encoding issues in some environments.
+                builder.append("- ")
+            }
+        } else if (node is Element && node.tagName() == "img" && node.hasAttr("data-mx-emoticon")) {
+            // Matrix custom emoji are represented as <img data-mx-emoticon ...>.
+            // Convert them to their :shortcode: so plain-text fallbacks never become empty.
+            fun normalizeToken(raw: String): String {
+                val trimmed = raw.trim()
+                if (trimmed.isBlank()) return ""
+                return if (trimmed.startsWith(":") && trimmed.endsWith(":")) trimmed else ":$trimmed:"
+            }
+
+            val alt = node.attr("alt")
+            val title = node.attr("title")
+            val data = node.attr("data-mx-emoticon")
+                .takeIf { it.isNotBlank() && it != "true" && it != "1" }
+                .orEmpty()
+
+            val token = normalizeToken(
+                alt.takeIf { it.isNotBlank() }
+                    ?: title.takeIf { it.isNotBlank() }
+                    ?: data
+            )
+            if (token.isNotBlank()) {
+                if (builder.lastOrNull()?.isWhitespace() == false) builder.append(" ")
+                builder.append(token)
+                builder.append(" ")
             }
         } else if (node is Element && node.isBlock && builder.lastOrNull() != '\n') {
             builder.append("\n")

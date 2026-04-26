@@ -34,7 +34,7 @@ class ToPlainTextTest {
         assertThat(document.toPlainText()).isEqualTo(
             """
             Hello world 
-            • This is an unordered list.
+            - This is an unordered list.
             1. This is an ordered list.
             """.trimIndent()
         )
@@ -54,7 +54,7 @@ class ToPlainTextTest {
         assertThat(formattedBody.toPlainText(permalinkParser = FakePermalinkParser())).isEqualTo(
             """
             Hello formatted world 
-            • This is an unordered list.
+            - This is an unordered list.
             1. This is an ordered list.
             """.trimIndent()
         )
@@ -91,7 +91,7 @@ class ToPlainTextTest {
         assertThat(messageType.toPlainText(permalinkParser = FakePermalinkParser())).isEqualTo(
             """
             Hello world 
-            • This is an unordered list.
+            - This is an unordered list.
             1. This is an ordered list.
             """.trimIndent()
         )

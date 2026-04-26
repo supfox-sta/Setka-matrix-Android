@@ -81,6 +81,7 @@ import io.element.android.libraries.matrix.test.A_SESSION_ID_2
 import io.element.android.libraries.matrix.test.A_THREAD_ID
 import io.element.android.libraries.matrix.test.A_USER_ID
 import io.element.android.libraries.matrix.test.A_USER_ID_2
+import io.element.android.libraries.matrix.test.FakeMatrixClient
 import io.element.android.libraries.matrix.test.core.aBuildMeta
 import io.element.android.libraries.matrix.test.encryption.FakeEncryptionService
 import io.element.android.libraries.matrix.test.permalink.FakePermalinkParser
@@ -92,6 +93,7 @@ import io.element.android.libraries.matrix.test.room.powerlevels.FakeRoomPermiss
 import io.element.android.libraries.matrix.test.timeline.FakeTimeline
 import io.element.android.libraries.matrix.test.timeline.aTimelineItemDebugInfo
 import io.element.android.libraries.matrix.ui.messages.reply.InReplyToDetails
+import io.element.android.libraries.preferences.test.InMemoryAppPreferencesStore
 import io.element.android.libraries.recentemojis.api.AddRecentEmoji
 import io.element.android.libraries.textcomposer.model.MessageComposerMode
 import io.element.android.libraries.textcomposer.model.TextEditorState
@@ -1317,6 +1319,8 @@ class MessagesPresenterTest {
         roomMemberModerationPresenter: Presenter<RoomMemberModerationState> = Presenter {
             aRoomMemberModerationState()
         },
+        matrixClient: FakeMatrixClient = FakeMatrixClient(),
+        appPreferencesStore: InMemoryAppPreferencesStore = InMemoryAppPreferencesStore(),
         encryptionService: FakeEncryptionService = FakeEncryptionService(),
         featureFlagService: FakeFeatureFlagService = FakeFeatureFlagService(),
         actionListEventSink: (ActionListEvent) -> Unit = {},
@@ -1342,6 +1346,7 @@ class MessagesPresenterTest {
             roomMemberModerationPresenter = roomMemberModerationPresenter,
             snackbarDispatcher = SnackbarDispatcher(),
             dispatchers = coroutineDispatchers,
+            matrixClient = matrixClient,
             clipboardHelper = clipboardHelper,
             htmlConverterProvider = FakeHtmlConverterProvider(),
             buildMeta = aBuildMeta(),
@@ -1352,6 +1357,7 @@ class MessagesPresenterTest {
             featureFlagService = featureFlagService,
             addRecentEmoji = addRecentEmoji,
             markAsFullyRead = markAsFullyRead,
+            appPreferencesStore = appPreferencesStore,
             sessionCoroutineScope = backgroundScope,
         )
     }

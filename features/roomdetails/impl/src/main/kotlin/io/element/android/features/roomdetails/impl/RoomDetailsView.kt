@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -43,7 +44,9 @@ import im.vector.app.features.analytics.plan.Interaction
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.roomcall.api.hasPermissionToJoin
+import io.element.android.features.userprofile.api.UserProfileState
 import io.element.android.features.userprofile.api.UserProfileVerificationState
+import io.element.android.features.userprofile.shared.UserProfileHeaderSection
 import io.element.android.features.userprofile.shared.blockuser.BlockUserDialogs
 import io.element.android.features.userprofile.shared.blockuser.BlockUserSection
 import io.element.android.libraries.androidutils.system.copyToClipboard
@@ -75,6 +78,7 @@ import io.element.android.libraries.designsystem.theme.components.IconSource
 import io.element.android.libraries.designsystem.theme.components.ListItem
 import io.element.android.libraries.designsystem.theme.components.ListItemStyle
 import io.element.android.libraries.designsystem.theme.components.Scaffold
+import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarHost
@@ -173,7 +177,18 @@ fun RoomDetailsView(
                     )
                 }
                 is RoomDetailsType.Dm -> {
-                    DmHeaderSection(
+                    state.roomMemberDetailsState?.let { dmMemberDetails ->
+                        DmMergedProfileSection(
+                            displayName = state.roomName,
+                            state = dmMemberDetails,
+                            openAvatarPreview = { name, avatarUrl ->
+                                openAvatarPreview(name, avatarUrl)
+                            },
+                            onCopyValue = { value ->
+                                state.eventSink(RoomDetailsEvent.CopyToClipboard(value))
+                            }
+                        )
+                    } ?: DmHeaderSection(
                         me = state.roomType.me,
                         otherMember = state.roomType.otherMember,
                         roomName = state.roomName,
@@ -188,6 +203,7 @@ fun RoomDetailsView(
             }
             BadgeList(
                 roomBadge = state.roomBadges,
+                verificationState = state.roomMemberDetailsState?.verificationState,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
             Spacer(Modifier.height(32.dp))
@@ -273,11 +289,13 @@ fun RoomDetailsView(
                     )
                 }
 
-                state.roomMemberDetailsState?.let { dmMemberDetails ->
+                if (state.roomType !is RoomDetailsType.Dm) {
+                    state.roomMemberDetailsState?.let { dmMemberDetails ->
                     ProfileItem(
                         verificationState = dmMemberDetails.verificationState,
                         onClick = { onProfileClick(dmMemberDetails.userId) }
                     )
+                    }
                 }
             }
 
@@ -526,6 +544,85 @@ private fun DmHeaderSection(
 }
 
 @Composable
+private fun DmMergedProfileSection(
+    displayName: String,
+    state: UserProfileState,
+    openAvatarPreview: (name: String, url: String) -> Unit,
+    onCopyValue: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val resolvedName = displayName.ifBlank { state.userName ?: state.userId.value }
+    Column(modifier = modifier.fillMaxWidth()) {
+        UserProfileHeaderSection(
+            avatarUrl = state.avatarUrl,
+            userId = state.userId,
+            userName = resolvedName,
+            bio = state.bio,
+            profileColorHex = state.profileColorHex,
+            badgeEmojiMxcUrl = state.badgeEmojiMxcUrl,
+            statusEmojiMxcUrl = state.statusEmojiMxcUrl,
+            profileBackgroundMxcUrl = state.profileBackgroundMxcUrl,
+            lastSeenText = state.lastSeenText,
+            verificationState = UserProfileVerificationState.UNKNOWN,
+            openAvatarPreview = { avatarUrl ->
+                openAvatarPreview(resolvedName, avatarUrl)
+            },
+            onUserIdClick = { onCopyValue(state.userId.value) },
+            withdrawVerificationClick = {},
+        )
+        PreferenceCategory(title = "Информация", showTopDivider = false) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                color = ElementTheme.colors.bgSubtleSecondary,
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    DmProfileInfoRow(
+                        label = "Имя пользователя",
+                        value = state.userId.value,
+                        onClick = { onCopyValue(state.userId.value) },
+                    )
+                    state.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                        ProfileInfoDivider()
+                        DmProfileInfoRow(
+                            label = "Телефон",
+                            value = phone,
+                            onClick = { onCopyValue(phone) },
+                        )
+                    }
+                    state.email?.takeIf { it.isNotBlank() }?.let { email ->
+                        ProfileInfoDivider()
+                        DmProfileInfoRow(
+                            label = "Почта",
+                            value = email,
+                            onClick = { onCopyValue(email) },
+                        )
+                    }
+                    state.lastSeenText?.takeIf { it.isNotBlank() }?.let { lastSeen ->
+                        ProfileInfoDivider()
+                        DmProfileInfoRow(
+                            label = "Статус",
+                            value = lastSeen,
+                            onClick = { onCopyValue(lastSeen) },
+                        )
+                    }
+                    state.bio?.takeIf { it.isNotBlank() }?.let { bio ->
+                        ProfileInfoDivider()
+                        DmProfileInfoRow(
+                            label = "О себе",
+                            value = bio,
+                            onClick = { onCopyValue(bio) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TitleAndSubtitle(
     title: String,
     subtitle: String?,
@@ -552,16 +649,74 @@ private fun TitleAndSubtitle(
 }
 
 @Composable
+private fun DmProfileInfoRow(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp)
+    ) {
+        Text(
+            text = value,
+            style = ElementTheme.typography.fontBodyLgMedium,
+            color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.96f),
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = label,
+            style = ElementTheme.typography.fontBodySmRegular,
+            color = ElementTheme.colors.textSecondary,
+        )
+    }
+}
+
+@Composable
+private fun ProfileInfoDivider() {
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(ElementTheme.colors.borderDisabled)
+    )
+}
+
+@Composable
 private fun BadgeList(
     roomBadge: ImmutableList<RoomBadge>,
+    verificationState: UserProfileVerificationState? = null,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
-        if (roomBadge.isNotEmpty()) {
+        val badges = buildList {
+            roomBadge.forEach { badge ->
+                add(badge.toMatrixBadgeData())
+                if (badge == RoomBadge.ENCRYPTED && verificationState == UserProfileVerificationState.VERIFIED) {
+                    add(
+                        MatrixBadgeAtom.MatrixBadgeData(
+                            text = stringResource(CommonStrings.common_verified),
+                            icon = CompoundIcons.Verified(),
+                            type = MatrixBadgeAtom.Type.Positive,
+                        )
+                    )
+                }
+            }
+            if (roomBadge.none { it == RoomBadge.ENCRYPTED } && verificationState == UserProfileVerificationState.VERIFIED) {
+                add(
+                    MatrixBadgeAtom.MatrixBadgeData(
+                        text = stringResource(CommonStrings.common_verified),
+                        icon = CompoundIcons.Verified(),
+                        type = MatrixBadgeAtom.Type.Positive,
+                    )
+                )
+            }
+        }
+        if (badges.isNotEmpty()) {
             MatrixBadgeRowMolecule(
-                data = roomBadge.map {
-                    it.toMatrixBadgeData()
-                }.toImmutableList(),
+                data = badges.toImmutableList(),
             )
         }
     }

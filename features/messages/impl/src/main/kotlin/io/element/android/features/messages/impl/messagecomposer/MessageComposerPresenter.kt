@@ -10,7 +10,10 @@ package io.element.android.features.messages.impl.messagecomposer
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.text.SpannableStringBuilder
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -35,6 +38,18 @@ import io.element.android.features.messages.impl.MessagesNavigator
 import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.attachments.preview.error.sendAttachmentError
 import io.element.android.features.messages.impl.draft.ComposerDraftService
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryFilter
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryItem
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryMediaProvider
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerEvent
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerState
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.matches
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaComposerState
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaDeleteConfirmation
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPackEditorState
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPackKind
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaService
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaStickerPack
 import io.element.android.features.messages.impl.messagecomposer.suggestions.RoomAliasSuggestionsDataSource
 import io.element.android.features.messages.impl.messagecomposer.suggestions.SuggestionsProcessor
 import io.element.android.features.messages.impl.timeline.TimelineController
@@ -78,10 +93,13 @@ import io.element.android.libraries.textcomposer.model.TextEditorState
 import io.element.android.libraries.textcomposer.model.rememberMarkdownTextEditorState
 import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analyticsproviders.api.trackers.captureInteraction
+import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
+import io.element.android.services.toolbox.api.sdk.BuildVersionSdkIntProvider
 import io.element.android.wysiwyg.compose.RichTextEditorState
 import io.element.android.wysiwyg.display.TextDisplay
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
@@ -98,6 +116,11 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import kotlin.time.Duration.Companion.seconds
 import io.element.android.libraries.core.mimetype.MimeTypes.Any as AnyMimeTypes
+
+private data class PendingSetkaUpload(
+    val packId: String,
+    val kind: SetkaPackKind,
+)
 
 @Suppress("LargeClass")
 @AssistedInject
@@ -116,6 +139,8 @@ class MessageComposerPresenter(
     private val messageComposerContext: DefaultMessageComposerContext,
     private val richTextEditorStateFactory: RichTextEditorStateFactory,
     private val roomAliasSuggestionsDataSource: RoomAliasSuggestionsDataSource,
+    private val legacyGalleryMediaProvider: LegacyGalleryMediaProvider,
+    private val buildVersionSdkIntProvider: BuildVersionSdkIntProvider,
     private val permalinkParser: PermalinkParser,
     private val permalinkBuilder: PermalinkBuilder,
     permissionsPresenterFactory: PermissionsPresenter.Factory,
@@ -125,6 +150,8 @@ class MessageComposerPresenter(
     private val suggestionsProcessor: SuggestionsProcessor,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
     private val notificationConversationService: NotificationConversationService,
+    private val setkaService: SetkaService,
+    private val externalIntentLauncher: ExternalIntentLauncher,
 ) : Presenter<MessageComposerState> {
     @AssistedFactory
     interface Factory {
@@ -134,6 +161,7 @@ class MessageComposerPresenter(
     private val mediaSender = mediaSenderFactory.create(timelineMode = timelineController.mainTimelineMode())
 
     private val cameraPermissionPresenter = permissionsPresenterFactory.create(Manifest.permission.CAMERA)
+    private val legacyGalleryPermissionPresenter = permissionsPresenterFactory.create(Manifest.permission.READ_EXTERNAL_STORAGE)
     private var pendingEvent: MessageComposerEvent? = null
     private val suggestionSearchTrigger = MutableStateFlow<Suggestion?>(null)
 
@@ -158,6 +186,7 @@ class MessageComposerPresenter(
         val markdownTextEditorState = rememberMarkdownTextEditorState(initialText = null, initialFocus = false)
 
         val cameraPermissionState = cameraPermissionPresenter.present()
+        val legacyGalleryPermissionState = legacyGalleryPermissionPresenter.present()
 
         val canShareLocation = remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
@@ -180,6 +209,14 @@ class MessageComposerPresenter(
             mutableStateOf(false)
         }
         var showAttachmentSourcePicker: Boolean by remember { mutableStateOf(false) }
+        var showLegacyGalleryPicker: Boolean by remember { mutableStateOf(false) }
+        var legacyGalleryFilter by rememberSaveable { mutableStateOf(LegacyGalleryFilter.All) }
+        var legacyGalleryItems by remember { mutableStateOf(emptyList<LegacyGalleryItem>()) }
+        val selectedLegacyGalleryItems = remember { mutableStateListOf<LegacyGalleryItem>() }
+        var isLegacyGalleryLoading by remember { mutableStateOf(false) }
+        var pendingSetkaUpload by remember { mutableStateOf<PendingSetkaUpload?>(null) }
+        var suspendedSetkaPackEditor by remember { mutableStateOf<SetkaPackEditorState?>(null) }
+        var setkaState by remember { mutableStateOf(SetkaComposerState()) }
 
         val sendTypingNotifications by remember {
             sessionPreferencesStore.isSendTypingNotificationsEnabled()
@@ -194,6 +231,28 @@ class MessageComposerPresenter(
                 }
                 pendingEvent = null
             }
+        }
+
+        LaunchedEffect(
+            showLegacyGalleryPicker,
+            legacyGalleryPermissionState.permissionGranted,
+            legacyGalleryPermissionState.permissionAlreadyAsked,
+        ) {
+            if (!showLegacyGalleryPicker || !shouldUseLegacyGalleryPicker()) return@LaunchedEffect
+            if (!legacyGalleryPermissionState.permissionGranted) {
+                if (!legacyGalleryPermissionState.permissionAlreadyAsked) {
+                    legacyGalleryPermissionState.eventSink(PermissionsEvent.RequestPermissions)
+                }
+                return@LaunchedEffect
+            }
+            isLegacyGalleryLoading = true
+            legacyGalleryItems = runCatching {
+                legacyGalleryMediaProvider.getRecentMedia(limit = 120)
+            }.getOrElse { throwable ->
+                Timber.e(throwable, "Failed to load media for legacy gallery picker")
+                emptyList()
+            }
+            isLegacyGalleryLoading = false
         }
 
         val suggestions = remember { mutableStateListOf<ResolvedSuggestion>() }
@@ -230,6 +289,119 @@ class MessageComposerPresenter(
             }
         }
 
+        fun applySetkaBootstrap(showLoading: Boolean, errorMessage: String? = null) {
+            if (showLoading) {
+                setkaState = setkaState.copy(isLoading = true)
+            }
+            localCoroutineScope.launch {
+                setkaService.bootstrap().fold(
+                    onSuccess = { bootstrap ->
+                        setkaState = setkaState.copy(
+                            isLoading = false,
+                            subscription = bootstrap.subscription,
+                            plans = bootstrap.plans.toImmutableList(),
+                            stickerPacks = bootstrap.stickerPacks.toImmutableList(),
+                            errorMessage = errorMessage,
+                        )
+                    },
+                    onFailure = { failure ->
+                        setkaState = setkaState.copy(
+                            isLoading = false,
+                            errorMessage = failure.message ?: "Не удалось загрузить Setka",
+                        )
+                    }
+                )
+            }
+        }
+
+        fun refreshSetka(showLoading: Boolean = false) {
+            applySetkaBootstrap(showLoading = showLoading)
+        }
+
+        fun replaceSetkaPack(updatedPack: SetkaStickerPack) {
+            setkaState = setkaState.copy(
+                stickerPacks = setkaState.stickerPacks
+                    .map { pack -> if (pack.id == updatedPack.id) updatedPack else pack }
+                    .sortedBy { it.name.lowercase() }
+                    .toImmutableList()
+            )
+        }
+
+        fun findInstalledSharedPackId(pack: SetkaStickerPack): String? {
+            return setkaState.stickerPacks.firstOrNull { installedPack ->
+                installedPack.id == pack.id || (
+                    installedPack.kind == pack.kind &&
+                        installedPack.name == pack.name &&
+                        installedPack.stickers.map { it.mxcUrl }.toSet() == pack.stickers.map { it.mxcUrl }.toSet()
+                    )
+            }?.id
+        }
+
+        fun handleSetkaPickedMedia(uri: Uri?) {
+            val uploadTarget = pendingSetkaUpload ?: return
+            pendingSetkaUpload = null
+            val editorToRestore = suspendedSetkaPackEditor
+            suspendedSetkaPackEditor = null
+            uri ?: return
+            localCoroutineScope.launch {
+                val pack = setkaState.stickerPacks.firstOrNull { it.id == uploadTarget.packId }
+                if (pack == null) {
+                    setkaState = setkaState.copy(
+                        errorMessage = "Пак не найден",
+                        packEditorState = editorToRestore ?: setkaState.packEditorState,
+                    )
+                    return@launch
+                }
+                setkaState = setkaState.copy(uploadingPackId = uploadTarget.packId, errorMessage = null)
+                setkaService.uploadPackMedia(uri, uploadTarget.kind)
+                    .mapCatching { sticker ->
+                        setkaService.addStickerToPack(pack, sticker).getOrThrow()
+                    }
+                    .fold(
+                        onSuccess = { updatedPack ->
+                            replaceSetkaPack(updatedPack)
+                            setkaState = setkaState.copy(
+                                uploadingPackId = null,
+                                packEditorState = editorToRestore ?: setkaState.packEditorState,
+                            )
+                        },
+                        onFailure = { failure ->
+                            setkaState = setkaState.copy(
+                                uploadingPackId = null,
+                                packEditorState = editorToRestore ?: setkaState.packEditorState,
+                                errorMessage = failure.message ?: "Не удалось загрузить медиа",
+                            )
+                        }
+                    )
+            }
+        }
+
+        val setkaGalleryImagePicker = mediaPickerProvider.registerGalleryImagePicker { uri ->
+            handleSetkaPickedMedia(uri)
+        }
+
+        fun openSetkaUploadPicker(packId: String, kind: SetkaPackKind) {
+            pendingSetkaUpload = PendingSetkaUpload(packId = packId, kind = kind)
+            if (shouldUseLegacyGalleryPicker()) {
+                suspendedSetkaPackEditor = setkaState.packEditorState
+                setkaState = setkaState.copy(packEditorState = null)
+                legacyGalleryFilter = LegacyGalleryFilter.Photos
+                selectedLegacyGalleryItems.clear()
+                showLegacyGalleryPicker = true
+            } else {
+                setkaGalleryImagePicker.launch()
+            }
+        }
+
+        fun openSetkaPayment(url: String?) {
+            if (url.isNullOrBlank()) return
+            externalIntentLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+
+        LaunchedEffect(Unit) {
+            refreshSetka(showLoading = true)
+        }
+
         fun handleEvent(event: MessageComposerEvent) {
             when (event) {
                 MessageComposerEvent.ToggleFullScreenState -> isFullScreen.value = !isFullScreen.value
@@ -246,6 +418,8 @@ class MessageComposerPresenter(
                     sessionCoroutineScope.sendMessage(
                         markdownTextEditorState = markdownTextEditorState,
                         richTextEditorState = richTextEditorState,
+                        stickerPacks = setkaState.stickerPacks,
+                        isSetkaPlusActive = setkaState.isPlusActive,
                     )
                 }
                 is MessageComposerEvent.SendUri -> {
@@ -269,12 +443,22 @@ class MessageComposerPresenter(
                     localCoroutineScope.setMode(event.composerMode, markdownTextEditorState, richTextEditorState)
                 }
                 MessageComposerEvent.AddAttachment -> localCoroutineScope.launch {
-                    showAttachmentSourcePicker = true
+                    val shouldShowAttachmentPicker = !showAttachmentSourcePicker
+                    showAttachmentSourcePicker = shouldShowAttachmentPicker
+                    if (shouldShowAttachmentPicker) {
+                        setkaState = setkaState.copy(isStickerPickerVisible = false)
+                    }
                 }
                 MessageComposerEvent.DismissAttachmentMenu -> showAttachmentSourcePicker = false
                 MessageComposerEvent.PickAttachmentSource.FromGallery -> localCoroutineScope.launch {
                     showAttachmentSourcePicker = false
-                    galleryMediaPicker.launch()
+                    if (shouldUseLegacyGalleryPicker()) {
+                        legacyGalleryFilter = LegacyGalleryFilter.All
+                        selectedLegacyGalleryItems.clear()
+                        showLegacyGalleryPicker = true
+                    } else {
+                        galleryMediaPicker.launch()
+                    }
                 }
                 MessageComposerEvent.PickAttachmentSource.FromFiles -> localCoroutineScope.launch {
                     showAttachmentSourcePicker = false
@@ -298,6 +482,24 @@ class MessageComposerPresenter(
                         cameraPermissionState.eventSink(PermissionsEvent.RequestPermissions)
                     }
                 }
+                MessageComposerEvent.PickAttachmentSource.SetkaStickers -> {
+                    showAttachmentSourcePicker = false
+                    setkaState = setkaState.copy(
+                        isStickerPickerVisible = true,
+                        errorMessage = null,
+                    )
+                    if (setkaState.stickerPacks.isEmpty()) {
+                        refreshSetka(showLoading = true)
+                    }
+                }
+                MessageComposerEvent.PickAttachmentSource.SetkaPlus -> {
+                    showAttachmentSourcePicker = false
+                    setkaState = setkaState.copy(
+                        isSubscriptionDialogVisible = true,
+                        errorMessage = null,
+                    )
+                    refreshSetka(showLoading = setkaState.plans.isEmpty())
+                }
                 MessageComposerEvent.PickAttachmentSource.Location -> {
                     showAttachmentSourcePicker = false
                     // Navigation to the location picker screen is done at the view layer
@@ -305,6 +507,330 @@ class MessageComposerPresenter(
                 MessageComposerEvent.PickAttachmentSource.Poll -> {
                     showAttachmentSourcePicker = false
                     // Navigation to the create poll screen is done at the view layer
+                }
+                MessageComposerEvent.RefreshSetka -> refreshSetka(showLoading = setkaState.stickerPacks.isEmpty())
+                MessageComposerEvent.ShowSetkaStickerPicker -> {
+                    showAttachmentSourcePicker = false
+                    setkaState = setkaState.copy(isStickerPickerVisible = true, errorMessage = null)
+                    if (setkaState.stickerPacks.isEmpty()) {
+                        refreshSetka(showLoading = true)
+                    }
+                }
+                MessageComposerEvent.HideSetkaStickerPicker -> {
+                    setkaState = setkaState.copy(isStickerPickerVisible = false)
+                }
+                is MessageComposerEvent.InsertInlineText -> {
+                    localCoroutineScope.launch {
+                        insertInlineText(
+                            text = event.text,
+                            markdownTextEditorState = markdownTextEditorState,
+                            richTextEditorState = richTextEditorState,
+                        )
+                    }
+                }
+                MessageComposerEvent.ShowSetkaPlusDialog -> {
+                    setkaState = setkaState.copy(isSubscriptionDialogVisible = true, errorMessage = null)
+                    refreshSetka(showLoading = setkaState.plans.isEmpty())
+                }
+                MessageComposerEvent.HideSetkaPlusDialog -> {
+                    setkaState = setkaState.copy(isSubscriptionDialogVisible = false)
+                }
+                is MessageComposerEvent.SendSetkaSticker -> {
+                    localCoroutineScope.launch {
+                        timelineController.invokeOnCurrentTimeline {
+                            setkaService.sendSticker(this, event.sticker)
+                                .onSuccess {
+                                    setkaState = setkaState.copy(
+                                        isStickerPickerVisible = false,
+                                        errorMessage = null,
+                                    )
+                                }
+                                .onFailure { failure ->
+                                    setkaState = setkaState.copy(
+                                        errorMessage = failure.message ?: "Не удалось отправить стикер",
+                                    )
+                                }
+                        }
+                    }
+                }
+                is MessageComposerEvent.BuySetkaPlan -> {
+                    localCoroutineScope.launch {
+                        if (setkaState.subscription?.isActive == true) {
+                            setkaState = setkaState.copy(errorMessage = "Подписка уже активна")
+                            return@launch
+                        }
+                        setkaState = setkaState.copy(busyPlanId = event.plan.id, errorMessage = null)
+                        setkaService.createPlusPayment(event.plan)
+                            .onSuccess { payment ->
+                                openSetkaPayment(payment.checkoutUrl)
+                                refreshSetka()
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    errorMessage = failure.message ?: "Не удалось создать платеж",
+                                )
+                            }
+                        setkaState = setkaState.copy(busyPlanId = null)
+                    }
+                }
+                is MessageComposerEvent.OpenSetkaPackEditor -> {
+                    if (!setkaState.isPlusActive) {
+                        setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                        return
+                    }
+                    val existingPack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                    setkaState = setkaState.copy(
+                        packEditorState = SetkaPackEditorState(
+                            kind = event.kind,
+                            packId = event.packId,
+                            initialName = existingPack?.name.orEmpty(),
+                        ),
+                        errorMessage = null,
+                    )
+                }
+                MessageComposerEvent.CloseSetkaPackEditor -> {
+                    setkaState = setkaState.copy(packEditorState = null)
+                }
+                is MessageComposerEvent.SaveSetkaPack -> {
+                    localCoroutineScope.launch {
+                        if (!setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                            return@launch
+                        }
+                        val trimmedName = event.name.trim()
+                        if (trimmedName.isBlank()) {
+                            setkaState = setkaState.copy(errorMessage = "Нужно название пака")
+                            return@launch
+                        }
+                        setkaState = setkaState.copy(uploadingPackId = event.packId ?: "new-pack", errorMessage = null)
+                        val result = if (event.packId == null) {
+                            setkaService.createStickerPack(trimmedName, event.kind)
+                        } else {
+                            val currentPack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                            if (currentPack == null) {
+                                Result.failure(IllegalStateException("Sticker pack not found"))
+                            } else {
+                                setkaService.saveStickerPack(
+                                    currentPack.copy(
+                                        name = trimmedName,
+                                        kind = event.kind,
+                                    )
+                                )
+                            }
+                        }
+                        result.fold(
+                            onSuccess = { _ ->
+                                setkaState = setkaState.copy(
+                                    uploadingPackId = null,
+                                    packEditorState = null,
+                                )
+                                refreshSetka()
+                            },
+                            onFailure = { failure ->
+                                setkaState = setkaState.copy(
+                                    uploadingPackId = null,
+                                    errorMessage = failure.message ?: "Не удалось сохранить пак",
+                                )
+                            }
+                        )
+                    }
+                }
+                is MessageComposerEvent.ConfirmDeleteSetkaPack -> {
+                    setkaState = setkaState.copy(
+                        deleteConfirmation = SetkaDeleteConfirmation(
+                            packId = event.packId,
+                            packName = event.packName,
+                        ),
+                        packEditorState = null,
+                    )
+                }
+                MessageComposerEvent.DismissDeleteSetkaPack -> {
+                    setkaState = setkaState.copy(deleteConfirmation = null)
+                }
+                is MessageComposerEvent.DeleteSetkaPack -> {
+                    localCoroutineScope.launch {
+                        if (!setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                            return@launch
+                        }
+                        setkaState = setkaState.copy(
+                            deletingPackId = event.packId,
+                            deleteConfirmation = null,
+                            errorMessage = null,
+                        )
+                        setkaService.deleteStickerPack(event.packId)
+                            .onSuccess {
+                                refreshSetka()
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    errorMessage = failure.message ?: "Не удалось удалить пак",
+                                )
+                        }
+                        setkaState = setkaState.copy(deletingPackId = null)
+                    }
+                }
+                is MessageComposerEvent.ShareSetkaPack -> {
+                    val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                    if (pack == null) {
+                        setkaState = setkaState.copy(errorMessage = "Пак не найден")
+                        return
+                    }
+                    localCoroutineScope.launch {
+                        setkaService.createPackShareLink(pack.id)
+                            .onSuccess { url ->
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, pack.name)
+                                    putExtra(Intent.EXTRA_TEXT, url)
+                                }
+                                externalIntentLauncher.launch(Intent.createChooser(shareIntent, null))
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    errorMessage = failure.message ?: "Не удалось создать ссылку",
+                                )
+                            }
+                    }
+                }
+                is MessageComposerEvent.PreviewSetkaSharedPack -> {
+                    localCoroutineScope.launch {
+                        setkaState = setkaState.copy(
+                            sharedPackPreview = io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewState(
+                                token = event.token,
+                                isLoading = true,
+                            ),
+                            errorMessage = null,
+                        )
+                        setkaService.resolveSharedPack(event.token)
+                            .onSuccess { pack ->
+                                setkaState = setkaState.copy(
+                                    sharedPackPreview = io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewState(
+                                        token = event.token,
+                                        pack = pack,
+                                        installedPackId = findInstalledSharedPackId(pack),
+                                        isLoading = false,
+                                    )
+                                )
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    sharedPackPreview = null,
+                                    errorMessage = failure.message ?: "РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РїР°Рє",
+                                )
+                            }
+                    }
+                }
+                MessageComposerEvent.DismissSetkaSharedPackPreview -> {
+                    setkaState = setkaState.copy(sharedPackPreview = null)
+                }
+                MessageComposerEvent.ApplySetkaSharedPackPreview -> {
+                    localCoroutineScope.launch {
+                        val preview = setkaState.sharedPackPreview ?: return@launch
+                        if (!setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(
+                                errorMessage = "Р§С‚РѕР±С‹ РґРѕР±Р°РІР»СЏС‚СЊ РїР°РєРё, РЅСѓР¶РµРЅ Setka Plus",
+                                isSubscriptionDialogVisible = true,
+                            )
+                            refreshSetka(showLoading = setkaState.plans.isEmpty())
+                            return@launch
+                        }
+                        setkaState = setkaState.copy(
+                            sharedPackPreview = preview.copy(isLoading = true),
+                            errorMessage = null,
+                        )
+                        val result = if (preview.installedPackId != null) {
+                            setkaService.deleteStickerPack(preview.installedPackId).map { preview.pack }
+                        } else {
+                            setkaService.importSharedPack(preview.token).map { it as SetkaStickerPack? }
+                        }
+                        result
+                            .onSuccess {
+                                if (preview.installedPackId == null) {
+                                    snackbarDispatcher.post(
+                                        SnackbarMessage(
+                                            messageResId = io.element.android.features.messages.impl.R.string.screen_room_setka_pack_added
+                                        )
+                                    )
+                                }
+                                setkaState = setkaState.copy(sharedPackPreview = null)
+                                refreshSetka(showLoading = false)
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    sharedPackPreview = preview.copy(isLoading = false),
+                                    errorMessage = failure.message ?: if (preview.installedPackId == null) {
+                                        "РќРµ СѓРґР°Р»РѕСЃСЊ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊ РїР°Рє"
+                                    } else {
+                                        "РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РїР°Рє"
+                                    },
+                                )
+                            }
+                    }
+                }
+                is MessageComposerEvent.ImportSetkaSharedPack -> {
+                    localCoroutineScope.launch {
+                        if (!setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(
+                                errorMessage = "Чтобы добавлять паки, нужен Setka Plus",
+                                isSubscriptionDialogVisible = true,
+                            )
+                            refreshSetka(showLoading = setkaState.plans.isEmpty())
+                            return@launch
+                        }
+                        setkaService.importSharedPack(event.token)
+                            .onSuccess {
+                                snackbarDispatcher.post(
+                                    SnackbarMessage(
+                                        messageResId = io.element.android.features.messages.impl.R.string.screen_room_setka_pack_added
+                                    )
+                                )
+                                refreshSetka(showLoading = false)
+                            }
+                            .onFailure { failure ->
+                                setkaState = setkaState.copy(
+                                    errorMessage = failure.message ?: "Не удалось импортировать пак",
+                                )
+                            }
+                    }
+                }
+                is MessageComposerEvent.DeleteSetkaSticker -> {
+                    localCoroutineScope.launch {
+                        if (!setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                            return@launch
+                        }
+                        val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                        if (pack == null) {
+                            setkaState = setkaState.copy(errorMessage = "Пак не найден")
+                            return@launch
+                        }
+                        val stickerKey = "${event.packId}:${event.stickerId}"
+                        setkaState = setkaState.copy(deletingStickerKey = stickerKey, errorMessage = null)
+                        setkaService.removeStickerFromPack(pack, event.stickerId)
+                            .fold(
+                                onSuccess = { updatedPack ->
+                                    replaceSetkaPack(updatedPack)
+                                    setkaState = setkaState.copy(deletingStickerKey = null)
+                                },
+                                onFailure = { failure ->
+                                    setkaState = setkaState.copy(
+                                        deletingStickerKey = null,
+                                        errorMessage = failure.message ?: "Не удалось удалить стикер",
+                                    )
+                                }
+                            )
+                    }
+                }
+                is MessageComposerEvent.UploadSetkaMedia -> {
+                    if (!setkaState.isPlusActive) {
+                        setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                        return
+                    }
+                    openSetkaUploadPicker(packId = event.packId, kind = event.kind)
+                }
+                MessageComposerEvent.ClearSetkaError -> {
+                    setkaState = setkaState.copy(errorMessage = null)
                 }
                 is MessageComposerEvent.ToggleTextFormatting -> {
                     showAttachmentSourcePicker = false
@@ -357,6 +883,47 @@ class MessageComposerPresenter(
             }
         }
 
+        fun handleLegacyGalleryEvent(event: LegacyGalleryPickerEvent) {
+            when (event) {
+                LegacyGalleryPickerEvent.Dismiss -> {
+                    pendingSetkaUpload = null
+                    if (suspendedSetkaPackEditor != null) {
+                        setkaState = setkaState.copy(packEditorState = suspendedSetkaPackEditor)
+                        suspendedSetkaPackEditor = null
+                    }
+                    selectedLegacyGalleryItems.clear()
+                    showLegacyGalleryPicker = false
+                }
+                LegacyGalleryPickerEvent.RequestPermissions -> legacyGalleryPermissionState.eventSink(PermissionsEvent.RequestPermissions)
+                is LegacyGalleryPickerEvent.SelectFilter -> legacyGalleryFilter = event.filter
+                is LegacyGalleryPickerEvent.ToggleMediaSelection -> {
+                    val existingIndex = selectedLegacyGalleryItems.indexOfFirst { it.id == event.item.id }
+                    when {
+                        existingIndex >= 0 -> selectedLegacyGalleryItems.removeAt(existingIndex)
+                        pendingSetkaUpload != null -> {
+                            selectedLegacyGalleryItems.clear()
+                            selectedLegacyGalleryItems.add(event.item)
+                        }
+                        else -> selectedLegacyGalleryItems.add(event.item)
+                    }
+                }
+                LegacyGalleryPickerEvent.ConfirmSelection -> {
+                    if (selectedLegacyGalleryItems.isEmpty()) return
+                    showLegacyGalleryPicker = false
+                    if (pendingSetkaUpload != null) {
+                        handleSetkaPickedMedia(selectedLegacyGalleryItems.firstOrNull()?.uri)
+                    } else {
+                        handlePickedMediaItems(
+                            items = selectedLegacyGalleryItems.map { item ->
+                                item.uri to item.mimeType
+                            }
+                        )
+                    }
+                    selectedLegacyGalleryItems.clear()
+                }
+            }
+        }
+
         val resolveMentionDisplay = remember {
             { text: String, url: String ->
                 val mentionSpan = mentionSpanProvider.getMentionSpanFor(text, url)
@@ -383,6 +950,24 @@ class MessageComposerPresenter(
             showTextFormatting = showTextFormatting,
             canShareLocation = canShareLocation.value,
             suggestions = suggestions.toImmutableList(),
+            legacyGalleryPickerState = if (showLegacyGalleryPicker && shouldUseLegacyGalleryPicker()) {
+                LegacyGalleryPickerState(
+                    permissionState = legacyGalleryPermissionState,
+                    isLoading = isLegacyGalleryLoading,
+                    selectedFilter = legacyGalleryFilter,
+                    mediaItems = legacyGalleryItems
+                        .filter { it.matches(legacyGalleryFilter) }
+                        .toImmutableList(),
+                    selectedMediaIds = selectedLegacyGalleryItems
+                        .map { it.id }
+                        .toImmutableSet(),
+                    maxSelectionCount = if (pendingSetkaUpload != null) 1 else Int.MAX_VALUE,
+                    eventSink = ::handleLegacyGalleryEvent,
+                )
+            } else {
+                null
+            },
+            setkaState = setkaState,
             resolveMentionDisplay = resolveMentionDisplay,
             resolveAtRoomMentionDisplay = resolveAtRoomMentionDisplay,
             eventSink = ::handleEvent,
@@ -433,8 +1018,31 @@ class MessageComposerPresenter(
     private fun CoroutineScope.sendMessage(
         markdownTextEditorState: MarkdownTextEditorState,
         richTextEditorState: RichTextEditorState,
+        stickerPacks: List<SetkaStickerPack>,
+        isSetkaPlusActive: Boolean,
     ) = launch {
         val message = currentComposerMessage(markdownTextEditorState, richTextEditorState, withMentions = true)
+            .withCustomEmoji(setkaService, stickerPacks)
+
+        val fallbackBody = if (message.markdown.isBlank()) {
+            setkaService.customEmojiFallbackBodyFromHtml(message.html)
+        } else {
+            null
+        }
+        val normalizedMessage = if (!fallbackBody.isNullOrBlank()) {
+            message.copy(markdown = fallbackBody)
+        } else {
+            message
+        }
+
+        if (!isSetkaPlusActive && (
+                setkaService.containsCustomEmoji(normalizedMessage.markdown, stickerPacks) ||
+                    normalizedMessage.html?.contains("data-mx-emoticon") == true
+                )
+        ) {
+            snackbarDispatcher.post(SnackbarMessage(messageResId = io.element.android.features.messages.impl.R.string.screen_room_setka_custom_emoji_requires_plus))
+            return@launch
+        }
         val capturedMode = messageComposerContext.composerMode
         // Reset composer right away
         resetComposer(markdownTextEditorState, richTextEditorState, fromEdit = capturedMode is MessageComposerMode.Edit)
@@ -442,20 +1050,20 @@ class MessageComposerPresenter(
             is MessageComposerMode.Attachment,
             is MessageComposerMode.Normal -> timelineController.invokeOnCurrentTimeline {
                 sendMessage(
-                    body = message.markdown,
-                    htmlBody = message.html,
-                    intentionalMentions = message.intentionalMentions
+                    body = normalizedMessage.markdown,
+                    htmlBody = normalizedMessage.html,
+                    intentionalMentions = normalizedMessage.intentionalMentions
                 )
             }
             is MessageComposerMode.Edit -> {
                 timelineController.invokeOnCurrentTimeline {
                     // First try to edit the message in the current timeline
-                    editMessage(capturedMode.eventOrTransactionId, message.markdown, message.html, message.intentionalMentions)
+                    editMessage(capturedMode.eventOrTransactionId, normalizedMessage.markdown, normalizedMessage.html, normalizedMessage.intentionalMentions)
                         .onFailure { cause ->
                             val eventId = capturedMode.eventOrTransactionId.eventId
                             if (cause is TimelineException.EventNotFound && eventId != null) {
                                 // if the event is not found in the timeline, try to edit the message directly
-                                room.editMessage(eventId, message.markdown, message.html, message.intentionalMentions)
+                                room.editMessage(eventId, normalizedMessage.markdown, normalizedMessage.html, normalizedMessage.intentionalMentions)
                             }
                         }
                 }
@@ -464,8 +1072,8 @@ class MessageComposerPresenter(
                 timelineController.invokeOnCurrentTimeline {
                     editCaption(
                         capturedMode.eventOrTransactionId,
-                        caption = message.markdown,
-                        formattedCaption = message.html
+                        caption = normalizedMessage.markdown,
+                        formattedCaption = normalizedMessage.html
                     )
                 }
             }
@@ -473,9 +1081,9 @@ class MessageComposerPresenter(
                 timelineController.invokeOnCurrentTimeline {
                     with(capturedMode) {
                         replyMessage(
-                            body = message.markdown,
-                            htmlBody = message.html,
-                            intentionalMentions = message.intentionalMentions,
+                            body = normalizedMessage.markdown,
+                            htmlBody = normalizedMessage.html,
+                            intentionalMentions = normalizedMessage.intentionalMentions,
                             repliedToEventId = eventId,
                         )
                     }
@@ -524,16 +1132,27 @@ class MessageComposerPresenter(
         uri: Uri?,
         mimeType: String? = null,
     ) {
-        uri ?: return
-        val localMedia = localMediaFactory.createFromUri(
-            uri = uri,
-            mimeType = mimeType,
-            name = null,
-            formattedFileSize = null
+        handlePickedMediaItems(
+            items = uri?.let { listOf(it to mimeType) }.orEmpty(),
         )
-        val mediaAttachment = Attachment.Media(localMedia)
+    }
+
+    private fun handlePickedMediaItems(
+        items: List<Pair<Uri, String?>>,
+    ) {
+        if (items.isEmpty()) return
+        val mediaAttachments = items.map { (uri, mimeType) ->
+            Attachment.Media(
+                localMediaFactory.createFromUri(
+                    uri = uri,
+                    mimeType = mimeType,
+                    name = null,
+                    formattedFileSize = null,
+                )
+            )
+        }.toImmutableList()
         val inReplyToEventId = (messageComposerContext.composerMode as? MessageComposerMode.Reply)?.eventId
-        navigator.navigateToPreviewAttachments(persistentListOf(mediaAttachment), inReplyToEventId)
+        navigator.navigateToPreviewAttachments(mediaAttachments, inReplyToEventId)
 
         // Reset composer since the attachment will be sent in a separate flow
         messageComposerContext.composerMode = MessageComposerMode.Normal
@@ -767,4 +1386,45 @@ class MessageComposerPresenter(
             }
         }
     }
+
+    private suspend fun insertInlineText(
+        text: String,
+        markdownTextEditorState: MarkdownTextEditorState,
+        richTextEditorState: RichTextEditorState,
+    ) {
+        if (text.isEmpty()) return
+        if (showTextFormatting) {
+            richTextEditorState.setMarkdown(richTextEditorState.messageMarkdown + text)
+            richTextEditorState.requestFocus()
+        } else {
+            val currentText = SpannableStringBuilder(markdownTextEditorState.text.value())
+            val selection = markdownTextEditorState.selection
+            val start = selection.first.coerceAtLeast(0).coerceAtMost(currentText.length)
+            val end = selection.last.coerceAtLeast(start).coerceAtMost(currentText.length)
+            currentText.replace(start, end, text)
+            markdownTextEditorState.text.update(currentText, true)
+            val cursor = start + text.length
+            markdownTextEditorState.selection = cursor..cursor
+            markdownTextEditorState.requestFocusAction()
+        }
+    }
+
+    private fun shouldUseLegacyGalleryPicker(): Boolean {
+        return buildVersionSdkIntProvider.get() < Build.VERSION_CODES.Q
+    }
+}
+
+private fun Message.withCustomEmoji(
+    setkaService: SetkaService,
+    packs: List<SetkaStickerPack>,
+): Message {
+    val (body, formattedHtml) = setkaService.applyCustomEmojiFormatting(
+        body = markdown,
+        htmlBody = html,
+        packs = packs,
+    )
+    return copy(
+        markdown = body,
+        html = formattedHtml,
+    )
 }

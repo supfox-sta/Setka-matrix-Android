@@ -115,6 +115,12 @@ object TestTags {
     val searchTextField = TestTag("search_text_field")
 
     /**
+     * Attachment source picker.
+     */
+    val attachmentSourceLocation = TestTag("attachment_source-location")
+    val attachmentSourcePoll = TestTag("attachment_source-poll")
+
+    /**
      * Generic call to action.
      */
     val callToAction = TestTag("call_to_action")

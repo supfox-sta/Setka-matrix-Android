@@ -94,10 +94,10 @@ class AppUpdateManifestTest {
 
     @Test
     fun `relative apk name resolves against default base url`() {
-        val manifest = AppUpdateManifest(apk = "app-fdroid-universal-debug.apk")
+        val manifest = AppUpdateManifest(apk = "app-gplay-universal-debug.apk")
 
         assertThat(manifest.resolvedApkUrl())
-            .isEqualTo("https://web.setka-matrix.ru/themes/element/img/app-android/app-fdroid-universal-debug.apk")
+            .isEqualTo("https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk")
     }
 
     @Test
@@ -111,34 +111,34 @@ class AppUpdateManifestTest {
     fun `cached apk file name keeps extension and version identity`() {
         val updateInfo = AppUpdateInfo(
             manifest = AppUpdateManifest(
-                apk = "app-fdroid-universal-debug.apk",
+                apk = "app-gplay-universal-debug.apk",
                 versionName = "26.03.4",
                 versionCode = 202603031,
             ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-fdroid-universal-debug.apk",
+            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
         )
 
         assertThat(updateInfo.cachedApkFileName())
-            .isEqualTo("app-fdroid-universal-debug-26.03.4-202603031.apk")
+            .isEqualTo("app-gplay-universal-debug-26.03.4-202603031.apk")
     }
 
     @Test
     fun `cached apk file names differ between releases that share the same remote file name`() {
         val oldUpdate = AppUpdateInfo(
             manifest = AppUpdateManifest(
-                apk = "app-fdroid-universal-debug.apk",
+                apk = "app-gplay-universal-debug.apk",
                 versionName = "26.03.4",
                 versionCode = 202603031,
             ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-fdroid-universal-debug.apk",
+            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
         )
         val newUpdate = AppUpdateInfo(
             manifest = AppUpdateManifest(
-                apk = "app-fdroid-universal-debug.apk",
+                apk = "app-gplay-universal-debug.apk",
                 versionName = "26.03.5",
                 versionCode = 202603041,
             ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-fdroid-universal-debug.apk",
+            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
         )
 
         assertThat(newUpdate.cachedApkFileName()).isNotEqualTo(oldUpdate.cachedApkFileName())

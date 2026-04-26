@@ -12,21 +12,27 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import io.element.android.compound.theme.ElementTheme
+import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.messages.api.timeline.voicemessages.composer.VoiceMessageComposerEvent
 import io.element.android.features.messages.api.timeline.voicemessages.composer.VoiceMessageComposerState
 import io.element.android.features.messages.api.timeline.videonotes.composer.VideoNoteComposerEvent
 import io.element.android.features.messages.api.timeline.videonotes.composer.VideoNoteComposerState
 import io.element.android.features.messages.api.timeline.voicemessages.composer.VoiceMessageComposerStateProvider
 import io.element.android.features.messages.api.timeline.voicemessages.composer.aVoiceMessageComposerState
+import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.textcomposer.TextComposer
+import io.element.android.libraries.textcomposer.model.VoiceMessageState
 import io.element.android.libraries.textcomposer.model.Suggestion
 import io.element.android.libraries.textcomposer.model.VoiceMessagePlayerEvent
 import io.element.android.libraries.textcomposer.model.VoiceMessageRecorderEvent
@@ -123,6 +129,33 @@ internal fun MessageComposerView(
         onError = ::onError,
         onTyping = ::onTyping,
         onSelectRichContent = ::sendUri,
+        textInputTrailingContent = {
+            if (voiceMessageState.voiceMessageState is VoiceMessageState.Idle) {
+                IconButton(
+                    modifier = Modifier.size(36.dp),
+                    onClick = {
+                        state.eventSink(
+                            if (state.setkaState.isStickerPickerVisible) {
+                                MessageComposerEvent.HideSetkaStickerPicker
+                            } else {
+                                MessageComposerEvent.ShowSetkaStickerPicker
+                            }
+                        )
+                    }
+                ) {
+                    Icon(
+                        modifier = Modifier.size(20.dp),
+                        imageVector = CompoundIcons.ReactionAdd(),
+                        contentDescription = null,
+                        tint = if (state.setkaState.isStickerPickerVisible) {
+                            ElementTheme.colors.iconAccentPrimary
+                        } else {
+                            ElementTheme.colors.iconSecondary
+                        },
+                    )
+                }
+            }
+        },
     )
 }
 

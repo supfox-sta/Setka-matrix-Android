@@ -71,6 +71,11 @@ interface Timeline : AutoCloseable {
         intentionalMentions: List<IntentionalMention>,
     ): Result<Unit>
 
+    suspend fun sendRaw(
+        eventType: String,
+        content: String,
+    ): Result<Unit>
+
     suspend fun editMessage(
         eventOrTransactionId: EventOrTransactionId,
         body: String,

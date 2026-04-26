@@ -92,6 +92,26 @@ android {
             storeFile = file("./signature/debug.keystore")
             storePassword = "android"
         }
+        val releaseStoreFilePath = System.getenv("ELEMENT_ANDROID_RELEASE_STORE_FILE")
+            ?: project.findProperty("signing.element.release.storeFile") as? String?
+        val releaseStorePassword = System.getenv("ELEMENT_ANDROID_RELEASE_STORE_PASSWORD")
+            ?: project.findProperty("signing.element.release.storePassword") as? String?
+        val releaseKeyAlias = System.getenv("ELEMENT_ANDROID_RELEASE_KEY_ALIAS")
+            ?: project.findProperty("signing.element.release.keyAlias") as? String?
+        val releaseKeyPassword = System.getenv("ELEMENT_ANDROID_RELEASE_KEY_PASSWORD")
+            ?: project.findProperty("signing.element.release.keyPassword") as? String?
+        val hasReleaseSigning = !releaseStoreFilePath.isNullOrBlank() &&
+            !releaseStorePassword.isNullOrBlank() &&
+            !releaseKeyAlias.isNullOrBlank() &&
+            !releaseKeyPassword.isNullOrBlank()
+        if (hasReleaseSigning) {
+            register("release") {
+                storeFile = file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
         register("nightly") {
             keyAlias = System.getenv("ELEMENT_ANDROID_NIGHTLY_KEYID")
                 ?: project.property("signing.element.nightly.keyId") as? String?
@@ -106,6 +126,10 @@ android {
     val baseAppName = BuildTimeConfig.APPLICATION_NAME
     val buildType = if (isEnterpriseBuild) "Enterprise" else "FOSS"
     logger.warnInBox("Building ${defaultConfig.applicationId} ($baseAppName) [$buildType]")
+    val hasReleaseSigning = signingConfigs.names.contains("release")
+    if (!hasReleaseSigning) {
+        logger.warn("Release signing is not configured. Release builds will use debug keystore.")
+    }
 
     buildTypes {
         val oidcRedirectSchemeBase = BuildTimeConfig.METADATA_HOST_REVERSED ?: "io.element.android"
@@ -127,7 +151,11 @@ android {
                 "login_redirect_scheme",
                 oidcRedirectSchemeBase,
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
 
             optimization {
                 enable = true

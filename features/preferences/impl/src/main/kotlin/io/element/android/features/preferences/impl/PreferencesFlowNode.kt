@@ -36,6 +36,7 @@ import io.element.android.features.preferences.impl.labs.LabsNode
 import io.element.android.features.preferences.impl.notifications.NotificationSettingsNode
 import io.element.android.features.preferences.impl.notifications.edit.EditDefaultNotificationSettingNode
 import io.element.android.features.preferences.impl.root.PreferencesRootNode
+import io.element.android.features.preferences.impl.threepid.ThreePidSettingsNode
 import io.element.android.features.preferences.impl.user.editprofile.EditUserProfileNode
 import io.element.android.libraries.architecture.BackstackView
 import io.element.android.libraries.architecture.BaseFlowNode
@@ -107,6 +108,9 @@ class PreferencesFlowNode(
         data object LockScreenSettings : NavTarget
 
         @Parcelize
+        data object ContactsAndPrivacy : NavTarget
+
+        @Parcelize
         data class EditDefaultNotificationSetting(val isOneToOne: Boolean) : NavTarget
 
         @Parcelize
@@ -173,6 +177,10 @@ class PreferencesFlowNode(
 
                     override fun navigateToAdvancedSettings() {
                         backstack.push(NavTarget.AdvancedSettings)
+                    }
+
+                    override fun navigateToContactsAndPrivacy() {
+                        backstack.push(NavTarget.ContactsAndPrivacy)
                     }
 
                     override fun navigateToLabs() {
@@ -299,6 +307,9 @@ class PreferencesFlowNode(
             }
             NavTarget.AdvancedSettings -> {
                 createNode<AdvancedSettingsNode>(buildContext)
+            }
+            NavTarget.ContactsAndPrivacy -> {
+                createNode<ThreePidSettingsNode>(buildContext)
             }
             is NavTarget.UserProfile -> {
                 val inputs = EditUserProfileNode.Inputs(navTarget.matrixUser)

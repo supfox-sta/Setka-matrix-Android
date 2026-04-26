@@ -56,6 +56,8 @@ data class MessagesState(
     val roomWallpaperStyle: String?,
     val pinnedMessagesBannerState: PinnedMessagesBannerState,
     val dmUserVerificationState: IdentityState?,
+    /** "В сети" / "Был(-а) недавно" for DMs (best-effort). */
+    val dmUserPresenceText: String?,
     val roomMemberModerationState: RoomMemberModerationState,
     /** Type of "shared history" icon to show in the top bar. */
     val topBarSharedHistoryIcon: SharedHistoryIcon,

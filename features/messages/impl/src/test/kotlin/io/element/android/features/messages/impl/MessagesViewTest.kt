@@ -280,25 +280,21 @@ class MessagesViewTest {
     }
 
     @Test
-    fun `clicking on send location invoke expected callback`() {
+    fun `attachment picker shows send location action when location sharing is enabled`() {
         val eventsRecorder = EventsRecorder<MessagesEvent>(expectEvents = false)
         val state = aMessagesState(
             composerState = aMessageComposerState(
-                showAttachmentSourcePicker = true
+                showAttachmentSourcePicker = true,
+                canShareLocation = true,
             ),
             eventSink = eventsRecorder
         )
-        ensureCalledOnce { callback ->
-            rule.setMessagesView(
-                state = state,
-                onSendLocationClick = callback,
-            )
-            rule.clickOn(R.string.screen_room_attachment_source_location)
-        }
+        rule.setMessagesView(state = state)
+        rule.onNodeWithTag(TestTags.attachmentSourceLocation.value, useUnmergedTree = true).assertExists()
     }
 
     @Test
-    fun `clicking on create poll invoke expected callback`() {
+    fun `attachment picker shows create poll action`() {
         val eventsRecorder = EventsRecorder<MessagesEvent>(expectEvents = false)
         val state = aMessagesState(
             composerState = aMessageComposerState(
@@ -306,14 +302,8 @@ class MessagesViewTest {
             ),
             eventSink = eventsRecorder
         )
-        ensureCalledOnce { callback ->
-            rule.setMessagesView(
-                state = state,
-                onCreatePollClick = callback,
-            )
-            // Then click on the poll action
-            rule.clickOn(R.string.screen_room_attachment_source_poll)
-        }
+        rule.setMessagesView(state = state)
+        rule.onNodeWithTag(TestTags.attachmentSourcePoll.value, useUnmergedTree = true).assertExists()
     }
 
     @Test

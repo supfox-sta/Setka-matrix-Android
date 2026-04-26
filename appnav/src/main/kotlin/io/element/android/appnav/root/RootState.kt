@@ -16,4 +16,6 @@ data class RootState(
     val rageshakeDetectionState: RageshakeDetectionState,
     val crashDetectionState: CrashDetectionState,
     val errorState: AppErrorState,
+    val showLegacyAndroidCompatibilityWarning: Boolean,
+    val dismissLegacyAndroidCompatibilityWarning: () -> Unit,
 )

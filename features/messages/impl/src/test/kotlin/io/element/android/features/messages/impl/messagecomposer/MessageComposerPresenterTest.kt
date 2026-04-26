@@ -10,7 +10,9 @@
 
 package io.element.android.features.messages.impl.messagecomposer
 
+import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.compose.runtime.remember
 import app.cash.molecule.RecompositionMode
 import app.cash.molecule.moleculeFlow
@@ -26,6 +28,15 @@ import io.element.android.features.messages.impl.MessagesNavigator
 import io.element.android.features.messages.impl.attachments.Attachment
 import io.element.android.features.messages.impl.draft.ComposerDraftService
 import io.element.android.features.messages.impl.draft.FakeComposerDraftService
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryItem
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryMediaProvider
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerEvent
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerState
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaBootstrap
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPackKind
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaService
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaSticker
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaStickerPack
 import io.element.android.features.messages.impl.messagecomposer.suggestions.SuggestionsProcessor
 import io.element.android.features.messages.impl.timeline.TimelineController
 import io.element.android.features.messages.impl.utils.FakeMentionSpanFormatter
@@ -97,13 +108,19 @@ import io.element.android.libraries.textcomposer.model.Suggestion
 import io.element.android.libraries.textcomposer.model.SuggestionType
 import io.element.android.libraries.textcomposer.model.TextEditorState
 import io.element.android.services.analytics.test.FakeAnalyticsService
+import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
+import io.element.android.services.toolbox.test.intent.FakeExternalIntentLauncher
+import io.element.android.services.toolbox.test.sdk.FakeBuildVersionSdkIntProvider
 import io.element.android.tests.testutils.WarmUpRule
 import io.element.android.tests.testutils.lambda.any
 import io.element.android.tests.testutils.lambda.assert
+import io.element.android.tests.testutils.lambda.matching
 import io.element.android.tests.testutils.lambda.lambdaRecorder
 import io.element.android.tests.testutils.lambda.value
 import io.element.android.tests.testutils.test
 import io.element.android.tests.testutils.waitForPredicate
+import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -758,6 +775,104 @@ class MessageComposerPresenterTest {
             val initialState = awaitFirstItem()
             initialState.eventSink(MessageComposerEvent.PickAttachmentSource.FromGallery)
             // No crashes here, otherwise it fails
+        }
+    }
+
+    @Test
+    fun `present - Pick media from gallery on legacy Android opens in-app picker`() = runTest {
+        val permissionPresenter = FakePermissionsPresenter().apply { setPermissionGranted() }
+        val mediaItem = LegacyGalleryItem(
+            id = 1L,
+            uri = Uri.parse("content://legacy/image/1"),
+            mimeType = MimeTypes.Images,
+            isVideo = false,
+            durationMillis = null,
+        )
+        val presenter = createPresenter(
+            permissionPresenter = permissionPresenter,
+            legacyGalleryMediaProvider = LegacyGalleryMediaProvider { _ -> listOf(mediaItem) },
+            sdkIntProvider = FakeBuildVersionSdkIntProvider(Build.VERSION_CODES.P),
+        )
+        presenter.test {
+            val initialState = awaitFirstItem()
+            initialState.eventSink(MessageComposerEvent.PickAttachmentSource.FromGallery)
+
+            val pickerState = awaitLegacyGalleryPickerState { it.mediaItems.isNotEmpty() }
+            assertThat(pickerState.mediaItems).containsExactly(mediaItem)
+        }
+    }
+
+    @Test
+    fun `present - selecting media from legacy gallery opens preview`() = runTest {
+        val permissionPresenter = FakePermissionsPresenter().apply { setPermissionGranted() }
+        val mediaItem = LegacyGalleryItem(
+            id = 2L,
+            uri = Uri.parse("content://legacy/image/2"),
+            mimeType = MimeTypes.Images,
+            isVideo = false,
+            durationMillis = null,
+        )
+        val onPreviewAttachmentLambda = lambdaRecorder { _: ImmutableList<Attachment>, _: EventId? -> }
+        val presenter = createPresenter(
+            navigator = FakeMessagesNavigator(onPreviewAttachmentLambda = onPreviewAttachmentLambda),
+            permissionPresenter = permissionPresenter,
+            legacyGalleryMediaProvider = LegacyGalleryMediaProvider { _ -> listOf(mediaItem) },
+            sdkIntProvider = FakeBuildVersionSdkIntProvider(Build.VERSION_CODES.P),
+        )
+        presenter.test {
+            val initialState = awaitFirstItem()
+            initialState.eventSink(MessageComposerEvent.PickAttachmentSource.FromGallery)
+
+            val pickerState = awaitLegacyGalleryPickerState { it.mediaItems.isNotEmpty() }
+            pickerState.eventSink(LegacyGalleryPickerEvent.ToggleMediaSelection(mediaItem))
+            val selectedState = awaitLegacyGalleryPickerState { it.selectedCount == 1 }
+            selectedState.eventSink(LegacyGalleryPickerEvent.ConfirmSelection)
+
+            onPreviewAttachmentLambda.assertions().isCalledOnce()
+            assertThat(awaitLegacyGalleryPickerDismissedState().legacyGalleryPickerState).isNull()
+        }
+    }
+
+    @Test
+    fun `present - selecting multiple media from legacy gallery opens preview with all attachments`() = runTest {
+        val permissionPresenter = FakePermissionsPresenter().apply { setPermissionGranted() }
+        val firstMediaItem = LegacyGalleryItem(
+            id = 11L,
+            uri = Uri.parse("content://legacy/image/11"),
+            mimeType = MimeTypes.Images,
+            isVideo = false,
+            durationMillis = null,
+        )
+        val secondMediaItem = LegacyGalleryItem(
+            id = 12L,
+            uri = Uri.parse("content://legacy/video/12"),
+            mimeType = MimeTypes.Videos,
+            isVideo = true,
+            durationMillis = 5_000L,
+        )
+        val onPreviewAttachmentLambda = lambdaRecorder { _: ImmutableList<Attachment>, _: EventId? -> }
+        val presenter = createPresenter(
+            navigator = FakeMessagesNavigator(onPreviewAttachmentLambda = onPreviewAttachmentLambda),
+            permissionPresenter = permissionPresenter,
+            legacyGalleryMediaProvider = LegacyGalleryMediaProvider { _ -> listOf(firstMediaItem, secondMediaItem) },
+            sdkIntProvider = FakeBuildVersionSdkIntProvider(Build.VERSION_CODES.P),
+        )
+        presenter.test {
+            val initialState = awaitFirstItem()
+            initialState.eventSink(MessageComposerEvent.PickAttachmentSource.FromGallery)
+
+            val pickerState = awaitLegacyGalleryPickerState { it.mediaItems.size == 2 }
+            pickerState.eventSink(LegacyGalleryPickerEvent.ToggleMediaSelection(firstMediaItem))
+            val oneSelectedState = awaitLegacyGalleryPickerState { it.selectedCount == 1 }
+            oneSelectedState.eventSink(LegacyGalleryPickerEvent.ToggleMediaSelection(secondMediaItem))
+            val twoSelectedState = awaitLegacyGalleryPickerState { it.selectedCount == 2 }
+            twoSelectedState.eventSink(LegacyGalleryPickerEvent.ConfirmSelection)
+
+            onPreviewAttachmentLambda.assertions().isCalledOnce().with(
+                matching<ImmutableList<Attachment>> { attachments -> attachments.size == 2 },
+                value(null),
+            )
+            assertThat(awaitLegacyGalleryPickerDismissedState().legacyGalleryPickerState).isNull()
         }
     }
 
@@ -1481,12 +1596,93 @@ class MessageComposerPresenterTest {
         }
     }
 
+    @Test
+    fun `present - share setka pack launches chooser intent`() = runTest {
+        val shareLink = "https://web.setka-matrix.ru/#/setka-pack/test"
+        val pack = SetkaStickerPack(
+            id = "pack-1",
+            name = "Funny",
+            kind = SetkaPackKind.STICKER,
+            stickers = listOf(
+                SetkaSticker(
+                    id = "sticker-1",
+                    name = "Smile",
+                    mxcUrl = "mxc://server/sticker",
+                    mimeType = "image/webp",
+                    width = 128,
+                    height = 128,
+                    size = 1024,
+                )
+            ),
+            createdAt = null,
+            updatedAt = null,
+        )
+        val setkaService = mockk<SetkaService> {
+            coEvery { bootstrap() } returns Result.success(
+                SetkaBootstrap(
+                    subscription = null,
+                    plans = emptyList(),
+                    stickerPacks = listOf(pack),
+                )
+            )
+            every { buildPackShareLink(pack) } returns shareLink
+        }
+        var launchedIntent: Intent? = null
+        val externalIntentLauncher = FakeExternalIntentLauncher { intent ->
+            launchedIntent = intent
+        }
+        val presenter = createPresenter(
+            setkaService = setkaService,
+            externalIntentLauncher = externalIntentLauncher,
+        )
+        presenter.test {
+            var state = awaitFirstItem()
+            repeat(5) {
+                if (state.setkaState.stickerPacks.isEmpty()) {
+                    state = awaitItem()
+                }
+            }
+
+            state.eventSink(MessageComposerEvent.ShareSetkaPack(pack.id))
+
+            assertThat(launchedIntent?.action).isEqualTo(Intent.ACTION_CHOOSER)
+            @Suppress("DEPRECATION")
+            val sendIntent = launchedIntent?.getParcelableExtra(Intent.EXTRA_INTENT) as? Intent
+            assertThat(sendIntent?.action).isEqualTo(Intent.ACTION_SEND)
+            assertThat(sendIntent?.getStringExtra(Intent.EXTRA_TEXT)).isEqualTo(shareLink)
+            assertThat(sendIntent?.getStringExtra(Intent.EXTRA_SUBJECT)).isEqualTo(pack.name)
+        }
+    }
+
     private suspend fun ReceiveTurbine<MessageComposerState>.backToNormalMode(state: MessageComposerState, skipCount: Int = 0): MessageComposerState {
         state.eventSink.invoke(MessageComposerEvent.CloseSpecialMode)
         skipItems(skipCount)
         val normalState = awaitItem()
         assertThat(normalState.mode).isEqualTo(MessageComposerMode.Normal)
         return normalState
+    }
+
+    private suspend fun ReceiveTurbine<MessageComposerState>.awaitLegacyGalleryPickerState(
+        predicate: (LegacyGalleryPickerState) -> Boolean = { true },
+    ): LegacyGalleryPickerState {
+        repeat(10) {
+            val state = awaitItem()
+            val pickerState = state.legacyGalleryPickerState
+            if (pickerState != null && predicate(pickerState)) {
+                return pickerState
+            }
+        }
+        throw AssertionError("Legacy gallery picker state was not emitted")
+    }
+
+    private suspend fun ReceiveTurbine<MessageComposerState>.awaitLegacyGalleryPickerDismissedState(): MessageComposerState {
+        repeat(10) {
+            val state = awaitItem()
+            if (state.legacyGalleryPickerState == null) {
+                return state
+            }
+        }
+        throw AssertionError("Legacy gallery picker was not dismissed")
     }
 
     private fun TestScope.createPresenter(
@@ -1512,6 +1708,10 @@ class MessageComposerPresenterTest {
         isRichTextEditorEnabled: Boolean = true,
         draftService: ComposerDraftService = FakeComposerDraftService(),
         mediaOptimizationConfigProvider: FakeMediaOptimizationConfigProvider = FakeMediaOptimizationConfigProvider(),
+        legacyGalleryMediaProvider: LegacyGalleryMediaProvider = LegacyGalleryMediaProvider { _ -> emptyList() },
+        sdkIntProvider: FakeBuildVersionSdkIntProvider = FakeBuildVersionSdkIntProvider(Build.VERSION_CODES.TIRAMISU),
+        setkaService: SetkaService = aSetkaService(),
+        externalIntentLauncher: ExternalIntentLauncher = FakeExternalIntentLauncher(),
     ) = MessageComposerPresenter(
         navigator = navigator,
         sessionCoroutineScope = this,
@@ -1538,6 +1738,8 @@ class MessageComposerPresenterTest {
         messageComposerContext = DefaultMessageComposerContext(),
         richTextEditorStateFactory = TestRichTextEditorStateFactory(),
         roomAliasSuggestionsDataSource = FakeRoomAliasSuggestionsDataSource(),
+        legacyGalleryMediaProvider = legacyGalleryMediaProvider,
+        buildVersionSdkIntProvider = sdkIntProvider,
         permissionsPresenterFactory = FakePermissionsPresenterFactory(permissionPresenter),
         permalinkParser = permalinkParser,
         permalinkBuilder = permalinkBuilder,
@@ -1548,9 +1750,21 @@ class MessageComposerPresenterTest {
         suggestionsProcessor = SuggestionsProcessor(),
         mediaOptimizationConfigProvider = mediaOptimizationConfigProvider,
         notificationConversationService = notificationConversationService,
+        setkaService = setkaService,
+        externalIntentLauncher = externalIntentLauncher,
     ).apply {
         isTesting = true
         showTextFormatting = isRichTextEditorEnabled
+    }
+
+    private fun aSetkaService(): SetkaService = mockk {
+        coEvery { bootstrap() } returns Result.success(
+            SetkaBootstrap(
+                subscription = null,
+                plans = emptyList(),
+                stickerPacks = emptyList(),
+            )
+        )
     }
 
     private suspend fun <T> ReceiveTurbine<T>.awaitFirstItem(): T {

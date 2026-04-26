@@ -27,6 +27,9 @@ open class RootStateProvider : PreviewParameterProvider<RootState> {
             ),
             aRootState().copy(
                 errorState = aAppErrorState(),
+            ),
+            aRootState().copy(
+                showLegacyAndroidCompatibilityWarning = true,
             )
         )
 }
@@ -35,4 +38,6 @@ fun aRootState() = RootState(
     rageshakeDetectionState = aRageshakeDetectionState(),
     crashDetectionState = aCrashDetectionState(),
     errorState = AppErrorState.NoError,
+    showLegacyAndroidCompatibilityWarning = false,
+    dismissLegacyAndroidCompatibilityWarning = {},
 )

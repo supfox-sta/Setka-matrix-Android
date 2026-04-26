@@ -17,4 +17,9 @@ data class HomeContact(
     val avatarUrl: String?,
     val email: String?,
     val phone: String?,
+    /**
+     * Human-friendly presence string (e.g. "В сети", "Был(-а) недавно").
+     * Filled opportunistically (may be null if not available).
+     */
+    val presenceText: String? = null,
 )

@@ -27,6 +27,7 @@ import io.element.android.features.preferences.impl.user.UserPreferences
 import io.element.android.libraries.architecture.coverage.ExcludeFromCoverage
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.designsystem.components.list.ListItemContent
+import io.element.android.libraries.designsystem.components.preferences.PreferenceCategory
 import io.element.android.libraries.designsystem.components.preferences.PreferencePage
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.ElementPreviewDark
@@ -63,6 +64,7 @@ fun PreferencesRootView(
     onOpenCallSettings: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
+    onOpenContactsAndPrivacy: () -> Unit,
     onOpenLabs: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onOpenUserProfile: (MatrixUser) -> Unit,
@@ -92,36 +94,40 @@ fun PreferencesRootView(
                 onAddAccountClick = onAddAccountClick,
             )
         }
-        // 'Manage my app' section
-        ManageAppSection(
-            state = state,
-            onOpenNotificationSettings = onOpenNotificationSettings,
-            onOpenLockScreenSettings = onOpenLockScreenSettings,
-            onSecureBackupClick = onSecureBackupClick,
-        )
+        PreferenceCategory(title = "Приложение") {
+            ManageAppSection(
+                state = state,
+                onOpenNotificationSettings = onOpenNotificationSettings,
+                onOpenLockScreenSettings = onOpenLockScreenSettings,
+                onSecureBackupClick = onSecureBackupClick,
+            )
+        }
 
-        // 'Account' section
-        ManageAccountSection(
-            state = state,
-            onManageAccountClick = onManageAccountClick,
-            onLinkNewDeviceClick = onLinkNewDeviceClick,
-            onOpenBlockedUsers = onOpenBlockedUsers
-        )
+        PreferenceCategory(title = "Аккаунт") {
+            ManageAccountSection(
+                state = state,
+                onManageAccountClick = onManageAccountClick,
+                onLinkNewDeviceClick = onLinkNewDeviceClick,
+                onOpenContactsAndPrivacy = onOpenContactsAndPrivacy,
+                onOpenBlockedUsers = onOpenBlockedUsers
+            )
+        }
 
-        // General section
-        GeneralSection(
-            state = state,
-            onOpenAbout = onOpenAbout,
-            onOpenCustomization = onOpenCustomization,
-            onOpenCallSettings = onOpenCallSettings,
-            onOpenAnalytics = onOpenAnalytics,
-            onOpenRageShake = onOpenRageShake,
-            onOpenAdvancedSettings = onOpenAdvancedSettings,
-            onOpenDeveloperSettings = onOpenDeveloperSettings,
-            onOpenLabs = onOpenLabs,
-            onSignOutClick = onSignOutClick,
-            onDeactivateClick = onDeactivateClick,
-        )
+        PreferenceCategory(title = "Внешний вид и функции") {
+            GeneralSection(
+                state = state,
+                onOpenAbout = onOpenAbout,
+                onOpenCustomization = onOpenCustomization,
+                onOpenCallSettings = onOpenCallSettings,
+                onOpenAnalytics = onOpenAnalytics,
+                onOpenRageShake = onOpenRageShake,
+                onOpenAdvancedSettings = onOpenAdvancedSettings,
+                onOpenDeveloperSettings = onOpenDeveloperSettings,
+                onOpenLabs = onOpenLabs,
+                onSignOutClick = onSignOutClick,
+                onDeactivateClick = onDeactivateClick,
+            )
+        }
 
         Footer(
             version = state.version,
@@ -192,7 +198,6 @@ private fun ColumnScope.ManageAppSection(
             onClick = onSecureBackupClick,
         )
     }
-    HorizontalDivider()
 }
 
 @Composable
@@ -200,6 +205,7 @@ private fun ColumnScope.ManageAccountSection(
     state: PreferencesRootState,
     onManageAccountClick: (url: String) -> Unit,
     onLinkNewDeviceClick: () -> Unit,
+    onOpenContactsAndPrivacy: () -> Unit,
     onOpenBlockedUsers: () -> Unit,
 ) {
     if (state.showLinkNewDevice) {
@@ -235,9 +241,13 @@ private fun ColumnScope.ManageAccountSection(
         )
     }
 
-    if (state.accountManagementUrl != null || state.devicesManagementUrl != null || state.showBlockedUsersItem) {
-        HorizontalDivider()
-    }
+    ListItem(
+        headlineContent = { Text(text = stringResource(R.string.screen_preferences_contacts_privacy_title)) },
+        supportingContent = { Text(text = stringResource(R.string.screen_preferences_contacts_privacy_subtitle)) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.UserProfile())),
+        onClick = onOpenContactsAndPrivacy,
+    )
+
 }
 
 @Composable
@@ -377,6 +387,7 @@ private fun ContentToPreview(matrixUser: MatrixUser) {
         onOpenRageShake = {},
         onOpenDeveloperSettings = {},
         onOpenAdvancedSettings = {},
+        onOpenContactsAndPrivacy = {},
         onOpenLabs = {},
         onOpenAbout = {},
         onOpenCustomization = {},

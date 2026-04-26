@@ -12,8 +12,15 @@ import io.element.android.libraries.matrix.ui.media.AvatarAction
 
 sealed interface EditUserProfileEvent {
     data class HandleAvatarAction(val action: AvatarAction) : EditUserProfileEvent
+    data object PickProfileBackground : EditUserProfileEvent
+    data object RemoveProfileBackground : EditUserProfileEvent
     data class UpdateDisplayName(val name: String) : EditUserProfileEvent
+    data class UpdateBio(val bio: String) : EditUserProfileEvent
+    data class UpdateProfileColorHex(val color: String) : EditUserProfileEvent
+    data class SetBadgeEmoji(val mxcUrl: String?) : EditUserProfileEvent
+    data class SetStatusEmoji(val mxcUrl: String?) : EditUserProfileEvent
     data object Exit : EditUserProfileEvent
+    data object DiscardChanges : EditUserProfileEvent
     data object Save : EditUserProfileEvent
     data object CloseDialog : EditUserProfileEvent
 }

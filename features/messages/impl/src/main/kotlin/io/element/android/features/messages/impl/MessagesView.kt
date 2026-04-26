@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -56,6 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.messages.api.timeline.videonotes.composer.VideoNoteComposerEvent
 import io.element.android.features.messages.api.timeline.voicemessages.composer.VoiceMessageComposerEvent
@@ -69,6 +71,12 @@ import io.element.android.features.messages.impl.messagecomposer.AttachmentsBott
 import io.element.android.features.messages.impl.messagecomposer.DisabledComposerView
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerView
+import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerView
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaInlinePickerPanel
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPackEditorDialog
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPlusDialog
+import io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewSheet
+import io.element.android.features.messages.impl.setka.LocalSetkaSharedPackImporter
 import io.element.android.features.messages.impl.messagecomposer.suggestions.SuggestionsPickerView
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerView
@@ -213,6 +221,13 @@ fun MessagesView(
 
     val expandableState = rememberExpandableBottomSheetLayoutState()
     val showVideoNoteOverlay = state.videoNoteComposerState.videoNoteState !is VideoNoteState.Idle
+    val legacyGalleryPickerState = state.composerState.legacyGalleryPickerState
+
+    LaunchedEffect(legacyGalleryPickerState) {
+        if (legacyGalleryPickerState != null) {
+            localView.hideKeyboard()
+        }
+    }
 
     val useLightWallpaper = when (state.roomWallpaperStyle) {
         RoomWallpaperStyles.LIGHT -> true
@@ -280,13 +295,18 @@ fun MessagesView(
                 ),
             )
         }
-        ExpandableBottomSheetLayout(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (showVideoNoteOverlay) Modifier.blur(16.dp) else Modifier),
-            backgroundColor = composerContainerColor,
-            content = {
-                Scaffold(
+        CompositionLocalProvider(
+            LocalSetkaSharedPackImporter provides { token ->
+                state.composerState.eventSink(MessageComposerEvent.PreviewSetkaSharedPack(token))
+            }
+        ) {
+            ExpandableBottomSheetLayout(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (showVideoNoteOverlay) Modifier.blur(16.dp) else Modifier),
+                backgroundColor = composerContainerColor,
+                content = {
+                    Scaffold(
                 containerColor = Color.Transparent,
                 contentWindowInsets = WindowInsets.statusBars,
                 topBar = {
@@ -308,6 +328,7 @@ fun MessagesView(
                             heroes = state.heroes,
                             roomCallState = state.roomCallState,
                             dmUserIdentityState = state.dmUserVerificationState,
+                            dmUserPresenceText = state.dmUserPresenceText,
                             sharedHistoryIcon = state.topBarSharedHistoryIcon,
                             onBackClick = { hidingKeyboard { onBackClick() } },
                             onRoomDetailsClick = { hidingKeyboard { onRoomDetailsClick() } },
@@ -426,8 +447,9 @@ fun MessagesView(
             } else {
                 RectangleShape
             },
-            maxBottomSheetContentHeight = maxComposerHeightPx.toDp(),
-        )
+                maxBottomSheetContentHeight = maxComposerHeightPx.toDp(),
+            )
+        }
 
         if (showVideoNoteOverlay) {
             VideoNoteComposerOverlay(
@@ -470,10 +492,67 @@ fun MessagesView(
         },
     )
 
+    if (state.composerState.setkaState.isSubscriptionDialogVisible) {
+        SetkaPlusDialog(
+            state = state.composerState.setkaState,
+            onDismiss = { state.composerState.eventSink(MessageComposerEvent.HideSetkaPlusDialog) },
+            onBuyPlan = { plan -> state.composerState.eventSink(MessageComposerEvent.BuySetkaPlan(plan)) },
+        )
+    }
+
+    state.composerState.setkaState.sharedPackPreview?.let { previewState ->
+        SetkaSharedPackPreviewSheet(
+            state = previewState,
+            onDismiss = { state.composerState.eventSink(MessageComposerEvent.DismissSetkaSharedPackPreview) },
+            onApply = { state.composerState.eventSink(MessageComposerEvent.ApplySetkaSharedPackPreview) },
+        )
+    }
+
+    state.composerState.setkaState.packEditorState?.let { editorState ->
+        SetkaPackEditorDialog(
+            state = state.composerState.setkaState,
+            editorState = editorState,
+            onDismiss = { state.composerState.eventSink(MessageComposerEvent.CloseSetkaPackEditor) },
+            onSave = { name ->
+                state.composerState.eventSink(
+                    MessageComposerEvent.SaveSetkaPack(
+                        kind = editorState.kind,
+                        packId = editorState.packId,
+                        name = name,
+                    )
+                )
+            },
+            onUploadToPack = { packId, kind ->
+                state.composerState.eventSink(MessageComposerEvent.UploadSetkaMedia(packId, kind))
+            },
+            onSharePack = { packId ->
+                state.composerState.eventSink(MessageComposerEvent.ShareSetkaPack(packId))
+            },
+            onDeletePack = { packId, packName ->
+                state.composerState.eventSink(MessageComposerEvent.ConfirmDeleteSetkaPack(packId, packName))
+            },
+            onDeleteSticker = { packId, stickerId ->
+                state.composerState.eventSink(MessageComposerEvent.DeleteSetkaSticker(packId, stickerId))
+            },
+        )
+    }
+
+    state.composerState.setkaState.deleteConfirmation?.let { deleteState ->
+        ConfirmationDialog(
+            title = stringResource(R.string.screen_room_setka_delete_pack_title),
+            content = stringResource(R.string.screen_room_setka_delete_pack_message, deleteState.packName),
+            onSubmitClick = {
+                state.composerState.eventSink(MessageComposerEvent.DeleteSetkaPack(deleteState.packId))
+            },
+            onDismiss = { state.composerState.eventSink(MessageComposerEvent.DismissDeleteSetkaPack) },
+        )
+    }
+
     CustomReactionBottomSheet(
         state = state.customReactionState,
-        onSelectEmoji = { uniqueId, emoji ->
-            state.eventSink(MessagesEvent.ToggleReaction(emoji.unicode, uniqueId))
+        customEmojiPacks = state.composerState.setkaState.emojiPacksOnly,
+        onSelectEmoji = { uniqueId, key ->
+            state.eventSink(MessagesEvent.ToggleReaction(key, uniqueId))
         }
     )
 
@@ -489,6 +568,13 @@ fun MessagesView(
         },
         state = state.linkState,
     )
+
+    legacyGalleryPickerState?.let { pickerState ->
+        LegacyGalleryPickerView(
+            state = pickerState,
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
 
 @Composable
@@ -533,6 +619,7 @@ private fun MessagesViewContent(
             .imePadding(),
     ) {
         AttachmentsBottomSheet(
+            modifier = Modifier.zIndex(3f),
             state = state.composerState,
             onSendLocationClick = onSendLocationClick,
             onCreatePollClick = onCreatePollClick,
@@ -608,7 +695,9 @@ private fun MessagesViewComposerBottomSheetContents(
 ) {
     when {
         state.successorRoom != null -> {
-            SuccessorRoomBanner(roomSuccessor = state.successorRoom, onRoomSuccessorClick = onRoomSuccessorClick)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                SuccessorRoomBanner(roomSuccessor = state.successorRoom, onRoomSuccessorClick = onRoomSuccessorClick)
+            }
         }
         state.userEventPermissions.canSendMessage -> {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -626,17 +715,47 @@ private fun MessagesViewComposerBottomSheetContents(
                 if (verificationViolation != null) {
                     DisabledComposerView(modifier = Modifier.fillMaxWidth())
                 } else {
-                    MessageComposerView(
-                        state = state.composerState,
-                        voiceMessageState = state.voiceMessageComposerState,
-                        videoNoteState = state.videoNoteComposerState,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        MessageComposerView(
+                            state = state.composerState,
+                            voiceMessageState = state.voiceMessageComposerState,
+                            videoNoteState = state.videoNoteComposerState,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        AnimatedVisibility(
+                            visible = state.composerState.setkaState.isStickerPickerVisible,
+                            enter = expandVertically(),
+                            exit = shrinkVertically(),
+                        ) {
+                            SetkaInlinePickerPanel(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 292.dp, max = 340.dp)
+                                    .imePadding(),
+                                state = state.composerState.setkaState,
+                                onDismiss = { state.composerState.eventSink(MessageComposerEvent.HideSetkaStickerPicker) },
+                                onSendSticker = { sticker ->
+                                    state.composerState.eventSink(MessageComposerEvent.SendSetkaSticker(sticker))
+                                },
+                                onInsertEmoji = { text ->
+                                    state.composerState.eventSink(MessageComposerEvent.InsertInlineText(text))
+                                },
+                                onOpenPackEditor = { kind, packId ->
+                                    state.composerState.eventSink(MessageComposerEvent.OpenSetkaPackEditor(kind, packId))
+                                },
+                                onOpenSubscription = {
+                                    state.composerState.eventSink(MessageComposerEvent.ShowSetkaPlusDialog)
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
         else -> {
-            CantSendMessageBanner()
+            Column(modifier = Modifier.fillMaxWidth()) {
+                CantSendMessageBanner()
+            }
         }
     }
 }

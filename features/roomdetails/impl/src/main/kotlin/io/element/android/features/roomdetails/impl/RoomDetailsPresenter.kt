@@ -108,17 +108,19 @@ class RoomDetailsPresenter(
         val roomCallState = roomCallStatePresenter.present()
         val joinedMemberCount by remember { derivedStateOf { roomInfo.joinedMembersCount } }
         val canToggleContact by remember { derivedStateOf { joinedMemberCount == 2L } }
-        var contactRoomIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-        val isInContacts by remember(canToggleContact, contactRoomIds) {
-            derivedStateOf { canToggleContact && contactRoomIds.contains(room.roomId.value) }
+        var contactByRoomId by remember { mutableStateOf<Map<String, io.element.android.libraries.matrix.api.contact.MatrixContact>>(emptyMap()) }
+        val isInContacts by remember(canToggleContact, contactByRoomId) {
+            derivedStateOf { canToggleContact && contactByRoomId.containsKey(room.roomId.value) }
+        }
+        val contactDisplayName by remember(contactByRoomId) {
+            derivedStateOf { contactByRoomId[room.roomId.value]?.displayName?.takeIf { it.isNotBlank() } }
         }
         val roomWallpaperStyle by appPreferencesStore.getRoomWallpaperFlow(room.roomId.value).collectAsState(initial = null)
 
         fun refreshContacts() = scope.launch(dispatchers.io) {
-            contactRoomIds = client.getContactList()
+            contactByRoomId = client.getContactList()
                 .getOrNull()
-                ?.map { it.roomId.value }
-                ?.toSet()
+                ?.associateBy { it.roomId.value }
                 .orEmpty()
         }
 
@@ -207,7 +209,13 @@ class RoomDetailsPresenter(
             }
         }
 
-        val roomMemberDetailsState = roomMemberDetailsPresenter?.present()
+        val roomMemberDetailsState = roomMemberDetailsPresenter?.present()?.let { baseState ->
+            if (contactDisplayName.isNullOrBlank()) {
+                baseState
+            } else {
+                baseState.copy(userName = contactDisplayName)
+            }
+        }
 
         val hasMemberVerificationViolations by produceState(false) {
             room.roomMemberIdentityStateChange(waitForEncryption = true)
@@ -221,7 +229,7 @@ class RoomDetailsPresenter(
 
         return RoomDetailsState(
             roomId = room.roomId,
-            roomName = roomName,
+            roomName = contactDisplayName ?: roomName,
             roomAlias = canonicalAlias,
             roomAvatarUrl = roomAvatar,
             roomTopic = topicState,

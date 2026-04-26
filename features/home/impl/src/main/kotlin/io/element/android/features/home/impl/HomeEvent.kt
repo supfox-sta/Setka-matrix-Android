@@ -15,4 +15,7 @@ sealed interface HomeEvent {
     data class SwitchToAccount(val sessionId: SessionId) : HomeEvent
     data object RefreshContacts : HomeEvent
     data object ToggleQuickTheme : HomeEvent
+    data object RefreshSetkaPlus : HomeEvent
+    data class BuySetkaPlusPlan(val planId: String) : HomeEvent
+    data object ClearSetkaPlusError : HomeEvent
 }

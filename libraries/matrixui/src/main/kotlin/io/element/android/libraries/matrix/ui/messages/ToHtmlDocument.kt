@@ -13,7 +13,10 @@ import io.element.android.libraries.matrix.api.permalink.PermalinkParser
 import io.element.android.libraries.matrix.api.timeline.item.event.FormattedBody
 import io.element.android.libraries.matrix.api.timeline.item.event.MessageFormat
 import io.element.android.wysiwyg.utils.HtmlToDomParser
+import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import org.jsoup.safety.Cleaner
+import org.jsoup.safety.Safelist
 
 /**
  * Converts the HTML string [FormattedBody.body] to a [Document] by parsing it.
@@ -28,22 +31,76 @@ fun FormattedBody.toHtmlDocument(
     permalinkParser: PermalinkParser,
     prefix: String? = null,
 ): Document? {
-    return takeIf { it.format == MessageFormat.HTML }?.body
-        // Trim whitespace at the end to avoid having wrong rendering of the message.
-        // We don't trim the start in case it's used as indentation.
-        ?.trimEnd()
-        ?.let { formattedBody ->
-            val dom = if (prefix != null) {
-                HtmlToDomParser.document("$prefix $formattedBody")
-            } else {
-                HtmlToDomParser.document(formattedBody)
-            }
-
-            // Prepend `@` to mentions
-            fixMentions(dom, permalinkParser)
-
-            dom
+    // Most clients (Element Web included) send HTML formatted bodies with:
+    //   "format": "org.matrix.custom.html"
+    //
+    // For robustness, if the SDK flags the format as UNKNOWN but the body clearly contains
+    // Matrix custom-emoji HTML, still parse it with a restrictive JSoup safelist so the user
+    // doesn't see empty message bubbles.
+    val formattedBody = when (format) {
+        MessageFormat.HTML -> body
+        MessageFormat.UNKNOWN -> body.takeIf { raw ->
+            raw.contains("data-mx-emoticon", ignoreCase = true) || raw.contains("<img", ignoreCase = true)
         }
+    } ?: return null
+
+    // Trim whitespace at the end to avoid having wrong rendering of the message.
+    // We don't trim the start in case it's used as indentation.
+    val trimmed = formattedBody.trimEnd()
+    val input = if (prefix != null) "$prefix $trimmed" else trimmed
+
+    var dom = HtmlToDomParser.document(input)
+
+    // HtmlToDomParser is strict and may keep <img> but drop its attributes/protocols (notably
+    // mxc://), which makes custom emoji extraction fail and can collapse the message into an
+    // empty bubble. When we detect custom emoji markup, ensure at least one <img> keeps a usable
+    // source URL, otherwise fall back to a JSoup Cleaner with an explicit allowlist.
+    if (input.contains("data-mx-emoticon", ignoreCase = true)) {
+        val imgs = dom.getElementsByTag("img")
+        val hasUsableImg = imgs.any { img ->
+            fun normalize(value: String): String = value.trim().replace(Regex("\\s+"), "")
+            val candidate = sequenceOf(
+                normalize(img.attr("data-mx-url")),
+                normalize(img.attr("data-mx-src")),
+                normalize(img.attr("src")),
+            ).firstOrNull { it.isNotBlank() }.orEmpty()
+            candidate.startsWith("mxc://", ignoreCase = true) ||
+                candidate.startsWith("https://", ignoreCase = true) ||
+                candidate.startsWith("http://", ignoreCase = true)
+        }
+        if (imgs.isEmpty() || !hasUsableImg) {
+            dom = parseWithJsoupSafelist(input)
+        }
+    }
+
+    // Prepend `@` to mentions
+    fixMentions(dom, permalinkParser)
+
+    return dom
+}
+
+private fun parseWithJsoupSafelist(html: String): Document {
+    // Start from a relaxed safelist and expand it to support Matrix custom emoji.
+    val safelist = Safelist.relaxed()
+        .addTags("img")
+        .addAttributes(
+            "img",
+            "src",
+            "alt",
+            "title",
+            "width",
+            "height",
+            "data-mx-emoticon",
+            "data-mx-src",
+            "data-mx-url",
+        )
+        // Matrix media URLs for emoji are usually mxc://...
+        .addProtocols("img", "src", "mxc", "https", "http")
+        // Allow matrix.to permalinks and matrix scheme on links.
+        .addProtocols("a", "href", "https", "http", "matrix")
+
+    val cleaned = Cleaner(safelist).clean(Jsoup.parseBodyFragment(html))
+    return cleaned
 }
 
 private fun fixMentions(

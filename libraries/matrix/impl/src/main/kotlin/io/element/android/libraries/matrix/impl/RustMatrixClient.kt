@@ -337,9 +337,27 @@ class RustMatrixClient(
         }.mapFailure { it.mapClientException() }
     }
 
+    override suspend fun executeAuthenticatedRequest(
+        method: String,
+        path: String,
+        body: ByteArray?,
+        contentType: String,
+        accept: String,
+    ): Result<ByteArray> = withContext(sessionDispatcher) {
+        runCatchingExceptions {
+            executeAuthenticatedRequestInternal(
+                method = method,
+                path = path,
+                body = body,
+                contentType = contentType,
+                accept = accept,
+            )
+        }
+    }
+
     override suspend fun getContactList(): Result<List<MatrixContact>> = withContext(sessionDispatcher) {
         runCatchingExceptions {
-            val responseBytes = executeContactListRequest(
+            val responseBytes = executeAuthenticatedRequestInternal(
                 method = "GET",
                 path = buildContactListPath()
             )
@@ -369,7 +387,7 @@ class RustMatrixClient(
                 email?.let { put("email", it) }
                 phone?.let { put("phone", it) }
             }.toString().encodeToByteArray()
-            executeContactListRequest(
+            executeAuthenticatedRequestInternal(
                 method = "PUT",
                 path = buildContactListPath(roomId),
                 body = body,
@@ -380,7 +398,7 @@ class RustMatrixClient(
 
     override suspend fun deleteContact(roomId: RoomId): Result<Unit> = withContext(sessionDispatcher) {
         runCatchingExceptions {
-            executeContactListRequest(
+            executeAuthenticatedRequestInternal(
                 method = "DELETE",
                 path = buildContactListPath(roomId),
             )
@@ -396,20 +414,22 @@ class RustMatrixClient(
         return "$basePath/rooms/$encodedRoomId"
     }
 
-    private fun executeContactListRequest(
+    private fun executeAuthenticatedRequestInternal(
         method: String,
         path: String,
         body: ByteArray? = null,
+        contentType: String = "application/json",
+        accept: String = "application/json",
     ): ByteArray {
         val homeserver = innerClient.homeserver().trimEnd('/')
         val token = innerClient.session().accessToken
         val connection = (URL("$homeserver$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
-            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Accept", accept)
             setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
                 doOutput = true
-                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Content-Type", contentType)
                 outputStream.use { it.write(body) }
             }
         }

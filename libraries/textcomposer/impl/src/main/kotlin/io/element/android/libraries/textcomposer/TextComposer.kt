@@ -16,17 +16,18 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -133,6 +134,7 @@ fun TextComposer(
     resolveAtRoomMentionDisplay: () -> TextDisplay,
     modifier: Modifier = Modifier,
     showTextFormatting: Boolean = false,
+    textInputTrailingContent: (@Composable () -> Unit)? = null,
 ) {
     val markdown = when (state) {
         is TextEditorState.Markdown -> state.state.text.value()
@@ -152,7 +154,8 @@ fun TextComposer(
     }
 
     val layoutModifier = modifier
-        .fillMaxSize()
+        .fillMaxWidth()
+        .wrapContentHeight()
         .height(IntrinsicSize.Min)
 
     val placeholder = if (composerMode.inThread) {
@@ -185,6 +188,7 @@ fun TextComposer(
                         composerMode = composerMode,
                         onResetComposerMode = onResetComposerMode,
                         isTextEmpty = state.richTextEditorState.messageHtml.isEmpty(),
+                        textInputTrailingContent = textInputTrailingContent,
                     ) {
                         RichTextEditor(
                             state = state.richTextEditorState,
@@ -211,6 +215,7 @@ fun TextComposer(
                     composerMode = composerMode,
                     onResetComposerMode = onResetComposerMode,
                     isTextEmpty = state.state.text.value().isEmpty(),
+                    textInputTrailingContent = textInputTrailingContent,
                 ) {
                     MarkdownTextInput(
                         state = state.state,
@@ -507,7 +512,7 @@ private fun StandardLayout(
             NotEncryptedBadge()
             Spacer(Modifier.height(4.dp))
         }
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             when (composerMode) {
                 is MessageComposerMode.Attachment -> {
                     Spacer(modifier = Modifier.width(12.dp))
@@ -520,8 +525,8 @@ private fun StandardLayout(
                     // To avoid loosing keyboard focus, the IconButton has to be defined here and has to be always enabled.
                     IconButton(
                         modifier = Modifier
-                            .padding(top = 5.dp, bottom = 5.dp, start = 3.dp, end = endPadding)
-                            .size(48.dp),
+                            .padding(top = 3.dp, bottom = 3.dp, start = 3.dp, end = endPadding)
+                            .size(44.dp),
                         onClick = {
                             if (voiceMessageState is VoiceMessageState.Idle) {
                                 onAddAttachment()
@@ -540,7 +545,7 @@ private fun StandardLayout(
                             Icon(
                                 modifier = Modifier
                                     .clip(CircleShape)
-                                    .size(30.dp)
+                                    .size(28.dp)
                                     .background(ElementTheme.colors.iconPrimary)
                                     .padding(3.dp),
                                 imageVector = CompoundIcons.Plus(),
@@ -560,7 +565,7 @@ private fun StandardLayout(
             }
             Box(
                 modifier = Modifier
-                    .padding(bottom = 8.dp, top = 8.dp)
+                    .padding(bottom = 6.dp, top = 6.dp)
                     .weight(1f)
             ) {
                 if (voiceMessageState is VoiceMessageState.Idle) {
@@ -573,8 +578,8 @@ private fun StandardLayout(
             val endButtonContentDescription = stringResource(endButtonParams.endButtonContentDescriptionResId)
             IconButton(
                 modifier = Modifier
-                    .padding(bottom = 5.dp, top = 5.dp, end = 6.dp, start = 6.dp)
-                    .size(48.dp)
+                    .padding(bottom = 3.dp, top = 3.dp, end = 6.dp, start = 6.dp)
+                    .size(44.dp)
                     .then(endButtonParams.endButtonModifier)
                     .clearAndSetSemantics {
                         contentDescription = endButtonContentDescription
@@ -674,6 +679,7 @@ private fun TextInputBox(
     onResetComposerMode: () -> Unit,
     isTextEmpty: Boolean,
     modifier: Modifier = Modifier,
+    textInputTrailingContent: (@Composable () -> Unit)? = null,
     textInput: @Composable () -> Unit,
 ) {
     val composerOpacity = (LocalSetkaCustomization.current.composerBackgroundOpacityPercent / 100f).coerceIn(0f, 1f)
@@ -688,8 +694,8 @@ private fun TextInputBox(
             .clip(roundedCorners)
             .border(0.5.dp, borderColor, roundedCorners)
             .background(color = bgColor)
-            .requiredHeightIn(min = 42.dp)
-            .fillMaxSize()
+            .requiredHeightIn(min = 38.dp)
+            .fillMaxWidth()
             .then(modifier),
     ) {
         if (composerMode is MessageComposerMode.Special) {
@@ -698,31 +704,64 @@ private fun TextInputBox(
                 onResetComposerMode = onResetComposerMode,
             )
         }
+        val showCaptionWarning = isTextEmpty && composerMode.showCaptionCompatibilityWarning()
+        val trailingActionsWidth = when {
+            showCaptionWarning && textInputTrailingContent != null -> 92.dp
+            showCaptionWarning || textInputTrailingContent != null -> 56.dp
+            else -> 12.dp
+        }
         Box(
             modifier = Modifier
-                .padding(top = 4.dp, bottom = 4.dp, start = 12.dp, end = 12.dp)
+                .padding(top = 2.dp, bottom = 2.dp)
+                .fillMaxWidth()
                 .then(Modifier.testTag(TestTags.textEditor)),
-            contentAlignment = Alignment.CenterStart,
         ) {
-            textInput()
-            if (isTextEmpty && composerMode.showCaptionCompatibilityWarning()) {
-                var showBottomSheet by remember { mutableStateOf(false) }
-                Icon(
-                    modifier = Modifier
-                        .clickable { showBottomSheet = true }
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                        .align(Alignment.CenterEnd),
-                    imageVector = CompoundIcons.InfoSolid(),
-                    tint = ElementTheme.colors.iconCriticalPrimary,
-                    contentDescription = null,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = trailingActionsWidth),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                textInput()
+            }
+            if (showCaptionWarning || textInputTrailingContent != null) {
+                TrailingTextInputActions(
+                    showCaptionWarning = showCaptionWarning,
+                    textInputTrailingContent = textInputTrailingContent,
                 )
-                if (showBottomSheet) {
-                    CaptionWarningBottomSheet(
-                        onDismiss = { showBottomSheet = false },
-                    )
-                }
             }
         }
+    }
+}
+
+@Composable
+private fun BoxScope.TrailingTextInputActions(
+    showCaptionWarning: Boolean,
+    textInputTrailingContent: (@Composable () -> Unit)?,
+) {
+    Row(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 4.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        if (showCaptionWarning) {
+            var showBottomSheet by remember { mutableStateOf(false) }
+            Icon(
+                modifier = Modifier
+                    .clickable { showBottomSheet = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                imageVector = CompoundIcons.InfoSolid(),
+                tint = ElementTheme.colors.iconCriticalPrimary,
+                contentDescription = null,
+            )
+            if (showBottomSheet) {
+                CaptionWarningBottomSheet(
+                    onDismiss = { showBottomSheet = false },
+                )
+            }
+        }
+        textInputTrailingContent?.invoke()
     }
 }
 

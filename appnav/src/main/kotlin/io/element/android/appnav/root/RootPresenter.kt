@@ -8,10 +8,14 @@
 
 package io.element.android.appnav.root
 
+import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import dev.zacsweers.metro.Inject
 import im.vector.app.features.analytics.plan.SuperProperties
 import io.element.android.features.rageshake.api.crash.CrashDetectionState
@@ -34,6 +38,7 @@ class RootPresenter(
         val rageshakeDetectionState = rageshakeDetectionPresenter.present()
         val crashDetectionState = crashDetectionPresenter.present()
         val appErrorState by appErrorStateService.appErrorStateFlow.collectAsState()
+        var hasDismissedLegacyAndroidCompatibilityWarning by rememberSaveable { mutableStateOf(false) }
 
         LaunchedEffect(Unit) {
             analyticsService.updateSuperProperties(
@@ -49,6 +54,11 @@ class RootPresenter(
             rageshakeDetectionState = rageshakeDetectionState,
             crashDetectionState = crashDetectionState,
             errorState = appErrorState,
+            showLegacyAndroidCompatibilityWarning = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                !hasDismissedLegacyAndroidCompatibilityWarning,
+            dismissLegacyAndroidCompatibilityWarning = {
+                hasDismissedLegacyAndroidCompatibilityWarning = true
+            },
         )
     }
 }

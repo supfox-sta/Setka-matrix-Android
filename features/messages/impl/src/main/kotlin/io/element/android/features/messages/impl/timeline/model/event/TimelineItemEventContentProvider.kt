@@ -65,11 +65,13 @@ fun aTimelineItemEmoteContent(
     htmlDocument: Document? = null,
     formattedBody: CharSequence = body,
     isEdited: Boolean = false,
+    rawHtmlBody: String? = null,
 ) = TimelineItemEmoteContent(
     body = body,
     htmlDocument = htmlDocument,
     formattedBody = formattedBody,
     isEdited = isEdited,
+    rawHtmlBody = rawHtmlBody,
 )
 
 fun aTimelineItemEncryptedContent() = TimelineItemEncryptedContent(
@@ -81,11 +83,13 @@ fun aTimelineItemNoticeContent(
     htmlDocument: Document? = null,
     formattedBody: CharSequence = body,
     isEdited: Boolean = false,
+    rawHtmlBody: String? = null,
 ) = TimelineItemNoticeContent(
     body = body,
     htmlDocument = htmlDocument,
     formattedBody = formattedBody,
     isEdited = isEdited,
+    rawHtmlBody = rawHtmlBody,
 )
 
 fun aTimelineItemRedactedContent() = TimelineItemRedactedContent
@@ -95,11 +99,13 @@ fun aTimelineItemTextContent(
     htmlDocument: Document? = null,
     formattedBody: CharSequence = body,
     isEdited: Boolean = false,
+    rawHtmlBody: String? = null,
 ) = TimelineItemTextContent(
     body = body,
     htmlDocument = htmlDocument,
     formattedBody = formattedBody,
     isEdited = isEdited,
+    rawHtmlBody = rawHtmlBody,
 )
 
 fun aTimelineItemUnknownContent() = TimelineItemUnknownContent

@@ -27,6 +27,7 @@ import io.element.android.libraries.di.RoomScope
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
+import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.services.analytics.api.AnalyticsService
 
 @ContributesNode(RoomScope::class)
@@ -81,6 +82,15 @@ class RoomMemberDetailsNode(
             state = state,
             modifier = modifier,
             goBack = this::navigateUp,
+            onEditProfile = {
+                callback.navigateToEditProfile(
+                    MatrixUser(
+                        userId = state.userId,
+                        displayName = state.userName,
+                        avatarUrl = state.avatarUrl,
+                    )
+                )
+            },
             onShareUser = ::onShareUser,
             onOpenDm = ::navigateToRoom,
             onStartAudioCall = ::onStartAudioCall,

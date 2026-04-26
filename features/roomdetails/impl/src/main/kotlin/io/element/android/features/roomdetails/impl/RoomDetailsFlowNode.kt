@@ -57,6 +57,7 @@ import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.core.toRoomIdOrAlias
 import io.element.android.libraries.matrix.api.permalink.PermalinkData
 import io.element.android.libraries.matrix.api.room.JoinedRoom
+import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.api.verification.VerificationRequest
 import io.element.android.libraries.mediaviewer.api.MediaGalleryEntryPoint
 import io.element.android.libraries.mediaviewer.api.MediaViewerEntryPoint
@@ -305,6 +306,8 @@ class RoomDetailsFlowNode(
                     override fun startVerifyUserFlow(userId: UserId) {
                         backstack.push(NavTarget.VerifyUser(userId))
                     }
+
+                    override fun navigateToEditProfile(matrixUser: MatrixUser) = Unit
                 }
                 val plugins = listOf(RoomMemberDetailsNode.RoomMemberDetailsInput(navTarget.roomMemberId), callback)
                 createNode<RoomMemberDetailsNode>(buildContext, plugins)

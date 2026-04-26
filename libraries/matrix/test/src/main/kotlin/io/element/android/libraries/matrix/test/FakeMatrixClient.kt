@@ -95,6 +95,7 @@ class FakeMatrixClient(
     private val clearCacheLambda: () -> Unit = { lambdaError() },
     private val userIdServerNameLambda: () -> String = { lambdaError() },
     private val getUrlLambda: (String) -> Result<ByteArray> = { lambdaError() },
+    private val executeAuthenticatedRequestLambda: (String, String, ByteArray?, String, String) -> Result<ByteArray> = { _, _, _, _, _ -> lambdaError() },
     private val getContactListLambda: () -> Result<List<MatrixContact>> = { lambdaError() },
     private val putContactLambda: (RoomId, String?, String?, String?) -> Result<Unit> = { _, _, _, _ -> lambdaError() },
     private val deleteContactLambda: (RoomId) -> Result<Unit> = { lambdaError() },
@@ -229,6 +230,16 @@ class FakeMatrixClient(
         data: ByteArray,
     ): Result<String> {
         return uploadMediaResult
+    }
+
+    override suspend fun executeAuthenticatedRequest(
+        method: String,
+        path: String,
+        body: ByteArray?,
+        contentType: String,
+        accept: String,
+    ): Result<ByteArray> {
+        return executeAuthenticatedRequestLambda(method, path, body, contentType, accept)
     }
 
     override suspend fun setDisplayName(displayName: String): Result<Unit> = simulateLongTask {

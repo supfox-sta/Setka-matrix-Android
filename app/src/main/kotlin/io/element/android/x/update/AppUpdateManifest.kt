@@ -13,7 +13,7 @@ import kotlin.math.max
 
 internal const val APP_UPDATE_BASE_URL = "https://web.setka-matrix.ru/themes/element/img/app-android/"
 internal const val APP_UPDATE_MANIFEST_FILE = "update.json"
-internal const val DEFAULT_APP_UPDATE_APK_NAME = "app-fdroid-universal-debug.apk"
+internal const val DEFAULT_APP_UPDATE_APK_NAME = "app-gplay-universal-debug.apk"
 
 @Serializable
 data class AppUpdateManifest(

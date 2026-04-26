@@ -279,6 +279,16 @@ class RustTimeline(
         }
     }
 
+    override suspend fun sendRaw(
+        eventType: String,
+        content: String,
+    ): Result<Unit> = withContext(dispatcher) {
+        joinedRoom.sendRaw(
+            eventType = eventType,
+            content = content,
+        )
+    }
+
     override suspend fun redactEvent(eventOrTransactionId: EventOrTransactionId, reason: String?): Result<Unit> = withContext(dispatcher) {
         runCatchingExceptions {
             inner.redactEvent(

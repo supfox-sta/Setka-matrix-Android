@@ -67,6 +67,7 @@ internal fun MessagesViewTopBar(
     heroes: ImmutableList<AvatarData>,
     roomCallState: RoomCallState,
     dmUserIdentityState: IdentityState?,
+    dmUserPresenceText: String?,
     sharedHistoryIcon: SharedHistoryIcon,
     onRoomDetailsClick: () -> Unit,
     onJoinCallClick: () -> Unit,
@@ -95,6 +96,7 @@ internal fun MessagesViewTopBar(
                 val titleModifier = Modifier.weight(1f, fill = false)
                 RoomAvatarAndNameRow(
                     roomName = roomName,
+                    subtitle = dmUserPresenceText,
                     roomAvatar = roomAvatar,
                     isTombstoned = isTombstoned,
                     heroes = heroes,
@@ -158,6 +160,7 @@ internal fun MessagesViewTopBar(
 @Composable
 private fun RoomAvatarAndNameRow(
     roomName: String?,
+    subtitle: String?,
     roomAvatar: AvatarData,
     heroes: ImmutableList<AvatarData>,
     isTombstoned: Boolean,
@@ -174,18 +177,25 @@ private fun RoomAvatarAndNameRow(
                 isTombstoned = isTombstoned,
             ),
         )
-        Text(
-            modifier = Modifier
-                .padding(horizontal = 8.dp)
-                .semantics {
-                    heading()
-                },
-            text = roomName ?: stringResource(CommonStrings.common_no_room_name),
-            style = ElementTheme.typography.fontBodyLgMedium,
-            fontStyle = FontStyle.Italic.takeIf { roomName == null },
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+            Text(
+                modifier = Modifier.semantics { heading() },
+                text = roomName ?: stringResource(CommonStrings.common_no_room_name),
+                style = ElementTheme.typography.fontBodyLgMedium,
+                fontStyle = FontStyle.Italic.takeIf { roomName == null },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            subtitle?.takeIf { it.isNotBlank() }?.let { value ->
+                Text(
+                    text = value,
+                    style = ElementTheme.typography.fontBodySmRegular,
+                    color = ElementTheme.colors.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -203,6 +213,7 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         heroes: ImmutableList<AvatarData> = persistentListOf(),
         roomCallState: RoomCallState = RoomCallState.Unavailable,
         dmUserIdentityState: IdentityState? = null,
+        dmUserPresenceText: String? = "В сети",
         sharedHistoryIcon: SharedHistoryIcon = SharedHistoryIcon.NONE,
     ) = MessagesViewTopBar(
         roomName = roomName,
@@ -211,6 +222,7 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         heroes = heroes,
         roomCallState = roomCallState,
         dmUserIdentityState = dmUserIdentityState,
+        dmUserPresenceText = dmUserPresenceText,
         sharedHistoryIcon = sharedHistoryIcon,
         onRoomDetailsClick = {},
         onJoinCallClick = {},

@@ -539,8 +539,8 @@ private fun String.toMutableParamMap(): LinkedHashMap<String, String> {
         .filter { it.isNotBlank() }
         .forEach { entry ->
             val parts = entry.split('=', limit = 2)
-            val key = URLDecoder.decode(parts[0], Charsets.UTF_8)
-            val value = URLDecoder.decode(parts.getOrElse(1) { "" }, Charsets.UTF_8)
+            val key = decodeUrlComponent(parts[0])
+            val value = decodeUrlComponent(parts.getOrElse(1) { "" })
             params[key] = value
         }
     return params
@@ -548,8 +548,16 @@ private fun String.toMutableParamMap(): LinkedHashMap<String, String> {
 
 private fun Map<String, String>.toEncodedQuery(): String {
     return entries.joinToString("&") { (key, value) ->
-        "${URLEncoder.encode(key, Charsets.UTF_8)}=${URLEncoder.encode(value, Charsets.UTF_8)}"
+        "${encodeUrlComponent(key)}=${encodeUrlComponent(value)}"
     }
+}
+
+private fun decodeUrlComponent(value: String): String {
+    return URLDecoder.decode(value, Charsets.UTF_8.name())
+}
+
+private fun encodeUrlComponent(value: String): String {
+    return URLEncoder.encode(value, Charsets.UTF_8.name())
 }
 
 private const val LIGHT_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/light_bg.png"

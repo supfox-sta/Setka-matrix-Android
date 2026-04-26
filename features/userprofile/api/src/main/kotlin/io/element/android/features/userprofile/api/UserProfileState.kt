@@ -18,6 +18,19 @@ data class UserProfileState(
     val userId: UserId,
     val userName: String?,
     val avatarUrl: String?,
+    /** Setka profile "about" text (server-backed). */
+    val bio: String?,
+    /** Setka profile color (hex string like "#RRGGBB" or "#AARRGGBB"). */
+    val profileColorHex: String?,
+    /** Optional badge emoji image (mxc://) to show next to the display name. */
+    val badgeEmojiMxcUrl: String?,
+    /** Optional status emoji image (mxc://) shown on top of the avatar. */
+    val statusEmojiMxcUrl: String?,
+    /** Optional profile background image (mxc://) shown behind the gradient header. */
+    val profileBackgroundMxcUrl: String?,
+    val email: String?,
+    val phone: String?,
+    val lastSeenText: String?,
     val verificationState: UserProfileVerificationState,
     val isBlocked: AsyncData<Boolean>,
     val startDmActionState: AsyncAction<RoomId>,

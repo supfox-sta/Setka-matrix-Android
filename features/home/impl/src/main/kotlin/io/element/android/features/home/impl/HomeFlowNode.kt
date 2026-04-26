@@ -58,6 +58,7 @@ import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.services.analytics.api.AnalyticsService
+import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -225,31 +226,58 @@ class HomeFlowNode(
                 onSettingsClick = callback::navigateToSettings,
                 onStartChatClick = callback::navigateToCreateRoom,
                 onSearchUsers = { query ->
-                    matrixClient.searchUsers(query, 20)
-                        .getOrNull()
-                        ?.results
-                        ?.toList()
-                        .orEmpty()
+                    val trimmed = query.trim()
+                    val isEmail = !trimmed.startsWith("@") && trimmed.contains("@") && trimmed.contains(".")
+                    val isE164Phone = trimmed.startsWith("+") && trimmed.drop(1).all { it.isDigit() } && trimmed.length >= 8
+
+                    val mxid = if (isEmail || isE164Phone) {
+                        val medium = if (isEmail) "email" else "msisdn"
+                        val lookupBody = JSONObject()
+                            .put("medium", medium)
+                            .put("address", trimmed)
+                            .toString()
+                            .encodeToByteArray()
+                        matrixClient.executeAuthenticatedRequest(
+                            method = "POST",
+                            path = "/_matrix/client/v3/setka/3pid/lookup",
+                            body = lookupBody,
+                        )
+                            .mapCatching { bytes -> JSONObject(bytes.decodeToString()).optString("mxid").trim() }
+                            .getOrNull()
+                            ?.takeIf { it.isNotBlank() }
+                    } else {
+                        null
+                    }
+
+                    if (mxid != null) {
+                        matrixClient.getProfile(UserId(mxid)).getOrNull()?.let(::listOf).orEmpty()
+                    } else {
+                        matrixClient.searchUsers(trimmed, 20)
+                            .getOrNull()
+                            ?.results
+                            ?.toList()
+                            .orEmpty()
+                    }
                 },
-                onAddContact = { user, displayName ->
+                onAddContact = { user, displayName, email, phone ->
                     when (val dmResult = matrixClient.startDM(user.userId, createIfDmDoesNotExist = true)) {
                         is StartDMResult.Success -> {
                             matrixClient.putContact(
                                 roomId = dmResult.roomId,
                                 displayName = displayName,
-                                email = null,
-                                phone = null,
+                                email = email,
+                                phone = phone,
                             ).isSuccess
                         }
                         else -> false
                     }
                 },
-                onUpdateContactName = { contact, displayName ->
+                onUpdateContact = { contact, displayName, email, phone ->
                     matrixClient.putContact(
                         roomId = contact.roomId,
                         displayName = displayName,
-                        email = contact.email,
-                        phone = contact.phone,
+                        email = email,
+                        phone = phone,
                     ).isSuccess
                 },
                 onCreateSpaceClick = callback::navigateToCreateSpace,
