@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,6 +44,7 @@ import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.model.RoomSummaryDisplayType
 import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.features.home.impl.roomlist.RoomListContentStateProvider
+import io.element.android.features.home.impl.roomlist.RoomListDisplayItem
 import io.element.android.features.home.impl.roomlist.RoomListEvent
 import io.element.android.features.home.impl.roomlist.SecurityBannerState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
@@ -69,6 +71,7 @@ fun RoomListContentView(
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
     onCreateRoomClick: () -> Unit,
+    statusEmojiByUserId: Map<String, String> = emptyMap(),
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -101,6 +104,7 @@ fun RoomListContentView(
                 onSetUpRecoveryClick = onSetUpRecoveryClick,
                 onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
                 onRoomClick = onRoomClick,
+                statusEmojiByUserId = statusEmojiByUserId,
                 lazyListState = lazyListState,
                 contentPadding = contentPadding,
             )
@@ -165,6 +169,12 @@ private fun EmptyView(
                         onDismissClick = { eventSink(RoomListEvent.DismissBanner) },
                     )
                 }
+                SecurityBannerState.SetkaServerBackupUpload -> {
+                    SetkaServerBackupUploadBanner(
+                        onContinueClick = { eventSink(RoomListEvent.UploadSetkaServerBackup) },
+                        onDismissClick = { eventSink(RoomListEvent.DismissBanner) },
+                    )
+                }
                 SecurityBannerState.None -> Unit
             }
         }
@@ -181,6 +191,7 @@ private fun RoomsView(
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
+    statusEmojiByUserId: Map<String, String>,
     contentPadding: PaddingValues,
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
@@ -201,6 +212,7 @@ private fun RoomsView(
             onSetUpRecoveryClick = onSetUpRecoveryClick,
             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
             onRoomClick = onRoomClick,
+            statusEmojiByUserId = statusEmojiByUserId,
             contentPadding = contentPadding,
             lazyListState = lazyListState,
             modifier = modifier.fillMaxSize(),
@@ -216,6 +228,7 @@ private fun RoomsViewList(
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onRoomClick: (RoomListRoomSummary) -> Unit,
+    statusEmojiByUserId: Map<String, String>,
     contentPadding: PaddingValues,
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
@@ -245,6 +258,14 @@ private fun RoomsViewList(
                     )
                 }
             }
+            SecurityBannerState.SetkaServerBackupUpload -> {
+                item {
+                    SetkaServerBackupUploadBanner(
+                        onContinueClick = { eventSink(RoomListEvent.UploadSetkaServerBackup) },
+                        onDismissClick = { eventSink(RoomListEvent.DismissBanner) },
+                    )
+                }
+            }
             SecurityBannerState.None -> if (state.fullScreenIntentPermissionsState.shouldDisplayBanner) {
                 item {
                     FullScreenIntentPermissionBanner(state = state.fullScreenIntentPermissionsState)
@@ -265,22 +286,54 @@ private fun RoomsViewList(
         // Note: do not use a key for the LazyColumn, or the scroll will not behave as expected if a room
         // is moved to the top of the list.
         itemsIndexed(
-            items = state.summaries,
-            contentType = { _, room -> room.contentType() },
-        ) { index, room ->
-            RoomSummaryRow(
-                room = room,
-                hideInviteAvatars = hideInvitesAvatars,
-                isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
-                    state.seenRoomInvites.contains(room.roomId),
-                onClick = onRoomClick,
-                eventSink = eventSink,
-            )
-            if (index != state.summaries.lastIndex) {
-                HorizontalDivider()
+            items = state.displayItems,
+            contentType = { _, item ->
+                when (item) {
+                    is RoomListDisplayItem.SpaceHeader -> "space_header"
+                    is RoomListDisplayItem.Room -> item.summary.contentType()
+                }
+            },
+        ) { index, item ->
+            when (item) {
+                is RoomListDisplayItem.SpaceHeader -> {
+                    RoomListSpaceHeaderRow(name = item.name)
+                    if (index != state.displayItems.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
+                is RoomListDisplayItem.Room -> {
+                    val room = item.summary
+                    RoomSummaryRow(
+                        room = room,
+                        hideInviteAvatars = hideInvitesAvatars,
+                        isInviteSeen = room.displayType == RoomSummaryDisplayType.INVITE &&
+                            state.seenRoomInvites.contains(room.roomId),
+                        statusEmojiByUserId = statusEmojiByUserId,
+                        onClick = onRoomClick,
+                        eventSink = eventSink,
+                    )
+                    if (index != state.displayItems.lastIndex) {
+                        HorizontalDivider()
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun RoomListSpaceHeaderRow(
+    name: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = name,
+        style = ElementTheme.typography.fontBodySmMedium,
+        color = ElementTheme.colors.textSecondary,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
 }
 
 @Composable

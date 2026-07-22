@@ -35,6 +35,7 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemPollContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemRtcNotificationContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStateContent
+import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVideoContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVoiceContent
 import io.element.android.features.messages.impl.timeline.protection.TimelineProtectionEvent
 import io.element.android.features.messages.impl.timeline.protection.TimelineProtectionState
@@ -61,6 +62,8 @@ internal fun TimelineItemRow(
     timelineProtectionState: TimelineProtectionState,
     focusedEventId: EventId?,
     displayThreadSummaries: Boolean,
+    isSetkaChannel: Boolean,
+    setkaChannelCommentsEnabled: Boolean,
     onUserDataClick: (MatrixUser) -> Unit,
     onLinkClick: (Link) -> Unit,
     onLinkLongClick: (Link) -> Unit,
@@ -77,15 +80,18 @@ internal fun TimelineItemRow(
     modifier: Modifier = Modifier,
     eventContentView: @Composable (TimelineItem.Event, Modifier, (ContentAvoidingLayoutData) -> Unit) -> Unit =
         { event, contentModifier, onContentLayoutChange ->
+            val isVideoNoteEvent = (event.content as? TimelineItemVideoContent)?.isVideoNote == true
             TimelineItemEventContentView(
                 content = event.content,
                 hideMediaContent = timelineProtectionState.hideMediaContent(event.eventId),
                 onShowContentClick = { timelineProtectionState.eventSink(TimelineProtectionEvent.ShowContent(event.eventId)) },
-                onContentClick = { onContentClick(event) },
+                onContentClick = if (isVideoNoteEvent) null else ({ onContentClick(event) }),
                 onLongClick = { onLongClick(event) },
                 onLinkClick = onLinkClick,
                 onLinkLongClick = onLinkLongClick,
                 eventSink = eventSink,
+                eventId = event.eventId,
+                localSendState = event.localSendState,
                 modifier = contentModifier,
                 onContentLayoutChange = onContentLayoutChange
             )
@@ -170,6 +176,8 @@ internal fun TimelineItemRow(
                             timelineProtectionState = timelineProtectionState,
                             isLastOutgoingMessage = isLastOutgoingMessage,
                             displayThreadSummaries = displayThreadSummaries,
+                            isSetkaChannel = isSetkaChannel,
+                            setkaChannelCommentsEnabled = setkaChannelCommentsEnabled,
                             onEventClick = { onContentClick(timelineItem) },
                             onLongClick = { onLongClick(timelineItem) },
                             onLinkClick = onLinkClick,
@@ -198,8 +206,9 @@ internal fun TimelineItemRow(
                     renderReadReceipts = renderReadReceipts,
                     isLastOutgoingMessage = isLastOutgoingMessage,
                     focusedEventId = focusedEventId,
-                    displayThreadSummaries = displayThreadSummaries,
-                    onClick = onContentClick,
+                        displayThreadSummaries = displayThreadSummaries,
+                        isSetkaChannel = isSetkaChannel,
+                        onClick = onContentClick,
                     onLongClick = onLongClick,
                     inReplyToClick = inReplyToClick,
                     onUserDataClick = onUserDataClick,

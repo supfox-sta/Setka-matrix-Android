@@ -17,20 +17,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
+import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.features.securebackup.impl.setup.views.RecoveryKeyUserStory
 import io.element.android.features.securebackup.impl.setup.views.RecoveryKeyViewState
 import io.element.android.features.securebackup.impl.tools.RecoveryKeyTools
 import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.architecture.runCatchingUpdatingState
+import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
+import io.element.android.libraries.matrix.api.setka.SetkaPendingRecoveryKeyStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Inject
 class SecureBackupEnterRecoveryKeyPresenter(
+    private val matrixClient: MatrixClient,
     private val encryptionService: EncryptionService,
     private val recoveryKeyTools: RecoveryKeyTools,
+    private val setkaPendingRecoveryKeyStore: SetkaPendingRecoveryKeyStore,
 ) : Presenter<SecureBackupEnterRecoveryKeyState> {
     @Composable
     override fun present(): SecureBackupEnterRecoveryKeyState {
@@ -89,6 +94,10 @@ class SecureBackupEnterRecoveryKeyPresenter(
     ) = launch {
         suspend {
             encryptionService.recover(recoveryKey).getOrThrow()
+            val serverName = matrixClient.sessionId.value.substringAfter(':', "")
+            if (SetkaMatrixConfig.isSetkaHomeserver(serverName)) {
+                setkaPendingRecoveryKeyStore.set(recoveryKey)
+            }
         }.runCatchingUpdatingState(action)
     }
 }

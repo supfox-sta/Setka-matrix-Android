@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="room_media_playback_voice_title">Voice message</string>
+    <string name="room_media_playback_video_note_title">Video circle</string>
+</resources>

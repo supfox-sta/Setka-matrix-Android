@@ -199,14 +199,6 @@ private fun ProfileInfoSection(state: UserProfileState) {
                         onClick = { state.eventSink(UserProfileEvents.CopyToClipboard(lastSeenText)) },
                     )
                 }
-                state.bio?.takeIf { it.isNotBlank() }?.let { bio ->
-                    ProfileInfoDivider()
-                    ProfileInfoRow(
-                        label = "О себе",
-                        value = bio,
-                        onClick = { state.eventSink(UserProfileEvents.CopyToClipboard(bio)) },
-                    )
-                }
             }
         }
     }

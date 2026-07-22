@@ -9,4 +9,8 @@ package io.element.android.features.preferences.impl.user.editprofile
 
 interface EditUserProfileNavigator {
     fun close()
+    fun openProfileCustomization()
+    fun openChangePhone()
+    fun openChangeEmail()
+    fun startSignOut()
 }

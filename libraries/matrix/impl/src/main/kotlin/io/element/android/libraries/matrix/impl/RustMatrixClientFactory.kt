@@ -9,6 +9,7 @@
 package io.element.android.libraries.matrix.impl
 
 import dev.zacsweers.metro.Inject
+import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
 import io.element.android.libraries.core.data.ByteUnit
 import io.element.android.libraries.core.data.megaBytes
@@ -78,6 +79,8 @@ class RustMatrixClientFactory(
             sessionPaths = sessionData.getSessionPaths(),
             passphrase = sessionData.passphrase,
             slidingSyncType = ClientBuilderSlidingSync.Restored,
+            matrixServerName = sessionData.userId.substringAfter(':', ""),
+            homeserverUrl = sessionData.homeserverUrl,
         )
             .homeserverUrl(sessionData.homeserverUrl)
             .username(sessionData.userId)
@@ -133,7 +136,10 @@ class RustMatrixClientFactory(
         sessionPaths: SessionPaths,
         passphrase: String?,
         slidingSyncType: ClientBuilderSlidingSync,
+        matrixServerName: String? = null,
+        homeserverUrl: String? = null,
     ): ClientBuilder {
+        val threadSettings = sdkThreadSettings(matrixServerName, homeserverUrl)
         return clientBuilderProvider.provide()
             .run {
                 sqliteStoreBuilderProvider.provide(sessionPaths)
@@ -162,7 +168,7 @@ class RustMatrixClientFactory(
                 )
             )
             .enableShareHistoryOnInvite(featureFlagService.isFeatureEnabled(FeatureFlags.EnableKeyShareOnInvite))
-            .threadsEnabled(featureFlagService.isFeatureEnabled(FeatureFlags.Threads), threadSubscriptions = false)
+            .threadsEnabled(threadSettings.enabled, threadSubscriptions = threadSettings.subscriptions)
             .requestConfig(
                 RequestConfig(
                     timeout = 30_000uL,
@@ -186,6 +192,29 @@ class RustMatrixClientFactory(
                 proxyProvider.provides()?.let { proxy(it) } ?: this
             }
     }
+
+    /**
+     * Setka channels rely on thread timelines; the Labs "Threads" flag defaults to off and
+     * [threadSubscriptions] are off in upstream Element X — enable both for Setka homeservers.
+     */
+    private suspend fun sdkThreadSettings(
+        matrixServerName: String?,
+        homeserverUrl: String?,
+    ): SdkThreadSettings {
+        val setkaSession = (matrixServerName != null && SetkaMatrixConfig.isSetkaHomeserver(matrixServerName)) ||
+            (homeserverUrl?.contains("setka-matrix.ru", ignoreCase = true) == true)
+        val labsThreads = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
+        val enabled = labsThreads || setkaSession
+        return SdkThreadSettings(
+            enabled = enabled,
+            subscriptions = setkaSession,
+        )
+    }
+
+    private data class SdkThreadSettings(
+        val enabled: Boolean,
+        val subscriptions: Boolean,
+    )
 }
 
 sealed interface ClientBuilderSlidingSync {

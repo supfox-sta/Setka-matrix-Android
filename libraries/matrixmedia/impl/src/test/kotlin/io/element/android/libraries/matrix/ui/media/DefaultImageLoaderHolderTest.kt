@@ -12,6 +12,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import coil3.ImageLoader
 import com.google.common.truth.Truth.assertThat
 import io.element.android.libraries.matrix.api.media.MatrixMediaLoader
+import io.element.android.libraries.matrix.api.media.NoOpSessionMatrixMediaLoaderRegistry
+import io.element.android.libraries.matrix.api.media.SessionMatrixMediaLoaderRegistry
 import io.element.android.libraries.matrix.test.A_SESSION_ID
 import io.element.android.libraries.matrix.test.FakeMatrixClient
 import io.element.android.libraries.sessionstorage.api.observer.SessionObserver
@@ -51,7 +53,7 @@ class DefaultImageLoaderHolderTest {
         val lambda =
             lambdaRecorder<MatrixMediaLoader, ImageLoader> { ImageLoader.Builder(context).build() }
         val sessionObserver = FakeSessionObserver()
-        val holder = DefaultImageLoaderHolder(
+        val holder = createDefaultImageLoaderHolder(
             imageLoaderFactory = FakeImageLoaderFactory(
                 newMatrixImageLoaderLambda = lambda,
             ),
@@ -72,7 +74,7 @@ class DefaultImageLoaderHolderTest {
         val lambda =
             lambdaRecorder<MatrixMediaLoader, ImageLoader> { ImageLoader.Builder(context).build() }
         val sessionObserver = FakeSessionObserver()
-        DefaultImageLoaderHolder(
+        createDefaultImageLoaderHolder(
             imageLoaderFactory = FakeImageLoaderFactory(
                 newMatrixImageLoaderLambda = lambda,
             ),
@@ -86,7 +88,9 @@ class DefaultImageLoaderHolderTest {
 private fun createDefaultImageLoaderHolder(
     imageLoaderFactory: ImageLoaderFactory = FakeImageLoaderFactory(),
     sessionObserver: SessionObserver = NoOpSessionObserver(),
+    sessionMatrixMediaLoaderRegistry: SessionMatrixMediaLoaderRegistry = NoOpSessionMatrixMediaLoaderRegistry,
 ) = DefaultImageLoaderHolder(
     imageLoaderFactory = imageLoaderFactory,
     sessionObserver = sessionObserver,
+    sessionMatrixMediaLoaderRegistry = sessionMatrixMediaLoaderRegistry,
 )

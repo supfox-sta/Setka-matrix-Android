@@ -28,7 +28,7 @@ class AboutPresenterTest {
             presenter.present()
         }.test {
             val initialState = awaitItem()
-            assertThat(initialState.elementLegals).isEqualTo(getAllLegals())
+            assertThat(initialState.documentsUrl).isEqualTo(SETKA_DOCUMENTS_URL)
         }
     }
 }

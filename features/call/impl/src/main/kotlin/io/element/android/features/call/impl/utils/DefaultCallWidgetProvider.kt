@@ -43,7 +43,7 @@ class DefaultCallWidgetProvider(
             ?: error("Room not found")
 
         val customBaseUrl = appPreferencesStore.getCustomElementCallBaseUrlFlow().firstOrNull()
-        val baseUrl = customBaseUrl ?: EMBEDDED_CALL_WIDGET_BASE_URL
+        val baseUrl = (customBaseUrl ?: EMBEDDED_CALL_WIDGET_BASE_URL).normalizeCallWidgetBaseUrl()
 
         val roomInfo = room.info()
         val isEncrypted = roomInfo.isEncrypted ?: room.getUpdatedIsEncrypted().getOrThrow()
@@ -75,4 +75,13 @@ class DefaultCallWidgetProvider(
             shouldAutoJoin = true,
         )
     }
+}
+
+private fun String.normalizeCallWidgetBaseUrl(): String {
+    val trimmed = trim()
+    // Embedded assets are loaded as a file (index.html), not a directory.
+    if (trimmed.contains("appassets.androidplatform.net")) {
+        return trimmed.trimEnd('/')
+    }
+    return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
 }

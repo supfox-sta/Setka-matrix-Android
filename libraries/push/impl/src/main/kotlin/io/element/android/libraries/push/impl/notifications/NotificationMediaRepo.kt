@@ -16,6 +16,7 @@ import dev.zacsweers.metro.ContributesBinding
 import io.element.android.libraries.core.extensions.mapCatchingExceptions
 import io.element.android.libraries.di.CacheDirectory
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.media.SessionMatrixMediaLoaderRegistry
 import io.element.android.libraries.matrix.api.media.MediaSource
 import io.element.android.libraries.matrix.api.mxc.MxcTools
 import java.io.File
@@ -64,6 +65,7 @@ class DefaultNotificationMediaRepo(
     @CacheDirectory private val cacheDir: File,
     private val mxcTools: MxcTools,
     @Assisted private val client: MatrixClient,
+    private val sessionMatrixMediaLoaderRegistry: SessionMatrixMediaLoaderRegistry,
 ) : NotificationMediaRepo {
     @ContributesBinding(AppScope::class)
     @AssistedFactory
@@ -73,7 +75,8 @@ class DefaultNotificationMediaRepo(
         ): DefaultNotificationMediaRepo
     }
 
-    private val matrixMediaLoader = client.matrixMediaLoader
+    private val matrixMediaLoader
+        get() = sessionMatrixMediaLoaderRegistry.getOrNull(client.sessionId) ?: client.matrixMediaLoader
 
     override suspend fun getMediaFile(
         mediaSource: MediaSource,

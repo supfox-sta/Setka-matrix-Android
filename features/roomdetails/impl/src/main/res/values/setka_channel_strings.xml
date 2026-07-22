@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_about_title">About channel</string>
+    <string name="screen_setka_channel_about_description">Description</string>
+    <string name="screen_setka_channel_about_empty">No description yet.</string>
+    <string name="screen_setka_channel_about_add_description">Add description</string>
+    <plurals name="screen_setka_channel_about_subscribers">
+        <item quantity="one">%1$d subscriber</item>
+        <item quantity="other">%1$d subscribers</item>
+    </plurals>
+    <string name="screen_setka_channel_topic_label">Description</string>
+    <string name="screen_setka_channel_topic_placeholder">What is this channel about?</string>
+</resources>

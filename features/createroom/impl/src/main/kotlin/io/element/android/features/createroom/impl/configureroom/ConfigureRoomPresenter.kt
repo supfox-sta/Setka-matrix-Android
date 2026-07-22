@@ -30,6 +30,7 @@ import io.element.android.libraries.architecture.runCatchingUpdatingState
 import io.element.android.libraries.core.mimetype.MimeTypes
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.createroom.CreateRoomParameters
@@ -62,8 +63,9 @@ import kotlin.time.Duration.Companion.seconds
 
 @AssistedInject
 class ConfigureRoomPresenter(
-    @Assisted private val isSpace: Boolean,
-    @Assisted private val initialParentSpaceId: RoomId?,
+    @Assisted("isSpace") private val isSpace: Boolean,
+    @Assisted("isChannel") private val isChannel: Boolean,
+    @Assisted("parentSpaceId") private val initialParentSpaceId: RoomId?,
     private val dataStore: CreateRoomConfigStore,
     private val matrixClient: MatrixClient,
     private val mediaPickerProvider: PickerProvider,
@@ -76,7 +78,11 @@ class ConfigureRoomPresenter(
 ) : Presenter<ConfigureRoomState> {
     @AssistedFactory
     interface Factory {
-        fun create(isSpace: Boolean, parentSpaceId: RoomId?): ConfigureRoomPresenter
+        fun create(
+            @Assisted("isSpace") isSpace: Boolean,
+            @Assisted("isChannel") isChannel: Boolean,
+            @Assisted("parentSpaceId") parentSpaceId: RoomId?,
+        ): ConfigureRoomPresenter
     }
 
     private val cameraPermissionPresenter: PermissionsPresenter = permissionsPresenterFactory.create(android.Manifest.permission.CAMERA)
@@ -114,7 +120,7 @@ class ConfigureRoomPresenter(
 
         var spaces by remember { mutableStateOf<ImmutableList<SpaceRoom>>(persistentListOf()) }
         LaunchedEffect(canAddRoomToSpace) {
-            spaces = if (canAddRoomToSpace) {
+            spaces = if (canAddRoomToSpace && !isChannel) {
                 matrixClient.spaceService.editableSpaces().getOrElse { emptyList() }.toImmutableList()
             } else {
                 persistentListOf()
@@ -229,8 +235,58 @@ class ConfigureRoomPresenter(
             availableJoinRules = availableJoinRules,
             spaces = spaces,
             isSpace = isSpace,
+            isChannel = isChannel,
             eventSink = ::handleEvent,
         )
+    }
+
+    private fun channelTopic(config: CreateRoomConfig): String =
+        SetkaChannelConfig.formatChannelTopic(config.topic)
+
+    private fun buildCreateRoomParameters(config: CreateRoomConfig, avatarUrl: String?): CreateRoomParameters {
+        val topic = when {
+            isChannel -> channelTopic(config)
+            else -> config.topic
+        }
+        return when (config.visibilityState) {
+            is RoomVisibilityState.Public -> {
+                CreateRoomParameters(
+                    name = config.roomName,
+                    topic = topic,
+                    isEncrypted = false,
+                    isDirect = false,
+                    visibility = RoomVisibility.Public,
+                    historyVisibilityOverride = if (isChannel) RoomHistoryVisibility.Shared else null,
+                    joinRuleOverride = config.visibilityState.joinRuleItem.toJoinRule()
+                        .takeIf { it != JoinRule.Public },
+                    preset = RoomPreset.PUBLIC_CHAT,
+                    invite = config.invites.map { it.userId },
+                    avatar = avatarUrl,
+                    roomAliasName = config.visibilityState.roomAddress(),
+                    isSpace = isSpace,
+                )
+            }
+            is RoomVisibilityState.Private -> {
+                CreateRoomParameters(
+                    name = config.roomName,
+                    topic = topic,
+                    isEncrypted = !isChannel,
+                    isDirect = false,
+                    visibility = RoomVisibility.Private,
+                    historyVisibilityOverride = if (isChannel) {
+                        RoomHistoryVisibility.Shared
+                    } else {
+                        RoomHistoryVisibility.Invited
+                    },
+                    joinRuleOverride = config.visibilityState.joinRuleItem.toJoinRule()
+                        .takeIf { it != JoinRule.Invite },
+                    preset = RoomPreset.PRIVATE_CHAT,
+                    invite = config.invites.map { it.userId },
+                    avatar = avatarUrl,
+                    isSpace = isSpace,
+                )
+            }
+        }
     }
 
     private fun CoroutineScope.createRoom(
@@ -239,42 +295,7 @@ class ConfigureRoomPresenter(
     ) = launch {
         suspend {
             val avatarUrl = config.avatarUri?.let { uploadAvatar(it.toUri()) }
-            val params = when (config.visibilityState) {
-                is RoomVisibilityState.Public -> {
-                    CreateRoomParameters(
-                        name = config.roomName,
-                        topic = config.topic,
-                        isEncrypted = false,
-                        isDirect = false,
-                        visibility = RoomVisibility.Public,
-                        joinRuleOverride = config.visibilityState.joinRuleItem.toJoinRule()
-                            // No need to specify the public join rule override, since the preset is already PUBLIC_CHAT
-                            .takeIf { it != JoinRule.Public },
-                        preset = RoomPreset.PUBLIC_CHAT,
-                        invite = config.invites.map { it.userId },
-                        avatar = avatarUrl,
-                        roomAliasName = config.visibilityState.roomAddress(),
-                        isSpace = isSpace,
-                    )
-                }
-                is RoomVisibilityState.Private -> {
-                    CreateRoomParameters(
-                        name = config.roomName,
-                        topic = config.topic,
-                        isEncrypted = true,
-                        isDirect = false,
-                        visibility = RoomVisibility.Private,
-                        historyVisibilityOverride = RoomHistoryVisibility.Invited,
-                        joinRuleOverride = config.visibilityState.joinRuleItem.toJoinRule()
-                            // No need to specify the Invite join rule override, since the preset is already PRIVATE_CHAT
-                            .takeIf { it != JoinRule.Invite },
-                        preset = RoomPreset.PRIVATE_CHAT,
-                        invite = config.invites.map { it.userId },
-                        avatar = avatarUrl,
-                        isSpace = isSpace,
-                    )
-                }
-            }
+            val params = buildCreateRoomParameters(config, avatarUrl)
             val roomId = matrixClient.createRoom(params)
                 .onFailure { failure ->
                     Timber.e(failure, "Failed to create room")
@@ -285,8 +306,13 @@ class ConfigureRoomPresenter(
                 }
                 .getOrThrow()
 
+            if (isChannel) {
+                matrixClient.getJoinedRoom(roomId)?.updateHistoryVisibility(RoomHistoryVisibility.Shared)
+                    ?.onFailure { Timber.w(it, "Failed to set channel history visibility for $roomId") }
+            }
+
             // Add the newly created room to the parent space too
-            if (config.parentSpace != null) {
+            if (config.parentSpace != null && !isChannel) {
                 Timber.d("Adding room $roomId to parent space ${config.parentSpace.roomId}")
                 // Wait until we receive the power level info for the room, as it's needed to check if it can be added to a space
                 // TODO create some SDK function that does this instead?

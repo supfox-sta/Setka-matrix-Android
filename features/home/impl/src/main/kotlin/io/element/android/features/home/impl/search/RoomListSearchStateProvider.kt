@@ -14,6 +14,7 @@ import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.roomlist.aRoomListRoomSummaryList
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
 class RoomListSearchStateProvider : PreviewParameterProvider<RoomListSearchState> {
     override val values: Sequence<RoomListSearchState>
@@ -22,7 +23,9 @@ class RoomListSearchStateProvider : PreviewParameterProvider<RoomListSearchState
             aRoomListSearchState(
                 isSearchActive = true,
                 query = "Test",
-                results = aRoomListRoomSummaryList()
+                results = aRoomListRoomSummaryList().map { summary ->
+                    RoomListSearchResultItem.Room(summary = summary, subtitle = null)
+                }.toImmutableList(),
             ),
         )
 }
@@ -30,11 +33,12 @@ class RoomListSearchStateProvider : PreviewParameterProvider<RoomListSearchState
 fun aRoomListSearchState(
     isSearchActive: Boolean = false,
     query: String = "",
-    results: ImmutableList<RoomListRoomSummary> = persistentListOf(),
+    results: ImmutableList<RoomListSearchResultItem> = persistentListOf(),
     eventSink: (RoomListSearchEvent) -> Unit = { },
 ) = RoomListSearchState(
     isSearchActive = isSearchActive,
     query = TextFieldState(initialText = query),
+    filter = RoomListSearchFilter.All,
     results = results,
     eventSink = eventSink,
 )

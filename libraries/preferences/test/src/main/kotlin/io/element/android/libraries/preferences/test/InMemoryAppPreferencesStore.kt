@@ -61,7 +61,10 @@ class InMemoryAppPreferencesStore(
     private val customizationCallAudioBackgroundStyle = MutableStateFlow(CallAudioBackgroundStyles.GRADIENT)
     private val callPreferEarpieceByDefault = MutableStateFlow(true)
     private val callEnableProximitySensor = MutableStateFlow(true)
+    private val hideLegacyAndroidCompatibilityWarning = MutableStateFlow(false)
     private val customizationInitialTimelineItemCount = MutableStateFlow(5)
+    private val setkaLiteEnabled = MutableStateFlow(false)
+    private val setkaLiteSuggestionDismissed = MutableStateFlow(false)
 
     override suspend fun setDeveloperModeEnabled(enabled: Boolean) {
         isDeveloperModeEnabled.value = enabled
@@ -354,6 +357,30 @@ class InMemoryAppPreferencesStore(
 
     override fun getCallEnableProximitySensorFlow(): Flow<Boolean> {
         return callEnableProximitySensor
+    }
+
+    override suspend fun setHideLegacyAndroidCompatibilityWarning(hide: Boolean) {
+        hideLegacyAndroidCompatibilityWarning.value = hide
+    }
+
+    override fun getHideLegacyAndroidCompatibilityWarningFlow(): Flow<Boolean> {
+        return hideLegacyAndroidCompatibilityWarning
+    }
+
+    override suspend fun setSetkaLiteEnabled(enabled: Boolean) {
+        setkaLiteEnabled.value = enabled
+    }
+
+    override fun getSetkaLiteEnabledFlow(): Flow<Boolean> {
+        return setkaLiteEnabled
+    }
+
+    override suspend fun setSetkaLiteSuggestionDismissed(dismissed: Boolean) {
+        setkaLiteSuggestionDismissed.value = dismissed
+    }
+
+    override fun getSetkaLiteSuggestionDismissedFlow(): Flow<Boolean> {
+        return setkaLiteSuggestionDismissed
     }
 
     override suspend fun setCustomizationInitialTimelineItemCount(count: Int) {

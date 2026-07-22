@@ -64,7 +64,10 @@ private val customizationEnableBlurEffectsKey = booleanPreferencesKey("customiza
 private val customizationCallAudioBackgroundStyleKey = stringPreferencesKey("customizationCallAudioBackgroundStyle")
 private val callPreferEarpieceByDefaultKey = booleanPreferencesKey("callPreferEarpieceByDefault")
 private val callEnableProximitySensorKey = booleanPreferencesKey("callEnableProximitySensor")
+private val hideLegacyAndroidCompatibilityWarningKey = booleanPreferencesKey("hideLegacyAndroidCompatibilityWarning")
 private val customizationInitialTimelineItemCountKey = intPreferencesKey("customizationInitialTimelineItemCount")
+private val setkaLiteEnabledKey = booleanPreferencesKey("setkaLiteEnabled")
+private val setkaLiteSuggestionDismissedKey = booleanPreferencesKey("setkaLiteSuggestionDismissed")
 
 @ContributesBinding(AppScope::class)
 class DefaultAppPreferencesStore(
@@ -609,6 +612,42 @@ class DefaultAppPreferencesStore(
     override fun getCallEnableProximitySensorFlow(): Flow<Boolean> {
         return store.data.map { prefs ->
             prefs[callEnableProximitySensorKey] ?: DEFAULT_CALL_ENABLE_PROXIMITY_SENSOR
+        }
+    }
+
+    override suspend fun setHideLegacyAndroidCompatibilityWarning(hide: Boolean) {
+        store.edit { prefs ->
+            prefs[hideLegacyAndroidCompatibilityWarningKey] = hide
+        }
+    }
+
+    override fun getHideLegacyAndroidCompatibilityWarningFlow(): Flow<Boolean> {
+        return store.data.map { prefs ->
+            prefs[hideLegacyAndroidCompatibilityWarningKey] ?: false
+        }
+    }
+
+    override suspend fun setSetkaLiteEnabled(enabled: Boolean) {
+        store.edit { prefs ->
+            prefs[setkaLiteEnabledKey] = enabled
+        }
+    }
+
+    override fun getSetkaLiteEnabledFlow(): Flow<Boolean> {
+        return store.data.map { prefs ->
+            prefs[setkaLiteEnabledKey] ?: false
+        }
+    }
+
+    override suspend fun setSetkaLiteSuggestionDismissed(dismissed: Boolean) {
+        store.edit { prefs ->
+            prefs[setkaLiteSuggestionDismissedKey] = dismissed
+        }
+    }
+
+    override fun getSetkaLiteSuggestionDismissedFlow(): Flow<Boolean> {
+        return store.data.map { prefs ->
+            prefs[setkaLiteSuggestionDismissedKey] ?: false
         }
     }
 

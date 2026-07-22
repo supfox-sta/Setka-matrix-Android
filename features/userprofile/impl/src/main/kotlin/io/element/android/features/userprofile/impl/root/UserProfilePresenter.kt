@@ -115,17 +115,35 @@ class UserProfilePresenter(
         }
         val setkaProfile by produceState<JSONObject?>(null, userId, isCurrentUser) {
             val encoded = Uri.encode(userId.value)
-            val path = if (isCurrentUser) {
-                "/_matrix/client/v3/user/$encoded/setka_profile"
+            val candidatePaths = if (isCurrentUser) {
+                listOf(
+                    "/_matrix/client/v3/setka/users/$encoded/profile",
+                    "/_matrix/client/r0/setka/users/$encoded/profile",
+                    "/_synapse/admin/v1/setka/users/$encoded/profile",
+                    "/_matrix/client/v3/user/$encoded/setka_profile",
+                    "/_matrix/client/r0/user/$encoded/setka_profile",
+                )
             } else {
-                "/_matrix/client/v3/profile/$encoded/setka_profile"
+                listOf(
+                    "/_matrix/client/v3/setka/users/$encoded/profile",
+                    "/_matrix/client/r0/setka/users/$encoded/profile",
+                    "/_synapse/admin/v1/setka/users/$encoded/profile",
+                    "/_synapse/admin/v1/setka_plus/users/$encoded",
+                    "/_matrix/client/v3/profile/$encoded/setka_profile",
+                    "/_matrix/client/v3/profile/${userId.value}/setka_profile",
+                    "/_matrix/client/r0/profile/$encoded/setka_profile",
+                    "/_matrix/client/r0/profile/${userId.value}/setka_profile",
+                )
             }
-            value = client.executeAuthenticatedRequest(
-                method = "GET",
-                path = path,
-            ).getOrNull()
-                ?.decodeToString()
-                ?.let { raw -> runCatching { JSONObject(raw) }.getOrNull() }
+            val payloads = candidatePaths.mapNotNull { path ->
+                client.executeAuthenticatedRequest(
+                    method = "GET",
+                    path = path,
+                ).getOrNull()
+                    ?.decodeToString()
+                    ?.let(::parseSetkaProfileResponse)
+            }
+            value = payloads.firstOrNull { it.hasUsefulSetkaProfilePayload() } ?: payloads.firstOrNull()
         }
 
         fun handleEvent(event: UserProfileEvents) {
@@ -218,6 +236,37 @@ class UserProfilePresenter(
             .onFailure {
                 isBlockedState.value = AsyncData.Failure(it, true)
             }
+    }
+}
+
+private fun parseSetkaProfileResponse(raw: String): JSONObject? {
+    val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    val nestedProfile = json.optJSONObject("profile")
+    if (nestedProfile != null) return nestedProfile
+    val nestedUserPayload = json.optJSONObject("user")
+        ?.optJSONObject("profile")
+    if (nestedUserPayload != null) return nestedUserPayload
+    return json
+}
+
+private fun JSONObject.hasUsefulSetkaProfilePayload(): Boolean {
+    return listOf(
+        "bio",
+        "color",
+        "badge_emoji_mxc",
+        "status_emoji_mxc",
+        "background_mxc",
+        "email",
+        "phone",
+        "presence_state",
+        "last_seen_ts",
+        "updated_at",
+    ).any { key ->
+        when (val value = opt(key)) {
+            is String -> value.isNotBlank()
+            is Number -> true
+            else -> value != null && value != JSONObject.NULL
+        }
     }
 }
 

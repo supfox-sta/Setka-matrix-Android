@@ -35,6 +35,7 @@ import io.element.android.libraries.designsystem.components.avatar.AvatarType
 import io.element.android.libraries.designsystem.components.avatar.getBestName
 import io.element.android.libraries.designsystem.theme.components.HorizontalDivider
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.matrix.ui.setka.SetkaStatusEmojiInline
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -128,7 +129,10 @@ fun ContactsContentView(
                     avatarType = AvatarType.User,
                 )
                 Column(modifier = Modifier.padding(start = 12.dp)) {
-                    Text(text = contact.displayName)
+                    androidx.compose.foundation.layout.Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = contact.displayName)
+                        SetkaStatusEmojiInline(mxcUrl = contact.statusEmojiMxcUrl)
+                    }
                     val subtitle = contact.presenceText?.takeIf { it.isNotBlank() }
                         ?: contact.userId?.value
                     subtitle?.let { Text(text = it) }

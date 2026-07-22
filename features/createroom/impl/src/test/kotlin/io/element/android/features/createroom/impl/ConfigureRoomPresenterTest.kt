@@ -554,6 +554,7 @@ class ConfigureRoomPresenterTest {
         mediaOptimizationConfigProvider: FakeMediaOptimizationConfigProvider = FakeMediaOptimizationConfigProvider(),
     ) = ConfigureRoomPresenter(
         isSpace = isSpace,
+        isChannel = false,
         initialParentSpaceId = initialParenSpaceId,
         dataStore = dataStore,
         matrixClient = matrixClient,

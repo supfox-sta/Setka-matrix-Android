@@ -14,6 +14,7 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.SingleIn
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.SessionId
+import io.element.android.libraries.matrix.api.media.SessionMatrixMediaLoaderRegistry
 import io.element.android.libraries.sessionstorage.api.observer.SessionListener
 import io.element.android.libraries.sessionstorage.api.observer.SessionObserver
 
@@ -22,6 +23,7 @@ import io.element.android.libraries.sessionstorage.api.observer.SessionObserver
 class DefaultImageLoaderHolder(
     private val imageLoaderFactory: ImageLoaderFactory,
     private val sessionObserver: SessionObserver,
+    private val sessionMatrixMediaLoaderRegistry: SessionMatrixMediaLoaderRegistry,
 ) : ImageLoaderHolder {
     private val map = mutableMapOf<SessionId, ImageLoader>()
     private val notLoggedInImageLoader by lazy {
@@ -47,8 +49,9 @@ class DefaultImageLoaderHolder(
     override fun get(client: MatrixClient): ImageLoader {
         return synchronized(map) {
             map.getOrPut(client.sessionId) {
-                imageLoaderFactory
-                    .newImageLoader(client.matrixMediaLoader)
+                val mediaLoader = sessionMatrixMediaLoaderRegistry.getOrNull(client.sessionId)
+                    ?: client.matrixMediaLoader
+                imageLoaderFactory.newImageLoader(mediaLoader)
             }
         }
     }
@@ -56,6 +59,7 @@ class DefaultImageLoaderHolder(
     override fun remove(sessionId: SessionId) {
         synchronized(map) {
             map.remove(sessionId)
+            sessionMatrixMediaLoaderRegistry.unregister(sessionId)
         }
     }
 }

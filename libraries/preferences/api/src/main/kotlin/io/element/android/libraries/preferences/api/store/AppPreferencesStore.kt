@@ -126,5 +126,14 @@ interface AppPreferencesStore {
     suspend fun setCustomizationInitialTimelineItemCount(count: Int)
     fun getCustomizationInitialTimelineItemCountFlow(): Flow<Int>
 
+    suspend fun setHideLegacyAndroidCompatibilityWarning(hide: Boolean)
+    fun getHideLegacyAndroidCompatibilityWarningFlow(): Flow<Boolean>
+
+    suspend fun setSetkaLiteEnabled(enabled: Boolean)
+    fun getSetkaLiteEnabledFlow(): Flow<Boolean>
+
+    suspend fun setSetkaLiteSuggestionDismissed(dismissed: Boolean)
+    fun getSetkaLiteSuggestionDismissedFlow(): Flow<Boolean>
+
     suspend fun reset()
 }

@@ -14,6 +14,8 @@ data class HomeSetkaPlusState(
     val plans: List<HomeSetkaPlusPlan> = emptyList(),
     val busyPlanId: String? = null,
     val errorMessage: String? = null,
+    val paymentFlowState: io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState =
+        io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState.Idle,
 )
 
 data class HomeSetkaPlusSubscription(

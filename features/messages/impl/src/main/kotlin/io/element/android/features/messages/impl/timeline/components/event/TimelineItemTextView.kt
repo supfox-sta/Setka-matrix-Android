@@ -76,7 +76,9 @@ import org.jsoup.nodes.Document
 import io.element.android.features.messages.impl.setka.LocalSetkaSharedPackImporter
 import io.element.android.features.messages.impl.setka.parseSetkaSharedPackLink
 import io.element.android.features.messages.impl.setka.SetkaSharedPackLink
+import io.element.android.features.messages.impl.setka.LocalSetkaEmojiPackPreviewHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -306,10 +308,17 @@ private fun SetkaInlineEmojiImage(
     src: String,
     modifier: Modifier = Modifier,
 ) {
+    val onEmojiClick = LocalSetkaEmojiPackPreviewHandler.current
     AsyncImage(
         model = MediaRequestData(MediaSource(src), MediaRequestData.Kind.Content),
         contentDescription = token,
-        modifier = modifier,
+        modifier = modifier.then(
+            if (onEmojiClick != null) {
+                Modifier.clickable { onEmojiClick(src) }
+            } else {
+                Modifier
+            }
+        ),
         contentScale = ContentScale.Fit,
     )
 }

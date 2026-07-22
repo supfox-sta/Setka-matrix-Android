@@ -126,7 +126,7 @@ class CallScreenPresenterTest {
     }
 
     @Test
-    fun `present - room call url forces native embedded params`() = runTest {
+    fun `present - room call url is passed through unchanged`() = runTest {
         val widgetProvider = FakeCallWidgetProvider(
             url = "https://appassets.androidplatform.net/element-call/index.html#/room?showControls=true&header=app_bar&preload=false&skipLobby=false"
         )
@@ -145,10 +145,9 @@ class CallScreenPresenterTest {
                 state = awaitItem()
             }
             val url = (state.urlState as AsyncData.Success).data
-            assertThat(url).contains("header=none")
-            assertThat(url).contains("showControls=false")
-            assertThat(url).contains("preload=true")
-            assertThat(url).contains("skipLobby=true")
+            assertThat(url).isEqualTo(
+                "https://appassets.androidplatform.net/element-call/index.html#/room?showControls=true&header=app_bar&preload=false&skipLobby=false"
+            )
         }
     }
 

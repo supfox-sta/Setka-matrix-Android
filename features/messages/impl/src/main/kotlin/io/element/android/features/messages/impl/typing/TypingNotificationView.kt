@@ -42,7 +42,35 @@ import io.element.android.features.messages.impl.R
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.features.messages.impl.typing.TypingRoomMember
 import kotlinx.collections.immutable.ImmutableList
+
+fun typingNotificationPlainText(
+    context: android.content.Context,
+    typingMembers: ImmutableList<TypingRoomMember>,
+): String? {
+    if (typingMembers.isEmpty()) return null
+    val names = when (typingMembers.size) {
+        1 -> typingMembers[0].disambiguatedDisplayName
+        2 -> context.getString(
+            R.string.screen_room_typing_two_members,
+            typingMembers[0].disambiguatedDisplayName,
+            typingMembers[1].disambiguatedDisplayName,
+        )
+        else -> context.resources.getQuantityString(
+            R.plurals.screen_room_typing_many_members,
+            typingMembers.size - 2,
+            typingMembers[0].disambiguatedDisplayName,
+            typingMembers[1].disambiguatedDisplayName,
+            typingMembers.size - 2,
+        )
+    }
+    val template = context.resources.getQuantityString(
+        R.plurals.screen_room_typing_notification,
+        typingMembers.size,
+    )
+    return template.replace("<>", names)
+}
 
 @Suppress("MultipleEmitters") // False positive
 @Composable

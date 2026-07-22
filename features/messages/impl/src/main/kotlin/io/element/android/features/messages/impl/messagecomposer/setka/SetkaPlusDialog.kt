@@ -42,6 +42,7 @@ import io.element.android.features.messages.impl.R
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.matrix.ui.setka.SetkaPlusPaymentFlowBanner
 import io.element.android.libraries.ui.strings.CommonStrings
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -52,6 +53,7 @@ fun SetkaPlusDialog(
     state: SetkaComposerState,
     onDismiss: () -> Unit,
     onBuyPlan: (SetkaPlusPlan) -> Unit,
+    onDismissPaymentResult: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Dialog(
@@ -102,6 +104,15 @@ fun SetkaPlusDialog(
                 ) {
                     item(key = "setka-plus-promo") {
                         SetkaPlusPromoCard()
+                    }
+
+                    if (state.paymentFlowState !is io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState.Idle) {
+                        item(key = "setka-plus-payment-flow") {
+                            SetkaPlusPaymentFlowBanner(
+                                paymentFlowState = state.paymentFlowState,
+                                onDismiss = onDismissPaymentResult,
+                            )
+                        }
                     }
 
                     state.errorMessage?.let { errorMessage ->

@@ -27,6 +27,7 @@ import dev.zacsweers.metro.Inject
 import im.vector.app.features.analytics.plan.Interaction
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
+import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.features.home.impl.datasource.RoomListDataSource
 import io.element.android.features.home.impl.filters.RoomListFilter.Rooms
 import io.element.android.features.home.impl.filters.RoomListFiltersState
@@ -50,6 +51,8 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import io.element.android.libraries.matrix.api.roomlist.RoomList
 import io.element.android.libraries.matrix.api.roomlist.RoomListFilter
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
 import io.element.android.libraries.matrix.api.timeline.ReceiptType
 import io.element.android.libraries.matrix.ui.safety.rememberHideInvitesAvatar
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
@@ -90,6 +93,7 @@ class RoomListPresenter(
     private val announcementService: AnnouncementService,
     private val coldStartWatcher: AnalyticsColdStartWatcher,
     private val spaceFiltersPresenter: Presenter<SpaceFiltersState>,
+    private val setkaServerRecoveryService: SetkaServerRecoveryService,
 ) : Presenter<RoomListState> {
     private val encryptionService = client.encryptionService
 
@@ -100,6 +104,8 @@ class RoomListPresenter(
         val filtersState = filtersPresenter.present()
         val searchState = searchPresenter.present()
         val spaceFiltersState = spaceFiltersPresenter.present()
+        val spaceFilters by client.spaceService.spaceFiltersFlow.collectAsState(initial = emptyList())
+        val homeserver = remember(client.sessionId) { client.sessionId.value.substringAfter(':', "") }
         val acceptDeclineInviteState = acceptDeclineInvitePresenter.present()
 
         LaunchedEffect(Unit) {
@@ -126,6 +132,9 @@ class RoomListPresenter(
                 }
                 RoomListEvent.DismissRequestVerificationPrompt -> securityBannerDismissed = true
                 RoomListEvent.DismissBanner -> securityBannerDismissed = true
+                RoomListEvent.UploadSetkaServerBackup -> coroutineScope.launch {
+                    setkaServerRecoveryService.uploadKeysToServer()
+                }
                 RoomListEvent.DismissNewNotificationSoundBanner -> coroutineScope.launch {
                     announcementService.onAnnouncementDismissed(Announcement.NewNotificationSound)
                 }
@@ -166,8 +175,11 @@ class RoomListPresenter(
         }
 
         val contentState = roomListContentState(
-            securityBannerDismissed,
-            showNewNotificationSoundBanner,
+            securityBannerDismissed = securityBannerDismissed,
+            showNewNotificationSoundBanner = showNewNotificationSoundBanner,
+            spaceFilters = spaceFilters,
+            homeserver = homeserver,
+            spaceFiltersState = spaceFiltersState,
         )
 
         val canReportRoom by produceState(false) { value = client.canReportRoom() }
@@ -193,11 +205,13 @@ class RoomListPresenter(
     ): State<SecurityBannerState> {
         val currentSecurityBannerDismissed by rememberUpdatedState(securityBannerDismissed)
         val recoveryState by encryptionService.recoveryStateStateFlow.collectAsState()
+        val setkaSyncState by setkaServerRecoveryService.syncState.collectAsState()
         return remember {
             derivedStateOf {
                 calculateBannerState(
                     securityBannerDismissed = currentSecurityBannerDismissed,
                     recoveryState = recoveryState,
+                    setkaSyncState = setkaSyncState,
                 )
             }
         }
@@ -206,11 +220,30 @@ class RoomListPresenter(
     private fun calculateBannerState(
         securityBannerDismissed: Boolean,
         recoveryState: RecoveryState,
+        setkaSyncState: SetkaServerRecoverySyncState,
     ): SecurityBannerState {
         if (securityBannerDismissed) {
             return SecurityBannerState.None
         }
 
+        if (setkaServerRecoveryService.isSetkaSession) {
+            return when (setkaSyncState) {
+                SetkaServerRecoverySyncState.ServerBackupMissing,
+                SetkaServerRecoverySyncState.Synced,
+                SetkaServerRecoverySyncState.Checking,
+                SetkaServerRecoverySyncState.Uploading,
+                SetkaServerRecoverySyncState.Unknown ->
+                    SecurityBannerState.None
+                SetkaServerRecoverySyncState.LoginNotVerified,
+                SetkaServerRecoverySyncState.Error ->
+                    calculateDefaultSecurityBanner(recoveryState)
+            }
+        }
+
+        return calculateDefaultSecurityBanner(recoveryState)
+    }
+
+    private fun calculateDefaultSecurityBanner(recoveryState: RecoveryState): SecurityBannerState {
         when (recoveryState) {
             RecoveryState.DISABLED -> return SecurityBannerState.SetUpRecovery
             RecoveryState.INCOMPLETE -> return SecurityBannerState.RecoveryKeyConfirmation
@@ -218,7 +251,6 @@ class RoomListPresenter(
             RecoveryState.WAITING_FOR_SYNC,
             RecoveryState.ENABLED -> Unit
         }
-
         return SecurityBannerState.None
     }
 
@@ -226,6 +258,9 @@ class RoomListPresenter(
     private fun roomListContentState(
         securityBannerDismissed: Boolean,
         showNewNotificationSoundBanner: Boolean,
+        spaceFilters: List<io.element.android.libraries.matrix.api.spaces.SpaceServiceFilter>,
+        homeserver: String,
+        spaceFiltersState: SpaceFiltersState,
     ): RoomListContentState {
         val roomSummaries by produceState(initialValue = AsyncData.Loading()) {
             roomListDataSource.roomSummariesFlow.collect { value = AsyncData.Success(it) }
@@ -251,12 +286,22 @@ class RoomListPresenter(
             else -> {
                 coldStartWatcher.onRoomListVisible()
 
+                val summaries = roomSummaries.dataOrNull().orEmpty().toImmutableList()
+                val useSpaceGrouping = SetkaMatrixConfig.isSetkaHomeserver(homeserver) &&
+                    spaceFiltersState !is SpaceFiltersState.Selected
+                val displayItems = if (useSpaceGrouping) {
+                    SetkaRoomListSpaceGrouper.group(summaries, spaceFilters)
+                } else {
+                    summaries.map { RoomListDisplayItem.Room(it) }.toImmutableList()
+                }
+
                 RoomListContentState.Rooms(
                     securityBannerState = securityBannerState,
                     showNewNotificationSoundBanner = showNewNotificationSoundBanner,
                     fullScreenIntentPermissionsState = fullScreenIntentPermissionsPresenter.present(),
                     batteryOptimizationState = batteryOptimizationPresenter.present(),
-                    summaries = roomSummaries.dataOrNull().orEmpty().toImmutableList(),
+                    summaries = summaries,
+                    displayItems = displayItems,
                     seenRoomInvites = seenRoomInvites.toImmutableSet(),
                 )
             }

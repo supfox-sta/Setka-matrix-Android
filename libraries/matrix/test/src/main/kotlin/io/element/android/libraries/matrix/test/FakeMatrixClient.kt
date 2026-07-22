@@ -8,7 +8,9 @@
 
 package io.element.android.libraries.matrix.test
 
+import io.element.android.libraries.matrix.api.ImportedRoomEventsResult
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.MatrixClientImportEventsException
 import io.element.android.libraries.matrix.api.analytics.SdkStoreSizes
 import io.element.android.libraries.matrix.api.core.DeviceId
 import io.element.android.libraries.matrix.api.core.EventId
@@ -411,4 +413,14 @@ class FakeMatrixClient(
     override suspend fun resetWellKnownConfig(): Result<Unit> {
         return resetWellKnownConfigLambda()
     }
+
+    override suspend fun importBackwardsRoomEvents(
+        roomId: RoomId,
+        eventsJson: String,
+        prevToken: String?,
+        fromToken: String?,
+    ): Result<ImportedRoomEventsResult> = Result.failure(MatrixClientImportEventsException)
+
+    override suspend fun importToDeviceEvents(eventsJson: String): Result<Int> =
+        Result.failure(MatrixClientImportEventsException)
 }

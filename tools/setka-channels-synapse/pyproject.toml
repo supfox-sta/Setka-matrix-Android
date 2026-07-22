@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "setka-channels-synapse"
+version = "0.1.0"
+description = "Synapse module: Setka broadcast channels with threaded comments"
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["setka_channels_synapse_module*"]

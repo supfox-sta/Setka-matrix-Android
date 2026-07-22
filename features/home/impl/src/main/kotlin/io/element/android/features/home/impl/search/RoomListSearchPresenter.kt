@@ -33,6 +33,7 @@ class RoomListSearchPresenter(
         var isSearchActive by remember {
             mutableStateOf(false)
         }
+        var searchFilter by remember { mutableStateOf(RoomListSearchFilter.All) }
         val searchQuery = rememberTextFieldState()
 
         val coroutineScope = rememberCoroutineScope()
@@ -50,6 +51,11 @@ class RoomListSearchPresenter(
                 RoomListSearchEvent.ToggleSearchVisibility -> {
                     isSearchActive = !isSearchActive
                     searchQuery.clearText()
+                    searchFilter = RoomListSearchFilter.All
+                }
+                is RoomListSearchEvent.SetFilter -> {
+                    searchFilter = event.filter
+                    coroutineScope.launch { dataSource.setFilter(event.filter) }
                 }
                 is RoomListSearchEvent.UpdateVisibleRange -> coroutineScope.launch {
                     dataSource.updateVisibleRange(visibleRange = event.range)
@@ -57,11 +63,16 @@ class RoomListSearchPresenter(
             }
         }
 
-        val searchResults by dataSource.roomSummaries.collectAsState(initial = persistentListOf())
+        val searchResults by dataSource.searchResults.collectAsState(initial = persistentListOf())
+
+        LaunchedEffect(searchFilter) {
+            dataSource.setFilter(searchFilter)
+        }
 
         return RoomListSearchState(
             isSearchActive = isSearchActive,
             query = searchQuery,
+            filter = searchFilter,
             results = searchResults,
             eventSink = ::handleEvent,
         )

@@ -21,6 +21,8 @@ import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import io.element.android.libraries.matrix.test.AN_EXCEPTION
 import io.element.android.libraries.matrix.test.core.aBuildMeta
 import io.element.android.libraries.matrix.test.encryption.FakeEncryptionService
+import io.element.android.libraries.matrix.test.setka.FakeSetkaLoginVerificationService
+import io.element.android.libraries.matrix.test.setka.FakeSetkaServerRecoveryService
 import io.element.android.tests.testutils.WarmUpRule
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -36,7 +38,7 @@ class SecureBackupRootPresenterTest {
         moleculeFlow(RecompositionMode.Immediate) {
             presenter.present()
         }.test {
-            skipItems(2)
+            skipItems(1)
             val initialState = awaitItem()
             assertThat(initialState.backupState).isEqualTo(BackupState.UNKNOWN)
             assertThat(initialState.doesBackupExistOnServer.dataOrNull()).isTrue()
@@ -80,7 +82,7 @@ class SecureBackupRootPresenterTest {
         moleculeFlow(RecompositionMode.Immediate) {
             presenter.present()
         }.test {
-            skipItems(2)
+            skipItems(1)
             val initialState = awaitItem()
             initialState.eventSink(SecureBackupRootEvents.DisplayKeyStorageDisabledError)
             assertThat(awaitItem().displayKeyStorageDisabledError).isTrue()
@@ -95,7 +97,7 @@ class SecureBackupRootPresenterTest {
         moleculeFlow(RecompositionMode.Immediate) {
             presenter.present()
         }.test {
-            skipItems(2)
+            skipItems(1)
             val initialState = awaitItem()
             initialState.eventSink(SecureBackupRootEvents.EnableKeyStorage)
             assertThat(awaitItem().enableAction.isLoading()).isTrue()
@@ -109,6 +111,8 @@ class SecureBackupRootPresenterTest {
     ): SecureBackupRootPresenter {
         return SecureBackupRootPresenter(
             encryptionService = encryptionService,
+            setkaServerRecoveryService = FakeSetkaServerRecoveryService(),
+            setkaLoginVerificationService = FakeSetkaLoginVerificationService(),
             buildMeta = aBuildMeta(applicationName = appName),
             snackbarDispatcher = SnackbarDispatcher(),
         )

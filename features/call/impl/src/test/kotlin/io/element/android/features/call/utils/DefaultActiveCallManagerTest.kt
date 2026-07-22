@@ -16,6 +16,7 @@ import com.google.common.truth.Truth.assertThat
 import io.element.android.features.call.api.CallType
 import io.element.android.features.call.impl.notifications.RingingCallNotificationCreator
 import io.element.android.features.call.impl.utils.ActiveCall
+import io.element.android.features.call.impl.utils.CallHistoryRecorder
 import io.element.android.features.call.impl.utils.CallState
 import io.element.android.features.call.impl.utils.DefaultActiveCallManager
 import io.element.android.features.call.impl.utils.DefaultCurrentCallService
@@ -505,5 +506,8 @@ class DefaultActiveCallManagerTest {
         appForegroundStateService = FakeAppForegroundStateService(),
         imageLoaderHolder = FakeImageLoaderHolder(),
         systemClock = systemClock,
+        callHistoryRecorder = CallHistoryRecorder(
+            context = InstrumentationRegistry.getInstrumentation().targetContext,
+        ),
     )
 }

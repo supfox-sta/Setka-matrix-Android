@@ -18,6 +18,7 @@ import io.element.android.libraries.matrix.test.AN_EVENT_ID
 import io.element.android.libraries.matrix.test.media.FakeMediaPreviewService
 import io.element.android.libraries.matrix.test.room.FakeBaseRoom
 import io.element.android.libraries.matrix.test.room.aRoomInfo
+import io.element.android.libraries.setkalite.api.SetkaLiteMediaGate
 import io.element.android.tests.testutils.WarmUpRule
 import io.element.android.tests.testutils.test
 import kotlinx.collections.immutable.persistentSetOf
@@ -87,11 +88,26 @@ class TimelineProtectionPresenterTest {
         }
     }
 
+    @Test
+    fun `present - setka lite enabled hides media until tapped`() = runTest {
+        val setkaLiteMediaGate = FakeSetkaLiteMediaGate(isLiteEnabled = true)
+        val presenter = createPresenter(setkaLiteMediaGate = setkaLiteMediaGate)
+        presenter.test {
+            val initialState = awaitItem()
+            assertThat(initialState.protectionState).isEqualTo(ProtectionState.RenderOnly(persistentSetOf()))
+            initialState.eventSink(TimelineProtectionEvent.ShowContent(eventId = AN_EVENT_ID))
+            val finalState = awaitItem()
+            assertThat(finalState.protectionState).isEqualTo(ProtectionState.RenderOnly(persistentSetOf(AN_EVENT_ID)))
+        }
+    }
+
     private fun createPresenter(
         room: BaseRoom = FakeBaseRoom(),
         mediaPreviewService: MediaPreviewService = FakeMediaPreviewService(),
+        setkaLiteMediaGate: SetkaLiteMediaGate = FakeSetkaLiteMediaGate(),
     ) = TimelineProtectionPresenter(
         mediaPreviewService = mediaPreviewService,
         room = room,
+        setkaLiteMediaGate = setkaLiteMediaGate,
     )
 }

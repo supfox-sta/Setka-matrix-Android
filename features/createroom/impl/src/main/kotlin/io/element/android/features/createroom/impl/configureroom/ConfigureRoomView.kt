@@ -79,6 +79,7 @@ fun ConfigureRoomView(
     modifier: Modifier = Modifier,
 ) {
     val isSpace = state.isSpace
+    val isChannel = state.isChannel
     val focusManager = LocalFocusManager.current
     val isAvatarActionsSheetVisible = remember { mutableStateOf(false) }
 
@@ -92,6 +93,7 @@ fun ConfigureRoomView(
         topBar = {
             ConfigureRoomToolbar(
                 isSpace = isSpace,
+                isChannel = isChannel,
                 isNextActionEnabled = state.isValid,
                 onBackClick = onBackClick,
                 onNextClick = {
@@ -110,6 +112,7 @@ fun ConfigureRoomView(
         ) {
             RoomNameWithAvatar(
                 isSpace = isSpace,
+                isChannel = isChannel,
                 modifier = Modifier.padding(horizontal = 16.dp),
                 avatarUri = state.config.avatarUri,
                 roomName = state.config.roomName.orEmpty(),
@@ -121,9 +124,19 @@ fun ConfigureRoomView(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 topic = state.config.topic.orEmpty(),
                 onTopicChange = { state.eventSink(ConfigureRoomEvents.TopicChanged(it)) },
+                label = if (isChannel) {
+                    stringResource(R.string.screen_setka_channel_topic_label)
+                } else {
+                    stringResource(R.string.screen_create_room_topic_label)
+                },
+                placeholder = if (isChannel) {
+                    stringResource(R.string.screen_setka_channel_topic_placeholder)
+                } else {
+                    stringResource(R.string.screen_create_room_topic_placeholder)
+                },
             )
             Spacer(modifier = Modifier.height(16.dp))
-            if (!state.isSpace && state.spaces.isNotEmpty()) {
+            if (!state.isSpace && !state.isChannel && state.spaces.isNotEmpty()) {
                 SelectParentSpaceOptions(
                     spaces = state.spaces,
                     selectedSpace = state.config.parentSpace,
@@ -165,11 +178,25 @@ fun ConfigureRoomView(
         async = state.createRoomAction,
         progressDialog = {
             AsyncActionViewDefaults.ProgressDialog(
-                progressText = stringResource(if (isSpace) CommonStrings.common_creating_space else CommonStrings.common_creating_room),
+                progressText = stringResource(
+                    when {
+                        isSpace -> CommonStrings.common_creating_space
+                        isChannel -> R.string.screen_create_channel_creating
+                        else -> CommonStrings.common_creating_room
+                    }
+                ),
             )
         },
         onSuccess = { onCreateRoomSuccess(it) },
-        errorMessage = { stringResource(if (isSpace) R.string.screen_create_room_error_creating_space else R.string.screen_create_room_error_creating_room) },
+        errorMessage = {
+            stringResource(
+                when {
+                    isSpace -> R.string.screen_create_room_error_creating_space
+                    isChannel -> R.string.screen_create_channel_error_creating
+                    else -> R.string.screen_create_room_error_creating_room
+                }
+            )
+        },
         onRetry = { state.eventSink(ConfigureRoomEvents.CreateRoom) },
         onErrorDismiss = { state.eventSink(ConfigureRoomEvents.CancelCreateRoom) },
     )
@@ -183,12 +210,19 @@ fun ConfigureRoomView(
 @Composable
 private fun ConfigureRoomToolbar(
     isSpace: Boolean,
+    isChannel: Boolean,
     isNextActionEnabled: Boolean,
     onBackClick: () -> Unit,
     onNextClick: () -> Unit,
 ) {
     TopAppBar(
-        titleStr = stringResource(if (isSpace) R.string.screen_create_room_new_space_title else R.string.screen_create_room_new_room_title),
+        titleStr = stringResource(
+            when {
+                isSpace -> R.string.screen_create_room_new_space_title
+                isChannel -> R.string.screen_create_channel_title
+                else -> R.string.screen_create_room_new_room_title
+            }
+        ),
         navigationIcon = { BackButton(onClick = onBackClick) },
         actions = {
             TextButton(
@@ -203,6 +237,7 @@ private fun ConfigureRoomToolbar(
 @Composable
 private fun RoomNameWithAvatar(
     isSpace: Boolean,
+    isChannel: Boolean,
     avatarUri: String?,
     roomName: String,
     onAvatarClick: () -> Unit,
@@ -224,7 +259,11 @@ private fun RoomNameWithAvatar(
                 if (avatarUri != null) {
                     AvatarPickerState.Selected(
                         avatarData = AvatarData(id = "#", name = null, url = avatarUri, size = AvatarSize.EditRoomDetails),
-                        type = if (isSpace) AvatarType.Space() else AvatarType.Room(),
+                        type = when {
+                            isSpace -> AvatarType.Space()
+                            isChannel -> AvatarType.Room()
+                            else -> AvatarType.Room()
+                        },
                     )
                 } else {
                     val containerSize = 48.dp
@@ -253,15 +292,17 @@ private fun RoomNameWithAvatar(
 private fun RoomTopic(
     topic: String,
     onTopicChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
     modifier: Modifier = Modifier,
 ) {
     TextField(
         modifier = modifier,
-        label = stringResource(R.string.screen_create_room_topic_label),
+        label = label,
         value = topic,
         onValueChange = onTopicChange,
         maxLines = 3,
-        placeholder = stringResource(R.string.screen_create_room_topic_placeholder),
+        placeholder = placeholder,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.Sentences,
         ),

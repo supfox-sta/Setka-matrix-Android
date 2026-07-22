@@ -52,9 +52,11 @@ fun SecureBackupSetupView(
     }
 
     if (state.setupState is SetupState.Error) {
+        val error = state.setupState as SetupState.Error
         ErrorDialog(
             title = stringResource(id = CommonStrings.common_something_went_wrong),
-            content = stringResource(id = CommonStrings.common_something_went_wrong_message),
+            content = error.exception.message?.takeIf { it.isNotBlank() }
+                ?: stringResource(id = CommonStrings.common_something_went_wrong_message),
             onSubmit = {
                 state.eventSink.invoke(SecureBackupSetupEvents.DismissDialog)
             },

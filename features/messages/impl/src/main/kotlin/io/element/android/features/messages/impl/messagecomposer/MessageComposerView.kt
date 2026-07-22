@@ -134,6 +134,7 @@ internal fun MessageComposerView(
                 IconButton(
                     modifier = Modifier.size(36.dp),
                     onClick = {
+                        view.clearFocus()
                         state.eventSink(
                             if (state.setkaState.isStickerPickerVisible) {
                                 MessageComposerEvent.HideSetkaStickerPicker

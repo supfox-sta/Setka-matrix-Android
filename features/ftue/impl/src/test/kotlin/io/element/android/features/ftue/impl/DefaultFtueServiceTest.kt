@@ -28,6 +28,7 @@ import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analytics.noop.NoopAnalyticsService
 import io.element.android.services.analytics.test.FakeAnalyticsService
 import io.element.android.services.toolbox.test.sdk.FakeBuildVersionSdkIntProvider
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -188,6 +189,28 @@ class DefaultFtueServiceTest {
             assertThat(awaitItem()).isEqualTo(InternalFtueState.Incomplete(FtueStep.AnalyticsOptIn))
             analyticsService.setDidAskUserConsent()
             assertThat(awaitItem()).isEqualTo(InternalFtueState.Complete)
+        }
+    }
+
+    @Test
+    fun `skipSessionVerificationForOnboarding skips session verification step`() = runTest {
+        val sessionVerificationService = FakeSessionVerificationService().apply {
+            emitVerifiedStatus(SessionVerifiedStatus.NotVerified)
+        }
+        val sessionPreferencesStore = InMemorySessionPreferencesStore()
+        val service = createDefaultFtueService(
+            sessionVerificationService = sessionVerificationService,
+            sessionPreferencesStore = sessionPreferencesStore,
+        )
+
+        service.ftueStepStateFlow.test {
+            assertThat(awaitItem()).isEqualTo(InternalFtueState.Unknown)
+            assertThat(awaitItem()).isEqualTo(InternalFtueState.Incomplete(FtueStep.SessionVerification))
+
+            service.skipSessionVerificationForOnboarding()
+
+            assertThat(awaitItem()).isEqualTo(InternalFtueState.Incomplete(FtueStep.NotificationsOptIn))
+            assertThat(sessionPreferencesStore.isSessionVerificationSkipped().first()).isTrue()
         }
     }
 }

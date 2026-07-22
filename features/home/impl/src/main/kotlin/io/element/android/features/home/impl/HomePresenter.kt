@@ -24,7 +24,13 @@ import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
+import io.element.android.features.home.impl.channels.SetkaPublicChannelsPresenter
+import io.element.android.features.home.impl.channels.SetkaPublicChannelsState
 import io.element.android.features.home.impl.model.HomeContact
+import io.element.android.features.home.impl.recent.RecentRoomSummariesResolver
+import io.element.android.features.home.impl.recent.SetkaRecentRoomsStore
+import io.element.android.features.home.impl.model.RoomListRoomSummary
+import io.element.android.features.home.impl.roomlist.RoomListContentState
 import io.element.android.features.home.impl.roomlist.RoomListState
 import io.element.android.features.home.impl.spaces.HomeSpacesState
 import io.element.android.features.logout.api.direct.DirectLogoutState
@@ -38,8 +44,21 @@ import io.element.android.libraries.matrix.api.sync.SyncService
 import io.element.android.libraries.preferences.api.store.AppPreferencesStore
 import io.element.android.libraries.preferences.api.store.RoomWallpaperStyles
 import io.element.android.libraries.sessionstorage.api.SessionStore
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentCoordinator
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPlan
+import io.element.android.libraries.matrix.api.setka.SetkaPlusService
+import io.element.android.libraries.matrix.api.setka.SetkaPlusSubscription
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
+import io.element.android.libraries.setkalite.api.SetkaLiteCoordinator
+import io.element.android.libraries.setkalite.api.SetkaTransferQueue
 import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
+import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.setka.fetchSetkaStatusEmojiMxc
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +82,14 @@ class HomePresenter(
     private val announcementService: AnnouncementService,
     private val appPreferencesStore: AppPreferencesStore,
     private val externalIntentLauncher: ExternalIntentLauncher,
+    private val setkaRecentRoomsStore: SetkaRecentRoomsStore,
+    private val recentRoomSummariesResolver: RecentRoomSummariesResolver,
+    private val setkaPlusService: SetkaPlusService,
+    private val setkaPlusPaymentCoordinator: SetkaPlusPaymentCoordinator,
+    private val setkaServerRecoveryService: SetkaServerRecoveryService,
+    private val setkaLiteCoordinator: SetkaLiteCoordinator,
+    private val setkaTransferQueue: SetkaTransferQueue,
+    private val setkaPublicChannelsPresenter: SetkaPublicChannelsPresenter,
 ) : Presenter<HomeState> {
     private val currentUserWithNeighborsBuilder = CurrentUserWithNeighborsBuilder()
 
@@ -78,12 +105,24 @@ class HomePresenter(
             )
         }.collectAsState(initial = persistentListOf(matrixUser))
         val isOnline by syncService.isOnline.collectAsState()
+        val setkaSyncState by setkaServerRecoveryService.syncState.collectAsState()
+        val setkaLiteState by setkaLiteCoordinator.state.collectAsState()
+        var showTransferQueueSheet by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(setkaServerRecoveryService.isSetkaSession) {
+            if (setkaServerRecoveryService.isSetkaSession) {
+                setkaServerRecoveryService.syncWhenReady()
+            }
+        }
         val currentThemeMode by appPreferencesStore.getThemeFlow().collectAsState(initial = null)
         val canReportBug by remember { rageshakeFeatureAvailability.isAvailable() }.collectAsState(false)
         val roomListState = roomListPresenter.present()
         val homeSpacesState = homeSpacesPresenter.present()
+        val setkaPublicChannelsState = setkaPublicChannelsPresenter.present()
         var contacts by remember { mutableStateOf<ImmutableList<HomeContact>>(persistentListOf()) }
         var setkaPlusState by remember { mutableStateOf(HomeSetkaPlusState()) }
+        val paymentFlowState by setkaPlusPaymentCoordinator.flowState.collectAsState()
+        var statusEmojiState by remember { mutableStateOf(HomeStatusEmojiState()) }
+        var statusEmojiByUserId by remember { mutableStateOf<ImmutableMap<String, String>>(persistentMapOf()) }
         var currentHomeNavigationBarItemOrdinal by rememberSaveable { mutableIntStateOf(HomeNavigationBarItem.Chats.ordinal) }
         val currentHomeNavigationBarItem by remember {
             derivedStateOf {
@@ -124,12 +163,20 @@ class HomePresenter(
                     if (userId.isNullOrBlank()) return@map contact
 
                     val presenceText = fetchPresenceText(client, userId)
-                    contact.copy(presenceText = presenceText)
+                    val statusEmojiMxcUrl = client.fetchSetkaStatusEmojiMxc(UserId(userId))
+                    contact.copy(
+                        presenceText = presenceText,
+                        statusEmojiMxcUrl = statusEmojiMxcUrl,
+                    )
                 }.toImmutableList()
 
                 withContext(Dispatchers.Main) {
-                    // Keep it simple: overwrite if we didn't refresh since.
                     contacts = enriched
+                    statusEmojiByUserId = enriched.mapNotNull { contact ->
+                        val userId = contact.userId?.value ?: return@mapNotNull null
+                        val emoji = contact.statusEmojiMxcUrl ?: return@mapNotNull null
+                        userId to emoji
+                    }.toMap().toImmutableMap()
                 }
             }
         }
@@ -137,35 +184,78 @@ class HomePresenter(
             // Force a refresh of the profile
             client.getUserProfile()
             refreshContacts()
+            runCatching {
+                val encodedUser = Uri.encode(client.sessionId.value)
+                val profileJson = client.executeAuthenticatedRequest(
+                    method = "GET",
+                    path = "/_matrix/client/v3/user/$encodedUser/setka_profile",
+                ).getOrNull()?.decodeToString()?.let(::JSONObject)
+                val badgeEmoji = profileJson?.optString("badge_emoji_mxc", "")?.takeIf { it.isNotBlank() }
+                statusEmojiState = statusEmojiState.copy(selectedMxcUrl = badgeEmoji)
+            }
+        }
+
+        fun loadStatusEmojiPacks() = coroutineState.launch(Dispatchers.IO) {
+            statusEmojiState = statusEmojiState.copy(isLoadingPacks = true)
+            val packs = runCatching {
+                val encodedUser = Uri.encode(client.sessionId.value)
+                val response = client.executeAuthenticatedRequest(
+                    method = "GET",
+                    path = "/_matrix/client/v3/user/$encodedUser/setka_plus/sticker_packs",
+                ).getOrThrow().decodeToString()
+                parseHomeEmojiPacks(JSONObject(response))
+            }.getOrDefault(persistentListOf())
+            withContext(Dispatchers.Main) {
+                statusEmojiState = statusEmojiState.copy(
+                    packs = packs,
+                    isLoadingPacks = false,
+                )
+            }
+        }
+
+        fun saveStatusEmoji(mxcUrl: String?) = coroutineState.launch(Dispatchers.IO) {
+            runCatching {
+                val encodedUser = Uri.encode(client.sessionId.value)
+                val body = JSONObject().put("badge_emoji_mxc", mxcUrl.orEmpty()).toString().encodeToByteArray()
+                client.executeAuthenticatedRequest(
+                    method = "PUT",
+                    path = "/_matrix/client/v3/user/$encodedUser/setka_profile",
+                    body = body,
+                ).getOrThrow()
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    statusEmojiState = statusEmojiState.copy(
+                        selectedMxcUrl = mxcUrl,
+                        showPicker = false,
+                    )
+                }
+            }
         }
 
         fun refreshSetkaPlus(showLoading: Boolean = true) = coroutineState.launch {
             if (showLoading) {
                 setkaPlusState = setkaPlusState.copy(isLoading = true, errorMessage = null)
             }
-            val subscriptionResult = client.executeAuthenticatedRequest(
-                method = "GET",
-                path = setkaPlusSubscriptionPath(client.sessionId.value),
-            )
-            val plansResult = client.executeAuthenticatedRequest(
-                method = "GET",
-                path = setkaPlusPlansPath(client.sessionId.value),
-            )
-            val subscription = subscriptionResult.getOrNull()
-                ?.decodeToString()
-                ?.let(::parseSetkaPlusSubscription)
-            val plans = plansResult.getOrNull()
-                ?.decodeToString()
-                ?.let(::parseSetkaPlusPlans)
-                .orEmpty()
-            val errorMessage = subscriptionResult.exceptionOrNull()?.message
-                ?: plansResult.exceptionOrNull()?.message
-            setkaPlusState = setkaPlusState.copy(
-                isLoading = false,
-                subscription = subscription,
-                plans = plans,
-                errorMessage = if (plans.isEmpty() && subscription == null) errorMessage else null,
-            )
+            try {
+                val subscriptionResult = setkaPlusService.getSubscription()
+                val plansResult = setkaPlusService.getPlans()
+                val subscription = subscriptionResult.getOrNull()?.toHomeState()
+                val plans = plansResult.getOrDefault(emptyList()).map { it.toHomeState() }
+                val errorMessage = subscriptionResult.exceptionOrNull()?.message
+                    ?: plansResult.exceptionOrNull()?.message
+                    ?: if (plans.isEmpty() && subscription == null) {
+                        "Сервер не вернул тарифы. Проверьте, что на homeserver включён API Сетка Plus."
+                    } else {
+                        null
+                    }
+                setkaPlusState = setkaPlusState.copy(
+                    subscription = subscription,
+                    plans = plans,
+                    errorMessage = errorMessage,
+                )
+            } finally {
+                setkaPlusState = setkaPlusState.copy(isLoading = false)
+            }
         }
 
         fun buySetkaPlusPlan(planId: String) = coroutineState.launch {
@@ -173,29 +263,30 @@ class HomePresenter(
                 setkaPlusState = setkaPlusState.copy(errorMessage = "Подписка уже активна")
                 return@launch
             }
-            val plan = setkaPlusState.plans.firstOrNull { it.id == planId }
-            if (plan == null) {
+            val plan = setkaPlusState.plans.firstOrNull { it.id == planId } ?: run {
                 setkaPlusState = setkaPlusState.copy(errorMessage = "Тариф не найден")
                 return@launch
             }
             setkaPlusState = setkaPlusState.copy(busyPlanId = plan.id, errorMessage = null)
-            val result = client.executeAuthenticatedRequest(
-                method = "POST",
-                path = setkaPlusPaymentCreatePath(client.sessionId.value),
-                body = JSONObject()
-                    .put("amount", plan.priceRub)
-                    .put("description", plan.name)
-                    .put("plan_id", plan.id)
-                    .toString()
-                    .encodeToByteArray(),
+            val result = setkaPlusService.createPayment(
+                SetkaPlusPlan(
+                    id = plan.id,
+                    name = plan.name,
+                    priceRub = plan.priceRub,
+                    durationDays = plan.durationDays,
+                    features = plan.features,
+                    active = plan.active,
+                    sortOrder = plan.sortOrder,
+                )
             )
             result.fold(
-                onSuccess = { payload ->
-                    val checkoutUrl = parseCheckoutUrl(payload.decodeToString())
-                    if (!checkoutUrl.isNullOrBlank()) {
+                onSuccess = { payment ->
+                    payment.checkoutUrl?.let { checkoutUrl ->
                         externalIntentLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl)))
                     }
-                    refreshSetkaPlus(showLoading = false)
+                    if (payment.paymentId.isNotBlank()) {
+                        setkaPlusPaymentCoordinator.beginPayment(payment.paymentId)
+                    }
                 },
                 onFailure = { throwable ->
                     setkaPlusState = setkaPlusState.copy(
@@ -206,6 +297,13 @@ class HomePresenter(
             )
             if (result.isSuccess) {
                 setkaPlusState = setkaPlusState.copy(busyPlanId = null)
+            }
+        }
+
+        LaunchedEffect(paymentFlowState) {
+            setkaPlusState = setkaPlusState.copy(paymentFlowState = paymentFlowState)
+            if (paymentFlowState is SetkaPlusPaymentFlowState.Confirmed) {
+                refreshSetkaPlus(showLoading = false)
             }
         }
         // Avatar indicator
@@ -255,6 +353,37 @@ class HomePresenter(
                 HomeEvent.ClearSetkaPlusError -> {
                     setkaPlusState = setkaPlusState.copy(errorMessage = null)
                 }
+                HomeEvent.DismissSetkaPlusPaymentResult -> {
+                    setkaPlusPaymentCoordinator.dismissResult()
+                }
+                HomeEvent.OpenStatusEmojiPicker -> {
+                    statusEmojiState = statusEmojiState.copy(showPicker = true)
+                    if (statusEmojiState.packs.isEmpty()) {
+                        loadStatusEmojiPacks()
+                    }
+                }
+                HomeEvent.CloseStatusEmojiPicker -> {
+                    statusEmojiState = statusEmojiState.copy(showPicker = false)
+                }
+                is HomeEvent.SelectStatusEmoji -> saveStatusEmoji(event.mxcUrl)
+                HomeEvent.ToggleSetkaLite -> coroutineState.launch {
+                    setkaLiteCoordinator.setEnabled(!setkaLiteState.isEnabled)
+                }
+                HomeEvent.OpenTransferQueue -> {
+                    showTransferQueueSheet = true
+                }
+                HomeEvent.DismissTransferQueue -> {
+                    showTransferQueueSheet = false
+                }
+                HomeEvent.ClearTransferQueueCompleted -> {
+                    setkaTransferQueue.clearCompleted()
+                }
+                HomeEvent.RefreshSetkaLiteSync -> coroutineState.launch {
+                    setkaLiteCoordinator.refreshSync()
+                }
+                HomeEvent.DismissSetkaLiteSuggestion -> coroutineState.launch {
+                    setkaLiteCoordinator.dismissLiteSuggestion()
+                }
             }
         }
 
@@ -265,6 +394,41 @@ class HomePresenter(
             }
         }
         val snackbarMessage by snackbarDispatcher.collectSnackbarMessageAsState()
+        val recentRoomIds by setkaRecentRoomsStore.recentRoomIdsFlow.collectAsState()
+        var recentRoomSummaries by remember {
+            mutableStateOf<ImmutableList<RoomListRoomSummary>>(persistentListOf())
+        }
+        LaunchedEffect(recentRoomIds, roomListState.contentState) {
+            recentRoomSummaries = recentRoomSummariesResolver.resolve(
+                recentRoomIds = recentRoomIds,
+                contentState = roomListState.contentState,
+            )
+        }
+        LaunchedEffect(roomListState.contentState, contacts) {
+            val dmUserIds = buildSet {
+                contacts.mapNotNullTo(this) { it.userId?.value }
+                val contentState = roomListState.contentState
+                if (contentState is RoomListContentState.Rooms) {
+                    contentState.summaries
+                        .filter { it.isDm }
+                        .mapNotNullTo(this) { summary -> summary.heroes.firstOrNull()?.id }
+                }
+            }
+            if (dmUserIds.isEmpty()) return@LaunchedEffect
+            coroutineState.launch(Dispatchers.IO) {
+                val updates = dmUserIds.associateWith { userId ->
+                    client.fetchSetkaStatusEmojiMxc(UserId(userId))
+                }.mapNotNull { (userId, mxc) -> mxc?.let { userId to it } }.toMap()
+                if (updates.isNotEmpty()) {
+                    withContext(Dispatchers.Main) {
+                        statusEmojiByUserId = statusEmojiByUserId.toMutableMap().apply { putAll(updates) }.toImmutableMap()
+                    }
+                }
+            }
+        }
+        val loadPublicChannelsForDiscovery = remember {
+            suspend { setkaPublicChannelsPresenter.loadPublicChannelsForDiscovery() }
+        }
         return HomeState(
             currentUserAndNeighbors = currentUserAndNeighbors,
             showAvatarIndicator = showAvatarIndicator,
@@ -277,6 +441,16 @@ class HomePresenter(
             canReportBug = canReportBug,
             directLogoutState = directLogoutState,
             setkaPlusState = setkaPlusState,
+            statusEmojiState = statusEmojiState,
+            statusEmojiByUserId = statusEmojiByUserId,
+            setkaSyncState = setkaSyncState.takeIf { setkaServerRecoveryService.isSetkaSession },
+            setkaLiteState = setkaLiteState,
+            showTransferQueueSheet = showTransferQueueSheet,
+            canCreateSetkaChannel = setkaServerRecoveryService.isSetkaSession,
+            showSetkaChannelsTab = setkaServerRecoveryService.isSetkaSession,
+            setkaPublicChannelsState = setkaPublicChannelsState.takeIf { setkaServerRecoveryService.isSetkaSession },
+            loadPublicChannelsForDiscovery = loadPublicChannelsForDiscovery,
+            recentRoomSummaries = recentRoomSummaries,
             eventSink = ::handleEvent,
         )
     }
@@ -298,68 +472,55 @@ private suspend fun fetchPresenceText(client: MatrixClient, userId: String): Str
     return "Был(-а) давно"
 }
 
-private fun setkaPlusSubscriptionPath(userId: String): String {
-    return "/_matrix/client/v3/user/${Uri.encode(userId)}/setka_plus/subscription"
+private fun SetkaPlusSubscription.toHomeState(): HomeSetkaPlusSubscription {
+    return HomeSetkaPlusSubscription(
+        tier = tier,
+        planName = planName,
+        status = status,
+        isActive = isActive,
+        expiresAt = expiresAt,
+    )
 }
 
-private fun setkaPlusPlansPath(userId: String): String {
-    return "/_matrix/client/v3/user/${Uri.encode(userId)}/setka_plus/plans"
+private fun SetkaPlusPlan.toHomeState(): HomeSetkaPlusPlan {
+    return HomeSetkaPlusPlan(
+        id = id,
+        name = name,
+        priceRub = priceRub,
+        durationDays = durationDays,
+        features = features,
+        active = active,
+        sortOrder = sortOrder,
+    )
 }
 
-private fun setkaPlusPaymentCreatePath(userId: String): String {
-    return "/_matrix/client/v3/user/${Uri.encode(userId)}/setka_plus/payments/yoomoney/create"
-}
-
-private fun parseSetkaPlusSubscription(raw: String): HomeSetkaPlusSubscription? {
-    return runCatching {
-        val json = JSONObject(raw)
-        HomeSetkaPlusSubscription(
-            tier = json.optString("tier", "setka_plus"),
-            planName = json.optString("plan_name").takeIf { it.isNotBlank() },
-            status = json.optString("status", "inactive"),
-            isActive = json.optBoolean("is_active", false),
-            expiresAt = json.optLong("expires_at", 0L),
-        )
-    }.getOrNull()
-}
-
-private fun parseSetkaPlusPlans(raw: String): List<HomeSetkaPlusPlan> {
-    return runCatching {
-        val root = JSONObject(raw)
-        val plans = root.optJSONArray("plans") ?: JSONArray()
-        buildList {
-            for (index in 0 until plans.length()) {
-                val item = plans.optJSONObject(index) ?: continue
-                val id = item.optString("id").trim()
-                val name = item.optString("name").trim()
-                val priceRub = item.optDouble("price_rub", 0.0)
-                val durationDays = item.optInt("duration_days", 0)
-                if (id.isBlank() || name.isBlank() || priceRub <= 0.0 || durationDays <= 0) continue
-                val featuresJson = item.optJSONArray("features") ?: JSONArray()
-                val features = buildList {
-                    for (featureIndex in 0 until featuresJson.length()) {
-                        val feature = featuresJson.optString(featureIndex).trim()
-                        if (feature.isNotBlank()) add(feature)
-                    }
-                }
-                add(
-                    HomeSetkaPlusPlan(
-                        id = id,
-                        name = name,
-                        priceRub = priceRub,
-                        durationDays = durationDays,
-                        features = features,
-                        active = item.optBoolean("active", true),
-                        sortOrder = item.optInt("sort_order", 0),
-                    )
-                )
-            }
-        }.sortedWith(compareBy<HomeSetkaPlusPlan> { it.sortOrder }.thenBy { it.priceRub })
-    }.getOrDefault(emptyList())
-}
-
-private fun parseCheckoutUrl(raw: String): String? {
-    return runCatching {
-        JSONObject(raw).optString("checkout_url").trim().takeIf { it.isNotBlank() }
-    }.getOrNull()
+private fun parseHomeEmojiPacks(root: JSONObject): ImmutableList<HomeEmojiPack> {
+    val packsJson = root.optJSONArray("packs")
+        ?: root.optJSONArray("sticker_packs")
+        ?: JSONArray()
+    val out = ArrayList<HomeEmojiPack>()
+    for (i in 0 until packsJson.length()) {
+        val pack = packsJson.optJSONObject(i) ?: continue
+        val kind = pack.optString("kind")
+        val isEmojiPack = kind.equals("emoji", ignoreCase = true) ||
+            pack.optString("type").equals("emoji", ignoreCase = true)
+        if (!isEmojiPack) continue
+        val id = pack.optString("id").takeIf { it.isNotBlank() } ?: continue
+        val name = pack.optString("name").takeIf { it.isNotBlank() } ?: id
+        val stickersJson = pack.optJSONArray("stickers") ?: JSONArray()
+        val stickers = ArrayList<HomeEmojiSticker>()
+        for (j in 0 until stickersJson.length()) {
+            val sticker = stickersJson.optJSONObject(j) ?: continue
+            val mxc = sticker.optString("mxc_url").takeIf { it.isNotBlank() }
+                ?: sticker.optString("mxcUrl").takeIf { it.isNotBlank() }
+                ?: continue
+            val stickerId = sticker.optString("id").takeIf { it.isNotBlank() } ?: mxc
+            val stickerName = sticker.optString("name").takeIf { it.isNotBlank() }
+            stickers.add(HomeEmojiSticker(id = stickerId, name = stickerName, mxcUrl = mxc))
+        }
+        if (stickers.isNotEmpty()) {
+            out.add(HomeEmojiPack(id = id, name = name, stickers = stickers.toImmutableList()))
+        }
+    }
+    return out.toImmutableList()
 }

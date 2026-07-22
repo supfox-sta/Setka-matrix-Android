@@ -31,7 +31,7 @@ class FakeEncryptionService(
     private val enableRecoveryLambda: (Boolean) -> Result<Unit> = { lambdaError() },
 ) : EncryptionService {
     private var disableRecoveryFailure: Exception? = null
-    override val backupStateStateFlow: MutableStateFlow<BackupState> = MutableStateFlow(BackupState.UNKNOWN)
+    override val backupStateStateFlow: MutableStateFlow<BackupState> = MutableStateFlow(BackupState.ENABLED)
     override val recoveryStateStateFlow: MutableStateFlow<RecoveryState> = MutableStateFlow(RecoveryState.UNKNOWN)
     override val enableRecoveryProgressStateFlow: MutableStateFlow<EnableRecoveryProgress> = MutableStateFlow(EnableRecoveryProgress.Starting)
     override val isLastDevice: MutableStateFlow<Boolean> = MutableStateFlow(false)
@@ -52,6 +52,7 @@ class FakeEncryptionService(
 
     override suspend fun enableBackups(): Result<Unit> = simulateLongTask {
         enableBackupsFailure?.let { return Result.failure(it) }
+        backupStateStateFlow.value = BackupState.ENABLED
         return Result.success(Unit)
     }
 
@@ -94,7 +95,11 @@ class FakeEncryptionService(
     }
 
     override suspend fun enableRecovery(waitForBackupsToUpload: Boolean): Result<Unit> = simulateLongTask {
-        return enableRecoveryLambda(waitForBackupsToUpload)
+        val result = enableRecoveryLambda(waitForBackupsToUpload)
+        if (result.isSuccess) {
+            enableRecoveryProgressStateFlow.emit(EnableRecoveryProgress.Done(FAKE_RECOVERY_KEY))
+        }
+        return result
     }
 
     fun givenWaitForBackupUploadSteadyStateFlow(flow: Flow<BackupUploadState>) {

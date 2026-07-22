@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_create_channel_title">Новый канал</string>
+    <string name="screen_create_channel_creating">Создаём канал…</string>
+    <string name="screen_create_channel_error_creating">Не удалось создать канал из‑за неизвестной ошибки. Попробуйте позже.</string>
+    <string name="screen_create_channel_add_people_title">Пригласить участников</string>
+</resources>

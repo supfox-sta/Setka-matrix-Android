@@ -834,7 +834,7 @@ class MessageComposerPresenterTest {
     }
 
     @Test
-    fun `present - selecting multiple media from legacy gallery opens preview with all attachments`() = runTest {
+    fun `present - selecting multiple photos from legacy gallery sends all without preview`() = runTest {
         val permissionPresenter = FakePermissionsPresenter().apply { setPermissionGranted() }
         val firstMediaItem = LegacyGalleryItem(
             id = 11L,
@@ -845,10 +845,10 @@ class MessageComposerPresenterTest {
         )
         val secondMediaItem = LegacyGalleryItem(
             id = 12L,
-            uri = Uri.parse("content://legacy/video/12"),
-            mimeType = MimeTypes.Videos,
-            isVideo = true,
-            durationMillis = 5_000L,
+            uri = Uri.parse("content://legacy/image/12"),
+            mimeType = MimeTypes.Images,
+            isVideo = false,
+            durationMillis = null,
         )
         val onPreviewAttachmentLambda = lambdaRecorder { _: ImmutableList<Attachment>, _: EventId? -> }
         val presenter = createPresenter(
@@ -868,10 +868,7 @@ class MessageComposerPresenterTest {
             val twoSelectedState = awaitLegacyGalleryPickerState { it.selectedCount == 2 }
             twoSelectedState.eventSink(LegacyGalleryPickerEvent.ConfirmSelection)
 
-            onPreviewAttachmentLambda.assertions().isCalledOnce().with(
-                matching<ImmutableList<Attachment>> { attachments -> attachments.size == 2 },
-                value(null),
-            )
+            onPreviewAttachmentLambda.assertions().isNotCalled()
             assertThat(awaitLegacyGalleryPickerDismissedState().legacyGalleryPickerState).isNull()
         }
     }

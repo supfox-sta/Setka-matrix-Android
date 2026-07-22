@@ -21,15 +21,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
+import io.element.android.features.preferences.impl.threepid.ThreePidMedium
+import io.element.android.features.preferences.impl.threepid.ThreePidService
 import io.element.android.libraries.androidutils.file.TemporaryUriDeleter
 import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.architecture.runCatchingUpdatingState
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.core.mimetype.MimeTypes
+import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.ui.media.AvatarAction
@@ -38,28 +44,27 @@ import io.element.android.libraries.mediaupload.api.MediaOptimizationConfigProvi
 import io.element.android.libraries.mediaupload.api.MediaPreProcessor
 import io.element.android.libraries.permissions.api.PermissionsEvent
 import io.element.android.libraries.permissions.api.PermissionsPresenter
-import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import org.json.JSONArray
 import org.json.JSONObject
 import timber.log.Timber
-import java.util.Locale
 
 @AssistedInject
 class EditUserProfilePresenter(
     @Assisted private val matrixUser: MatrixUser,
     @Assisted private val navigator: EditUserProfileNavigator,
     private val matrixClient: MatrixClient,
+    private val threePidService: ThreePidService,
     private val mediaPickerProvider: PickerProvider,
     private val mediaPreProcessor: MediaPreProcessor,
     private val temporaryUriDeleter: TemporaryUriDeleter,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
+    @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
     permissionsPresenterFactory: PermissionsPresenter.Factory,
 ) : Presenter<EditUserProfileState> {
-    private val cameraPermissionPresenter: PermissionsPresenter = permissionsPresenterFactory.create(android.Manifest.permission.CAMERA)
+    private val cameraPermissionPresenter: PermissionsPresenter =
+        permissionsPresenterFactory.create(android.Manifest.permission.CAMERA)
     private var pendingPermissionRequest = false
 
     @AssistedFactory
@@ -73,15 +78,16 @@ class EditUserProfilePresenter(
     @Composable
     override fun present(): EditUserProfileState {
         val cameraPermissionState = cameraPermissionPresenter.present()
+        val lifecycleOwner = LocalLifecycleOwner.current
         var userAvatarUri by rememberSaveable { mutableStateOf(matrixUser.avatarUrl) }
         var userDisplayName by rememberSaveable { mutableStateOf(matrixUser.displayName) }
         var bio by rememberSaveable { mutableStateOf("") }
+        var phoneNumber by remember { mutableStateOf<String?>(null) }
+        var emailAddress by remember { mutableStateOf<String?>(null) }
+        var hasVerifiedEmail by remember { mutableStateOf(false) }
+        var loadedSetkaBio by remember { mutableStateOf<String?>(null) }
         var profileColorHex by rememberSaveable { mutableStateOf("") }
-        var badgeEmojiMxcUrl by rememberSaveable { mutableStateOf<String?>(null) }
-        var statusEmojiMxcUrl by rememberSaveable { mutableStateOf<String?>(null) }
         var profileBackgroundUrl by rememberSaveable { mutableStateOf<String?>(null) }
-
-        // Keep the last server-loaded value to compute dirty state for Setka extras.
         var loadedSetkaProfile by remember { mutableStateOf<JSONObject?>(null) }
 
         val setkaProfile by produceState<JSONObject?>(initialValue = null, matrixUser.userId) {
@@ -106,28 +112,39 @@ class EditUserProfilePresenter(
             }.getOrDefault(false)
         }
 
-        val badgeEmojiPacks by produceState<ImmutableList<SetkaEmojiPack>>(initialValue = persistentListOf()) {
-            value = runCatching {
-                val encodedUser = Uri.encode(matrixUser.userId.value)
-                val raw = matrixClient.executeAuthenticatedRequest(
-                    method = "GET",
-                    path = "/_matrix/client/v3/user/$encodedUser/setka_plus/sticker_packs",
-                ).getOrThrow().decodeToString()
-                parseEmojiPacksFromStickerPacksResponse(JSONObject(raw))
-            }.getOrDefault(persistentListOf())
-        }
-
         LaunchedEffect(setkaProfile) {
             val incoming = setkaProfile ?: return@LaunchedEffect
             if (loadedSetkaProfile == null) {
                 loadedSetkaProfile = incoming
+                loadedSetkaBio = incoming.optString("bio", "")
                 bio = incoming.optString("bio", "")
                 profileColorHex = incoming.optString("color", "")
-                badgeEmojiMxcUrl = incoming.optString("badge_emoji_mxc", "").takeIf { it.isNotBlank() }
-                statusEmojiMxcUrl = incoming.optString("status_emoji_mxc", "").takeIf { it.isNotBlank() }
                 profileBackgroundUrl = incoming.optString("background_mxc", "").takeIf { it.isNotBlank() }
             }
         }
+
+        fun refreshContactInfo() {
+            sessionCoroutineScope.launch {
+                threePidService.getThreePids()
+                    .onSuccess { threePids ->
+                        phoneNumber = threePids
+                            .firstOrNull { it.medium == ThreePidMedium.Msisdn }
+                            ?.address
+                    }
+                threePidService.resolveUserEmail()
+                    .onSuccess { status ->
+                        emailAddress = status.address
+                        hasVerifiedEmail = status.isVerified
+                    }
+            }
+        }
+
+        LaunchedEffect(lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                refreshContactInfo()
+            }
+        }
+
         val cameraPhotoPicker = mediaPickerProvider.registerCameraPhotoPicker(
             onResult = { uri ->
                 if (uri != null) {
@@ -176,22 +193,14 @@ class EditUserProfilePresenter(
             userDisplayName,
             userAvatarUri,
             bio,
-            profileColorHex,
-            badgeEmojiMxcUrl,
-            statusEmojiMxcUrl,
+            loadedSetkaBio,
             profileBackgroundUrl,
             loadedSetkaProfile,
         ) {
             val hasProfileChanged = hasDisplayNameChanged(userDisplayName, matrixUser) ||
                 hasAvatarUrlChanged(userAvatarUri, matrixUser) ||
-                hasSetkaProfileChanged(
-                    loaded = loadedSetkaProfile,
-                    bio = bio,
-                    color = profileColorHex,
-                    badge = badgeEmojiMxcUrl,
-                    statusEmoji = statusEmojiMxcUrl,
-                    background = profileBackgroundUrl,
-                )
+                (loadedSetkaBio?.trim() ?: "") != bio.trim() ||
+                hasBackgroundChanged(loadedSetkaProfile, profileBackgroundUrl)
             !userDisplayName.isNullOrBlank() && hasProfileChanged
         }
 
@@ -201,12 +210,10 @@ class EditUserProfilePresenter(
                     name = userDisplayName,
                     avatarUri = userAvatarUri?.toUri(),
                     bio = bio,
-                    color = profileColorHex,
-                    badgeEmojiMxcUrl = badgeEmojiMxcUrl,
-                    statusEmojiMxcUrl = statusEmojiMxcUrl,
+                    loadedSetkaBio = loadedSetkaBio,
+                    loadedSetkaProfile = loadedSetkaProfile,
                     profileBackgroundUrl = profileBackgroundUrl,
                     currentUser = matrixUser,
-                    loadedSetkaProfile = loadedSetkaProfile,
                     action = saveAction,
                 )
                 is EditUserProfileEvent.HandleAvatarAction -> {
@@ -224,31 +231,33 @@ class EditUserProfilePresenter(
                         }
                     }
                 }
+                is EditUserProfileEvent.UpdateDisplayName -> userDisplayName = event.name
+                is EditUserProfileEvent.UpdateBio -> bio = event.bio
+                EditUserProfileEvent.OpenChangePhone -> {
+                    if (hasVerifiedEmail) {
+                        navigator.openChangePhone()
+                    } else {
+                        navigator.openChangeEmail()
+                    }
+                }
+                EditUserProfileEvent.OpenChangeEmail -> navigator.openChangeEmail()
+                EditUserProfileEvent.OpenProfileCustomization -> navigator.openProfileCustomization()
                 EditUserProfileEvent.PickProfileBackground -> {
                     if (isSetkaPlusActive) {
                         backgroundImagePicker.launch()
                     }
                 }
-                EditUserProfileEvent.RemoveProfileBackground -> {
-                    profileBackgroundUrl = null
-                }
-                is EditUserProfileEvent.UpdateDisplayName -> userDisplayName = event.name
-                is EditUserProfileEvent.UpdateBio -> bio = event.bio
-                is EditUserProfileEvent.UpdateProfileColorHex -> profileColorHex = event.color
-                is EditUserProfileEvent.SetBadgeEmoji -> badgeEmojiMxcUrl = event.mxcUrl
-                is EditUserProfileEvent.SetStatusEmoji -> statusEmojiMxcUrl = event.mxcUrl
+                EditUserProfileEvent.RemoveProfileBackground -> profileBackgroundUrl = null
+                EditUserProfileEvent.SignOut -> navigator.startSignOut()
                 EditUserProfileEvent.Exit -> {
                     when (saveAction.value) {
                         is AsyncAction.Confirming -> {
-                            // Close the dialog right now
                             saveAction.value = AsyncAction.Uninitialized
                             navigator.close()
                         }
-                        AsyncAction.Loading -> Unit
+                        AsyncAction.Loading -> navigator.close()
                         is AsyncAction.Failure,
-                        is AsyncAction.Success -> {
-                            // Should not happen
-                        }
+                        is AsyncAction.Success -> Unit
                         AsyncAction.Uninitialized -> {
                             if (canSave) {
                                 saveAction.value = AsyncAction.ConfirmingCancellation
@@ -272,11 +281,11 @@ class EditUserProfilePresenter(
             userAvatarUrl = userAvatarUri,
             bio = bio,
             profileColorHex = profileColorHex,
-            badgeEmojiMxcUrl = badgeEmojiMxcUrl,
-            statusEmojiMxcUrl = statusEmojiMxcUrl,
             profileBackgroundUrl = profileBackgroundUrl,
             isSetkaPlusActive = isSetkaPlusActive,
-            badgeEmojiPacks = badgeEmojiPacks,
+            emailAddress = emailAddress,
+            hasVerifiedEmail = hasVerifiedEmail,
+            phoneNumber = phoneNumber,
             avatarActions = avatarActions,
             saveButtonEnabled = canSave && saveAction.value !is AsyncAction.Loading,
             saveAction = saveAction.value,
@@ -295,16 +304,14 @@ class EditUserProfilePresenter(
         name: String?,
         avatarUri: Uri?,
         bio: String,
-        color: String,
-        badgeEmojiMxcUrl: String?,
-        statusEmojiMxcUrl: String?,
+        loadedSetkaBio: String?,
+        loadedSetkaProfile: JSONObject?,
         profileBackgroundUrl: String?,
         currentUser: MatrixUser,
-        loadedSetkaProfile: JSONObject?,
         action: MutableState<AsyncAction<Unit>>,
     ) = launch {
-        val results = mutableListOf<Result<Unit>>()
         suspend {
+            val results = mutableListOf<Result<Unit>>()
             if (!name.isNullOrEmpty() && name.trim() != currentUser.displayName.orEmpty().trim()) {
                 results.add(matrixClient.setDisplayName(name).onFailure {
                     Timber.e(it, "Failed to set user's display name")
@@ -315,19 +322,40 @@ class EditUserProfilePresenter(
                     Timber.e(it, "Failed to update user's avatar")
                 })
             }
-            val setkaUpdate = updateSetkaProfileIfNeeded(
-                loaded = loadedSetkaProfile,
-                bio = bio,
-                color = color,
-                badgeEmojiMxcUrl = badgeEmojiMxcUrl,
-                statusEmojiMxcUrl = statusEmojiMxcUrl,
-                backgroundMxcUrl = uploadProfileBackgroundIfNeeded(profileBackgroundUrl).getOrThrow(),
-            )
-            if (setkaUpdate != null) {
-                results.add(setkaUpdate.onFailure { Timber.e(it, "Failed to update Setka profile extras") })
+            if (loadedSetkaBio != null && loadedSetkaBio.trim() != bio.trim()) {
+                results.add(updateBio(bio).onFailure {
+                    Timber.e(it, "Failed to update bio")
+                })
+            }
+            if (hasBackgroundChanged(loadedSetkaProfile, profileBackgroundUrl)) {
+                results.add(updateProfileBackground(loadedSetkaProfile, profileBackgroundUrl).onFailure {
+                    Timber.e(it, "Failed to update profile background")
+                })
             }
             if (results.all { it.isSuccess }) Unit else results.first { it.isFailure }.getOrThrow()
         }.runCatchingUpdatingState(action)
+    }
+
+    private fun hasBackgroundChanged(loaded: JSONObject?, profileBackgroundUrl: String?): Boolean {
+        if (loaded == null) return false
+        val loadedBackground = loaded.optString("background_mxc", "").takeIf { it.isNotBlank() }
+        val normalized = profileBackgroundUrl?.trim().orEmpty()
+        return (loadedBackground?.trim() ?: "") != normalized
+    }
+
+    private suspend fun updateProfileBackground(
+        loadedSetkaProfile: JSONObject?,
+        profileBackgroundUrl: String?,
+    ): Result<Unit> {
+        if (loadedSetkaProfile == null) return Result.success(Unit)
+        val backgroundMxcUrl = uploadProfileBackgroundIfNeeded(profileBackgroundUrl).getOrThrow()
+        val body = JSONObject().put("background_mxc", backgroundMxcUrl?.trim().orEmpty())
+        val encodedUser = Uri.encode(matrixUser.userId.value)
+        return matrixClient.executeAuthenticatedRequest(
+            method = "PUT",
+            path = "/_matrix/client/v3/user/$encodedUser/setka_profile",
+            body = body.toString().encodeToByteArray(),
+        ).map { Unit }
     }
 
     private suspend fun uploadProfileBackgroundIfNeeded(profileBackgroundUrl: String?): Result<String?> {
@@ -344,73 +372,13 @@ class EditUserProfilePresenter(
         }.onFailure { Timber.e(it, "Unable to upload profile background") }
     }
 
-    private fun hasSetkaProfileChanged(
-        loaded: JSONObject?,
-        bio: String,
-        color: String,
-        badge: String?,
-        statusEmoji: String?,
-        background: String?,
-    ): Boolean {
-        if (loaded == null) return false
-        val loadedBio = loaded.optString("bio", "")
-        val loadedColor = loaded.optString("color", "")
-        val loadedBadge = loaded.optString("badge_emoji_mxc", "").takeIf { it.isNotBlank() }
-        val loadedStatusEmoji = loaded.optString("status_emoji_mxc", "").takeIf { it.isNotBlank() }
-        val loadedBackground = loaded.optString("background_mxc", "").takeIf { it.isNotBlank() }
-        return loadedBio.trim() != bio.trim() ||
-            loadedColor.trim() != color.trim() ||
-            (loadedBadge?.trim() ?: "") != (badge?.trim() ?: "") ||
-            (loadedStatusEmoji?.trim() ?: "") != (statusEmoji?.trim() ?: "") ||
-            (loadedBackground?.trim() ?: "") != (background?.trim() ?: "")
-    }
-
-    private suspend fun updateSetkaProfileIfNeeded(
-        loaded: JSONObject?,
-        bio: String,
-        color: String,
-        badgeEmojiMxcUrl: String?,
-        statusEmojiMxcUrl: String?,
-        backgroundMxcUrl: String?,
-    ): Result<Unit>? {
-        if (loaded == null) return null
-        val loadedBio = loaded.optString("bio", "")
-        val loadedColor = loaded.optString("color", "")
-        val loadedBadge = loaded.optString("badge_emoji_mxc", "").takeIf { it.isNotBlank() }
-        val loadedStatusEmoji = loaded.optString("status_emoji_mxc", "").takeIf { it.isNotBlank() }
-        val loadedBackground = loaded.optString("background_mxc", "").takeIf { it.isNotBlank() }
-        val normalizedColor = color.trim()
-        val normalizedBadge = badgeEmojiMxcUrl?.trim().orEmpty()
-        val normalizedStatusEmoji = statusEmojiMxcUrl?.trim().orEmpty()
-        val normalizedBackground = backgroundMxcUrl?.trim().orEmpty()
-        val body = JSONObject()
-        var changed = false
-        if (loadedBio.trim() != bio.trim()) {
-            body.put("bio", bio)
-            changed = true
-        }
-        if (loadedColor.trim() != normalizedColor) {
-            body.put("color", normalizedColor)
-            changed = true
-        }
-        if ((loadedBadge?.trim() ?: "") != normalizedBadge) {
-            body.put("badge_emoji_mxc", normalizedBadge)
-            changed = true
-        }
-        if ((loadedStatusEmoji?.trim() ?: "") != normalizedStatusEmoji) {
-            body.put("status_emoji_mxc", normalizedStatusEmoji)
-            changed = true
-        }
-        if ((loadedBackground?.trim() ?: "") != normalizedBackground) {
-            body.put("background_mxc", normalizedBackground)
-            changed = true
-        }
-        if (!changed) return null
+    private suspend fun updateBio(bio: String): Result<Unit> {
         val encodedUser = Uri.encode(matrixUser.userId.value)
+        val body = JSONObject().put("bio", bio).toString().encodeToByteArray()
         return matrixClient.executeAuthenticatedRequest(
             method = "PUT",
             path = "/_matrix/client/v3/user/$encodedUser/setka_profile",
-            body = body.toString().encodeToByteArray(),
+            body = body,
         ).map { Unit }
     }
 
@@ -428,47 +396,5 @@ class EditUserProfilePresenter(
                 matrixClient.removeAvatar().getOrThrow()
             }
         }.onFailure { Timber.e(it, "Unable to update avatar") }
-    }
-
-    private fun parseEmojiPacksFromStickerPacksResponse(root: JSONObject): ImmutableList<SetkaEmojiPack> {
-        val packsJson = root.optJSONArray("packs")
-            ?: root.optJSONArray("sticker_packs")
-            ?: JSONArray()
-        val out = ArrayList<SetkaEmojiPack>()
-        for (i in 0 until packsJson.length()) {
-            val pack = packsJson.optJSONObject(i) ?: continue
-            val kind = pack.optString("kind")
-            val id = pack.optString("id").takeIf { it.isNotBlank() } ?: continue
-            val name = pack.optString("name").takeIf { it.isNotBlank() } ?: id
-            val stickersJson = pack.optJSONArray("stickers") ?: JSONArray()
-            val stickers = ArrayList<SetkaEmojiSticker>()
-            for (j in 0 until stickersJson.length()) {
-                val sticker = stickersJson.optJSONObject(j) ?: continue
-                val mxc = sticker.optString("mxc_url").takeIf { it.isNotBlank() }
-                    ?: sticker.optString("mxcUrl").takeIf { it.isNotBlank() }
-                    ?: continue
-                val stickerId = sticker.optString("id").takeIf { it.isNotBlank() } ?: mxc
-                val stickerName = sticker.optString("name").takeIf { it.isNotBlank() }
-                stickers.add(SetkaEmojiSticker(id = stickerId, name = stickerName, mxcUrl = mxc))
-            }
-            val isEmojiPack = kind.lowercase(Locale.ROOT) == "emoji" ||
-                stickers.any { sticker ->
-                    val normalized = sticker.name.orEmpty()
-                    normalized.startsWith(":") && normalized.endsWith(":")
-                }
-            if (!isEmojiPack) continue
-            val icon = pack.optString("icon_mxc").takeIf { it.isNotBlank() }
-                ?: pack.optString("iconMxcUrl").takeIf { it.isNotBlank() }
-                ?: stickers.firstOrNull()?.mxcUrl
-            out.add(
-                SetkaEmojiPack(
-                    id = id,
-                    name = name,
-                    iconMxcUrl = icon,
-                    stickers = stickers.toImmutableList(),
-                )
-            )
-        }
-        return out.toImmutableList()
     }
 }

@@ -103,6 +103,7 @@ class DefaultActiveCallManager(
     private val appForegroundStateService: AppForegroundStateService,
     private val imageLoaderHolder: ImageLoaderHolder,
     private val systemClock: SystemClock,
+    private val callHistoryRecorder: CallHistoryRecorder,
 ) : ActiveCallManager {
     private val tag = "ActiveCallManager"
     private var timedOutCallJob: Job? = null
@@ -194,6 +195,10 @@ class DefaultActiveCallManager(
         if (displayMissedCallNotification) {
             displayMissedCallNotification(notificationData)
         }
+        callHistoryRecorder.recordMissedCall(
+            peerName = notificationData.senderName,
+            peerId = notificationData.senderId.value,
+        )
     }
 
     override suspend fun hangUpCall(
@@ -225,6 +230,10 @@ class DefaultActiveCallManager(
         if (currentActiveCall.callState is CallState.Ringing) {
             // Decline the call
             val notificationData = currentActiveCall.callState.notificationData
+            callHistoryRecorder.recordMissedCall(
+                peerName = notificationData.senderName,
+                peerId = notificationData.senderId.value,
+            )
             matrixClientProvider.getOrRestore(notificationData.sessionId).getOrNull()
                 ?.getRoom(notificationData.roomId)
                 ?.declineCall(notificationData.eventId)

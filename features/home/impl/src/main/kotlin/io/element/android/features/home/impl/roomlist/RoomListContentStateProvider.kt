@@ -17,6 +17,7 @@ import io.element.android.libraries.push.api.battery.BatteryOptimizationState
 import io.element.android.libraries.push.api.battery.aBatteryOptimizationState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 
 open class RoomListContentStateProvider : PreviewParameterProvider<RoomListContentState> {
@@ -46,6 +47,7 @@ internal fun aRoomsContentState(
     fullScreenIntentPermissionsState = fullScreenIntentPermissionsState,
     batteryOptimizationState = batteryOptimizationState,
     summaries = summaries,
+    displayItems = summaries.map { RoomListDisplayItem.Room(it) }.toImmutableList(),
     seenRoomInvites = seenRoomInvites.toImmutableSet(),
 )
 

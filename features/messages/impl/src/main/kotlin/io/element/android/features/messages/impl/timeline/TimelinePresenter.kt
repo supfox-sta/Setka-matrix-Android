@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
+import io.element.android.appconfig.SetkaChannelConfig
+import io.element.android.features.messages.impl.channel.filterSetkaChannelMainTimeline
 import io.element.android.features.messages.impl.MessagesNavigator
 import io.element.android.features.messages.impl.UserEventPermissions
 import io.element.android.features.messages.impl.crypto.sendfailure.resolve.ResolveVerifiedUserSendFailureEvent
@@ -133,6 +135,20 @@ class TimelinePresenter(
 
         val roomInfo by room.roomInfoFlow.collectAsState()
 
+        val isSetkaChannel by remember(roomInfo.topic, room.sessionId) {
+            derivedStateOf {
+                SetkaChannelConfig.isSetkaChannelRoom(
+                    topic = roomInfo.topic,
+                    homeserver = room.sessionId.value.substringAfter(':', ""),
+                )
+            }
+        }
+        val setkaChannelCommentsEnabled by remember(isSetkaChannel, roomInfo.roomPowerLevels) {
+            derivedStateOf {
+                isSetkaChannel && SetkaChannelConfig.subscribersCanCommentInChannel(roomInfo.roomPowerLevels)
+            }
+        }
+
         val prevMostRecentItemId = rememberSaveable { mutableStateOf<UniqueId?>(null) }
 
         val newEventState = remember { mutableStateOf(NewEventState.None) }
@@ -149,8 +165,8 @@ class TimelinePresenter(
             timelineController.isLive()
         }.collectAsState(initial = true)
 
-        val displayThreadSummaries by produceState(false) {
-            value = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
+        val displayThreadSummaries by produceState(initialValue = false, isSetkaChannel) {
+            value = featureFlagService.isFeatureEnabled(FeatureFlags.Threads) || isSetkaChannel
         }
         val initialTimelineItemCount by remember {
             appPreferencesStore.getCustomizationInitialTimelineItemCountFlow()
@@ -296,12 +312,13 @@ class TimelinePresenter(
         val userEventPermissions by room.permissionsAsState(UserEventPermissions.DEFAULT) { perms ->
             perms.userEventPermissions()
         }
-        val timelineRoomInfo by remember(typingNotificationState, roomCallState, roomInfo) {
+        val timelineRoomInfo by remember(typingNotificationState, roomCallState, roomInfo, isSetkaChannel, timelineMode, userEventPermissions) {
             derivedStateOf {
+                val canSendInChannelThread = isSetkaChannel && timelineMode is Timeline.Mode.Thread
                 TimelineRoomInfo(
                     name = roomInfo.name,
                     isDm = roomInfo.isDm,
-                    userHasPermissionToSendMessage = userEventPermissions.canSendMessage,
+                    userHasPermissionToSendMessage = userEventPermissions.canSendMessage || canSendInChannelThread,
                     userHasPermissionToSendReaction = userEventPermissions.canSendReaction,
                     roomCallState = roomCallState,
                     pinnedEventIds = roomInfo.pinnedEventIds,
@@ -315,14 +332,25 @@ class TimelinePresenter(
             Timber.tag(tag).d("Timeline: $timelineMode | focus state: ${focusRequestState.value}")
         }
 
-        val effectiveTimelineItems by remember(timelineItems, hasExpandedInitialTimelineWindow, initialTimelineItemCount) {
+        val effectiveTimelineItems by remember(
+            timelineItems,
+            hasExpandedInitialTimelineWindow,
+            initialTimelineItemCount,
+            isSetkaChannel,
+            timelineMode,
+        ) {
             derivedStateOf {
                 val clampedCount = initialTimelineItemCount.coerceAtLeast(1)
-                if (hasExpandedInitialTimelineWindow || timelineItems.size <= clampedCount) {
+                val windowed = if (hasExpandedInitialTimelineWindow || timelineItems.size <= clampedCount) {
                     timelineItems
                 } else {
                     timelineItems.take(clampedCount).toImmutableList()
                 }
+                filterSetkaChannelMainTimeline(
+                    items = windowed,
+                    isSetkaChannel = isSetkaChannel,
+                    timelineMode = timelineMode,
+                )
             }
         }
 
@@ -337,6 +365,8 @@ class TimelinePresenter(
             messageShieldDialogData = messageShieldDialogData.value,
             resolveVerifiedUserSendFailureState = resolveVerifiedUserSendFailureState,
             displayThreadSummaries = displayThreadSummaries,
+            isSetkaChannel = isSetkaChannel,
+            setkaChannelCommentsEnabled = setkaChannelCommentsEnabled,
             eventSink = ::handleEvent,
         )
     }

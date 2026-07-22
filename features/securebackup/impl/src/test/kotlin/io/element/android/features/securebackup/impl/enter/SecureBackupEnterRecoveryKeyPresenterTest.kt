@@ -19,6 +19,8 @@ import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 import io.element.android.libraries.matrix.test.AN_EXCEPTION
 import io.element.android.libraries.matrix.test.encryption.FakeEncryptionService
+import io.element.android.libraries.matrix.test.FakeMatrixClient
+import io.element.android.libraries.matrix.api.setka.SetkaPendingRecoveryKeyStore
 import io.element.android.tests.testutils.WarmUpRule
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
@@ -93,7 +95,12 @@ class SecureBackupEnterRecoveryKeyPresenterTest {
     private fun createPresenter(
         encryptionService: EncryptionService = FakeEncryptionService(),
     ) = SecureBackupEnterRecoveryKeyPresenter(
+        matrixClient = FakeMatrixClient(),
         encryptionService = encryptionService,
         recoveryKeyTools = RecoveryKeyTools(),
+        setkaPendingRecoveryKeyStore = object : SetkaPendingRecoveryKeyStore {
+            override fun set(recoveryKey: String) = Unit
+            override fun consume(): String? = null
+        },
     )
 }

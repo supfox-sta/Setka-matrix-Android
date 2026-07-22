@@ -146,8 +146,28 @@ class DefaultVideoNoteComposerPresenter(
                     state = VideoNoteState.Preview(
                         file = event.file,
                         duration = duration,
-                        isSending = false,
+                        isSending = true,
                     )
+                    sessionCoroutineScope.launch {
+                        val preview = state as? VideoNoteState.Preview ?: return@launch
+                        val mimeType = "video/mp4"
+                        val result = mediaSender.sendMedia(
+                            uri = preview.file.toUri(),
+                            mimeType = mimeType,
+                            caption = null,
+                            formattedCaption = null,
+                            inReplyToEventId = null,
+                            mediaOptimizationConfig = mediaOptimizationConfigProvider.get(),
+                        )
+                        if (result.isFailure) {
+                            Timber.e(result.exceptionOrNull(), "Failed to send video note")
+                            analyticsService.trackError(result.exceptionOrNull() ?: IllegalStateException("Failed to send video note"))
+                            showSendFailureDialog = true
+                            state = preview.copy(isSending = false)
+                        } else {
+                            resetToIdle(deleteFile = true)
+                        }
+                    }
                 }
                 VideoNoteComposerEvent.SendVideoNote -> localCoroutineScope.launch { sendVideoNote() }
                 VideoNoteComposerEvent.DeleteVideoNote -> resetToIdle(deleteFile = true)

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="room_media_playback_voice_title">Голосовое сообщение</string>
+    <string name="room_media_playback_video_note_title">Видео-кружок</string>
+</resources>

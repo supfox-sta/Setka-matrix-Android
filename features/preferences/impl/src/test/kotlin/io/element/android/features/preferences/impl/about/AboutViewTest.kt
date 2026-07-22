@@ -14,10 +14,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.tests.testutils.EnsureNeverCalled
-import io.element.android.tests.testutils.EnsureNeverCalledWithParam
 import io.element.android.tests.testutils.clickOn
 import io.element.android.tests.testutils.ensureCalledOnce
-import io.element.android.tests.testutils.ensureCalledOnceWithParam
 import io.element.android.tests.testutils.pressBack
 import org.junit.Rule
 import org.junit.Test
@@ -40,14 +38,13 @@ class AboutViewTest {
     }
 
     @Test
-    fun `clicking on an item invokes the expected callback`() {
-        val state = anAboutState()
-        ensureCalledOnceWithParam(state.elementLegals.first()) { callback ->
+    fun `clicking on documents invokes the expected callback`() {
+        ensureCalledOnce { callback ->
             rule.setAboutView(
-                state,
-                onElementLegalClick = callback,
+                anAboutState(),
+                onDocumentsClick = callback,
             )
-            rule.clickOn(state.elementLegals.first().titleRes)
+            rule.clickOn(R.string.screen_about_setka_documents)
         }
     }
 
@@ -65,14 +62,14 @@ class AboutViewTest {
 
 private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setAboutView(
     state: AboutState,
-    onElementLegalClick: (ElementLegal) -> Unit = EnsureNeverCalledWithParam(),
+    onDocumentsClick: () -> Unit = EnsureNeverCalled(),
     onOpenSourceLicensesClick: () -> Unit = EnsureNeverCalled(),
     onBackClick: () -> Unit = EnsureNeverCalled(),
 ) {
     setContent {
         AboutView(
             state = state,
-            onElementLegalClick = onElementLegalClick,
+            onDocumentsClick = onDocumentsClick,
             onOpenSourceLicensesClick = onOpenSourceLicensesClick,
             onBackClick = onBackClick,
         )

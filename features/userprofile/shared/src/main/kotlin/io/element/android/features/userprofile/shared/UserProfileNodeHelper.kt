@@ -9,13 +9,13 @@
 package io.element.android.features.userprofile.shared
 
 import android.content.Context
-import io.element.android.libraries.androidutils.R
-import io.element.android.libraries.androidutils.system.openUrlInExternalApp
+import io.element.android.libraries.androidutils.system.startSharePlainTextIntent
 import io.element.android.libraries.architecture.NodeInputs
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
 import io.element.android.libraries.matrix.api.user.MatrixUser
+import io.element.android.libraries.androidutils.R
 
 class UserProfileNodeHelper(
     private val userId: UserId,
@@ -31,11 +31,20 @@ class UserProfileNodeHelper(
 
     fun onShareUser(
         context: Context,
-        _permalinkBuilder: PermalinkBuilder,
+        permalinkBuilder: PermalinkBuilder,
     ) {
-        context.openUrlInExternalApp(
-            url = "https://setka-matrix.ru",
-            errorMessage = context.getString(R.string.error_no_compatible_app_found),
+        val permalink = permalinkBuilder.permalinkForUser(userId).getOrNull()
+        val shareText = if (permalink != null) {
+            "Мой профиль в Сетке Matrix:\n$permalink"
+        } else {
+            "Сетка Matrix"
+        }
+        context.startSharePlainTextIntent(
+            activityResultLauncher = null,
+            chooserTitle = "Поделиться профилем",
+            text = shareText,
+            subject = "Профиль в Сетке Matrix",
+            noActivityFoundMessage = context.getString(R.string.error_no_compatible_app_found),
         )
     }
 }

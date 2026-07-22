@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_home_create_actions_title">Create</string>
+    <string name="screen_home_create_chat">New chat</string>
+    <string name="screen_home_create_channel">Create channel</string>
+</resources>

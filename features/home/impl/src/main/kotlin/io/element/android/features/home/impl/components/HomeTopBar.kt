@@ -16,11 +16,12 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.TopAppBarDefaults
@@ -46,6 +47,7 @@ import io.element.android.appconfig.RoomListConfig
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.home.impl.HomeNavigationBarItem
+import io.element.android.features.home.impl.HomeStatusEmojiState
 import io.element.android.features.home.impl.R
 import io.element.android.features.home.impl.filters.RoomListFiltersState
 import io.element.android.features.home.impl.filters.RoomListFiltersView
@@ -71,6 +73,9 @@ import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
+import io.element.android.libraries.setkalite.api.SetkaLiteState
+import io.element.android.libraries.setkalite.api.activeCount
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.ui.components.aMatrixUserList
 import io.element.android.libraries.matrix.ui.model.getAvatarData
@@ -94,11 +99,15 @@ fun HomeTopBar(
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     onOpenMyProfile: () -> Unit,
     onOpenSetkaPlus: () -> Unit,
+    onOpenContacts: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onLogout: () -> Unit,
     onAccountSwitch: (SessionId) -> Unit,
     onCreateSpace: () -> Unit,
-    onToggleTheme: () -> Unit,
+    statusEmojiState: HomeStatusEmojiState,
+    onOpenStatusEmojiPicker: () -> Unit,
+    onCloseStatusEmojiPicker: () -> Unit,
+    onSelectStatusEmoji: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior,
     canCreateSpaces: Boolean,
     canReportBug: Boolean,
@@ -107,6 +116,10 @@ fun HomeTopBar(
     spaceFiltersState: SpaceFiltersState,
     hasNetworkConnection: Boolean = true,
     isUpdating: Boolean = false,
+    setkaSyncState: SetkaServerRecoverySyncState? = null,
+    setkaLiteState: SetkaLiteState = SetkaLiteState(),
+    onOpenTransferQueue: () -> Unit = {},
+    onToggleSetkaLite: () -> Unit = {},
     searchEntryBackgroundColor: Color = ElementTheme.colors.bgCanvasDefault,
     modifier: Modifier = Modifier,
 ) {
@@ -126,6 +139,7 @@ fun HomeTopBar(
         }
         HomeNavigationBarItem.Spaces -> stringResource(selectedNavigationItem.labelRes)
         HomeNavigationBarItem.Contacts -> stringResource(selectedNavigationItem.labelRes)
+        HomeNavigationBarItem.Channels -> stringResource(selectedNavigationItem.labelRes)
     }
     var showAppName by remember(tabTitle) { mutableStateOf(false) }
     LaunchedEffect(tabTitle) {
@@ -133,14 +147,32 @@ fun HomeTopBar(
         kotlinx.coroutines.delay(3000)
         showAppName = true
     }
-    LaunchedEffect(hasNetworkConnection, isUpdating) {
-        if (!hasNetworkConnection || isUpdating) {
+    LaunchedEffect(hasNetworkConnection, isUpdating, setkaSyncState, setkaLiteState.syncProgress.isActive) {
+        if (!hasNetworkConnection || isUpdating || setkaSyncState?.showsInHeader() == true ||
+            setkaLiteState.syncProgress.isActive
+        ) {
             showAppName = false
         }
+    }
+    val setkaHeaderTitle = setkaSyncState?.headerTitleRes()?.let { stringResource(it) }
+    val setkaLiteSyncTitle = if (
+        setkaLiteState.isEnabled &&
+        setkaLiteState.syncProgress.isActive &&
+        selectedNavigationItem == HomeNavigationBarItem.Chats &&
+        spaceFiltersState !is SpaceFiltersState.Selected
+    ) {
+        stringResource(
+            R.string.screen_home_setka_lite_syncing,
+            setkaLiteState.syncProgress.percent,
+        )
+    } else {
+        null
     }
     val displayedTitle = when {
         !hasNetworkConnection -> stringResource(CommonStrings.common_offline)
         isUpdating -> stringResource(CommonStrings.common_syncing)
+        setkaHeaderTitle != null && selectedNavigationItem == HomeNavigationBarItem.Chats -> setkaHeaderTitle
+        setkaLiteSyncTitle != null -> setkaLiteSyncTitle
         showAppName -> "\u0421\u0435\u0442\u043a\u0430 Matrix"
         else -> tabTitle
     }
@@ -184,15 +216,23 @@ fun HomeTopBar(
                     onAccountSwitch = onAccountSwitch,
                     onOpenMyProfile = onOpenMyProfile,
                     onOpenSetkaPlus = onOpenSetkaPlus,
+                    onOpenContacts = onOpenContacts,
                     onOpenSettings = onOpenSettings,
                     onLogout = onLogout,
+                    setkaLiteState = setkaLiteState,
+                    onToggleSetkaLite = onToggleSetkaLite,
                 )
             },
             actions = {
                 when (selectedNavigationItem) {
                     HomeNavigationBarItem.Chats -> RoomListMenuItems(
                         onToggleSearch = onToggleSearch,
-                        onToggleTheme = onToggleTheme,
+                        setkaLiteState = setkaLiteState,
+                        onOpenTransferQueue = onOpenTransferQueue,
+                        statusEmojiState = statusEmojiState,
+                        onOpenStatusEmojiPicker = onOpenStatusEmojiPicker,
+                        onCloseStatusEmojiPicker = onCloseStatusEmojiPicker,
+                        onSelectStatusEmoji = onSelectStatusEmoji,
                         onMenuActionClick = onMenuActionClick,
                         canReportBug = canReportBug,
                     )
@@ -201,6 +241,7 @@ fun HomeTopBar(
                         onCreateSpace = onCreateSpace
                     )
                     HomeNavigationBarItem.Contacts -> Unit
+                    HomeNavigationBarItem.Channels -> Unit
                 }
             },
             // We want a 16dp left padding for the navigationIcon :
@@ -261,16 +302,38 @@ private fun SearchEntryRow(
 @Composable
 private fun RoomListMenuItems(
     onToggleSearch: () -> Unit,
-    onToggleTheme: () -> Unit,
+    setkaLiteState: SetkaLiteState,
+    onOpenTransferQueue: () -> Unit,
+    statusEmojiState: HomeStatusEmojiState,
+    onOpenStatusEmojiPicker: () -> Unit,
+    onCloseStatusEmojiPicker: () -> Unit,
+    onSelectStatusEmoji: (String?) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     canReportBug: Boolean,
 ) {
-    IconButton(onClick = onToggleTheme) {
-        Icon(
-            imageVector = CompoundIcons.Settings(),
-            contentDescription = stringResource(CommonStrings.common_settings),
-        )
+    if (setkaLiteState.isAvailable) {
+        Box {
+            IconButton(onClick = onOpenTransferQueue) {
+                Icon(
+                    imageVector = CompoundIcons.Download(),
+                    contentDescription = stringResource(R.string.screen_home_setka_lite_transfer_queue),
+                )
+            }
+            if (setkaLiteState.transferQueue.activeCount() > 0) {
+                RedIndicatorAtom(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 10.dp, end = 10.dp),
+                )
+            }
+        }
     }
+    HomeStatusEmojiButton(
+        state = statusEmojiState,
+        onOpenPicker = onOpenStatusEmojiPicker,
+        onDismissPicker = onCloseStatusEmojiPicker,
+        onSelectEmoji = onSelectStatusEmoji,
+    )
     IconButton(
         onClick = onToggleSearch,
     ) {
@@ -383,8 +446,11 @@ private fun NavigationIcon(
     onAccountSwitch: (SessionId) -> Unit,
     onOpenMyProfile: () -> Unit,
     onOpenSetkaPlus: () -> Unit,
+    onOpenContacts: () -> Unit,
     onOpenSettings: () -> Unit,
     onLogout: () -> Unit,
+    setkaLiteState: SetkaLiteState,
+    onToggleSetkaLite: () -> Unit,
 ) {
     if (currentUserAndNeighbors.size == 1) {
         AccountIcon(
@@ -393,8 +459,11 @@ private fun NavigationIcon(
             showAvatarIndicator = showAvatarIndicator,
             onOpenMyProfile = onOpenMyProfile,
             onOpenSetkaPlus = onOpenSetkaPlus,
+            onOpenContacts = onOpenContacts,
             onOpenSettings = onOpenSettings,
             onLogout = onLogout,
+            setkaLiteState = setkaLiteState,
+            onToggleSetkaLite = onToggleSetkaLite,
         )
     } else {
         // Render a vertical pager
@@ -424,6 +493,11 @@ private fun NavigationIcon(
                 } else {
                     {}
                 },
+                onOpenContacts = if (page == 1) {
+                    onOpenContacts
+                } else {
+                    {}
+                },
                 onOpenSettings = if (page == 1) {
                     onOpenSettings
                 } else {
@@ -433,6 +507,10 @@ private fun NavigationIcon(
                     onLogout
                 } else {
                     {}
+                },
+                setkaLiteState = if (page == 1) setkaLiteState else SetkaLiteState(),
+                onToggleSetkaLite = {
+                    if (page == 1) onToggleSetkaLite()
                 },
             )
         }
@@ -446,8 +524,11 @@ private fun AccountIcon(
     showAvatarIndicator: Boolean,
     onOpenMyProfile: () -> Unit,
     onOpenSetkaPlus: () -> Unit,
+    onOpenContacts: () -> Unit,
     onOpenSettings: () -> Unit,
     onLogout: () -> Unit,
+    setkaLiteState: SetkaLiteState,
+    onToggleSetkaLite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -492,6 +573,19 @@ private fun AccountIcon(
             },
         )
         DropdownMenuItem(
+            text = { Text(stringResource(R.string.screen_home_menu_contacts)) },
+            onClick = {
+                showMenu = false
+                onOpenContacts()
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = CompoundIcons.UserProfile(),
+                    contentDescription = null,
+                )
+            },
+        )
+        DropdownMenuItem(
             text = { Text(stringResource(R.string.screen_home_menu_setka_plus)) },
             onClick = {
                 showMenu = false
@@ -504,6 +598,31 @@ private fun AccountIcon(
                 )
             },
         )
+        if (isCurrentAccount && setkaLiteState.isAvailable) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        stringResource(
+                            if (setkaLiteState.isEnabled) {
+                                R.string.screen_home_menu_setka_lite_on
+                            } else {
+                                R.string.screen_home_menu_setka_lite_off
+                            }
+                        )
+                    )
+                },
+                onClick = {
+                    showMenu = false
+                    onToggleSetkaLite()
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = CompoundIcons.Mobile(),
+                        contentDescription = null,
+                    )
+                },
+            )
+        }
         DropdownMenuItem(
             text = { Text(stringResource(R.string.screen_home_menu_settings)) },
             onClick = {
@@ -533,6 +652,26 @@ private fun AccountIcon(
     }
 }
 
+private fun SetkaServerRecoverySyncState.showsInHeader(): Boolean = when (this) {
+    SetkaServerRecoverySyncState.Checking,
+    SetkaServerRecoverySyncState.Uploading,
+    SetkaServerRecoverySyncState.ServerBackupMissing,
+    SetkaServerRecoverySyncState.Error -> true
+    SetkaServerRecoverySyncState.Synced,
+    SetkaServerRecoverySyncState.Unknown,
+    SetkaServerRecoverySyncState.LoginNotVerified -> false
+}
+
+private fun SetkaServerRecoverySyncState.headerTitleRes(): Int? = when (this) {
+    SetkaServerRecoverySyncState.Checking -> R.string.home_setka_sync_checking
+    SetkaServerRecoverySyncState.Uploading -> R.string.home_setka_sync_uploading
+    SetkaServerRecoverySyncState.ServerBackupMissing -> R.string.home_setka_sync_backup_missing
+    SetkaServerRecoverySyncState.Error -> R.string.home_setka_sync_error
+    SetkaServerRecoverySyncState.Synced,
+    SetkaServerRecoverySyncState.Unknown,
+    SetkaServerRecoverySyncState.LoginNotVerified -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @PreviewsDayNight
 @Composable
@@ -550,7 +689,10 @@ internal fun HomeTopBarPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
-        onToggleTheme = {},
+        statusEmojiState = HomeStatusEmojiState(),
+        onOpenStatusEmojiPicker = {},
+        onCloseStatusEmojiPicker = {},
+        onSelectStatusEmoji = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -577,7 +719,10 @@ internal fun HomeTopBarSpaceFiltersSelectedPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
-        onToggleTheme = {},
+        statusEmojiState = HomeStatusEmojiState(),
+        onOpenStatusEmojiPicker = {},
+        onCloseStatusEmojiPicker = {},
+        onSelectStatusEmoji = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -604,7 +749,10 @@ internal fun HomeTopBarSpacesPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
-        onToggleTheme = {},
+        statusEmojiState = HomeStatusEmojiState(),
+        onOpenStatusEmojiPicker = {},
+        onCloseStatusEmojiPicker = {},
+        onSelectStatusEmoji = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = false,
@@ -631,7 +779,10 @@ internal fun HomeTopBarWithIndicatorPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
-        onToggleTheme = {},
+        statusEmojiState = HomeStatusEmojiState(),
+        onOpenStatusEmojiPicker = {},
+        onCloseStatusEmojiPicker = {},
+        onSelectStatusEmoji = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,
@@ -658,7 +809,10 @@ internal fun HomeTopBarMultiAccountPreview() = ElementPreview {
         onAccountSwitch = {},
         onToggleSearch = {},
         onCreateSpace = {},
-        onToggleTheme = {},
+        statusEmojiState = HomeStatusEmojiState(),
+        onOpenStatusEmojiPicker = {},
+        onCloseStatusEmojiPicker = {},
+        onSelectStatusEmoji = {},
         canCreateSpaces = true,
         canReportBug = true,
         displayFilters = true,

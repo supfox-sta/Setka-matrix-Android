@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_about_title">О канале</string>
+    <string name="screen_setka_channel_about_description">Описание</string>
+    <string name="screen_setka_channel_about_empty">Описание пока не добавлено.</string>
+    <string name="screen_setka_channel_about_add_description">Добавить описание</string>
+    <plurals name="screen_setka_channel_about_subscribers">
+        <item quantity="one">%1$d подписчик</item>
+        <item quantity="few">%1$d подписчика</item>
+        <item quantity="many">%1$d подписчиков</item>
+        <item quantity="other">%1$d подписчиков</item>
+    </plurals>
+    <string name="screen_setka_channel_topic_label">Описание</string>
+    <string name="screen_setka_channel_topic_placeholder">О чём этот канал?</string>
+</resources>

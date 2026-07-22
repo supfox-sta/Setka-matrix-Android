@@ -18,4 +18,14 @@ sealed interface HomeEvent {
     data object RefreshSetkaPlus : HomeEvent
     data class BuySetkaPlusPlan(val planId: String) : HomeEvent
     data object ClearSetkaPlusError : HomeEvent
+    data object DismissSetkaPlusPaymentResult : HomeEvent
+    data object OpenStatusEmojiPicker : HomeEvent
+    data object CloseStatusEmojiPicker : HomeEvent
+    data class SelectStatusEmoji(val mxcUrl: String?) : HomeEvent
+    data object ToggleSetkaLite : HomeEvent
+    data object OpenTransferQueue : HomeEvent
+    data object DismissTransferQueue : HomeEvent
+    data object ClearTransferQueueCompleted : HomeEvent
+    data object RefreshSetkaLiteSync : HomeEvent
+    data object DismissSetkaLiteSuggestion : HomeEvent
 }

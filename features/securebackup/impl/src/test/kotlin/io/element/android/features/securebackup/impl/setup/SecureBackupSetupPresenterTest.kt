@@ -50,7 +50,9 @@ class SecureBackupSetupPresenterTest {
 
     @Test
     fun `present - create recovery key and save it`() = runTest {
-        val encryptionService = FakeEncryptionService()
+        val encryptionService = FakeEncryptionService(
+            enableRecoveryLambda = { Result.success(Unit) },
+        )
         val presenter = createSecureBackupSetupPresenter(
             encryptionService = encryptionService
         )
@@ -69,13 +71,12 @@ class SecureBackupSetupPresenterTest {
                     inProgress = true,
                 )
             )
-            encryptionService.emitEnableRecoveryProgress(EnableRecoveryProgress.Done(A_RECOVERY_KEY))
             val createdState = awaitItem()
-            assertThat(createdState.setupState).isEqualTo(SetupState.Created(A_RECOVERY_KEY))
+            assertThat(createdState.setupState).isEqualTo(SetupState.Created(FakeEncryptionService.FAKE_RECOVERY_KEY))
             assertThat(createdState.recoveryKeyViewState).isEqualTo(
                 RecoveryKeyViewState(
                     recoveryKeyUserStory = RecoveryKeyUserStory.Setup,
-                    formattedRecoveryKey = A_RECOVERY_KEY,
+                    formattedRecoveryKey = FakeEncryptionService.FAKE_RECOVERY_KEY,
                     displayTextFieldContents = true,
                     inProgress = false,
                 )

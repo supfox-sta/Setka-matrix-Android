@@ -109,6 +109,7 @@ class RoomListSearchPresenterTest {
             )
             awaitItem().let { state ->
                 assertThat(state.results).hasSize(1)
+                assertThat(state.results.first()).isInstanceOf(RoomListSearchResultItem.Room::class.java)
             }
             roomList.summaries.emit(emptyList())
             awaitItem().let { state ->
@@ -150,6 +151,7 @@ fun TestScope.createRoomListSearchPresenter(
             override fun create(coroutineScope: CoroutineScope): RoomListSearchDataSource {
                 return RoomListSearchDataSource(
                     roomListService = roomListService,
+                    matrixClient = io.element.android.libraries.matrix.test.FakeMatrixClient(),
                     roomSummaryFactory = aRoomListRoomSummaryFactory(
                         dateFormatter = FakeDateFormatter(),
                         roomLatestEventFormatter = FakeRoomLatestEventFormatter(),

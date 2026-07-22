@@ -119,7 +119,7 @@ class RustMatrixAuthenticationService(
         withContext(coroutineDispatchers.io) {
             val emptySessionPath = rotateSessionPath()
             runCatchingExceptions {
-                val client = makeClient(sessionPaths = emptySessionPath) {
+                val client = makeClient(sessionPaths = emptySessionPath, homeserverUrl = homeserver) {
                     serverNameOrHomeserverUrl(homeserver)
                 }
 
@@ -344,7 +344,8 @@ class RustMatrixAuthenticationService(
 
     private suspend fun makeClient(
         sessionPaths: SessionPaths,
-        config: suspend ClientBuilder.() -> ClientBuilder,
+        homeserverUrl: String? = null,
+        config: suspend ClientBuilder.() -> ClientBuilder = { this },
     ): Client {
         Timber.d("Creating client with simplified sliding sync")
         return rustMatrixClientFactory
@@ -352,6 +353,7 @@ class RustMatrixAuthenticationService(
                 sessionPaths = sessionPaths,
                 passphrase = pendingPassphrase,
                 slidingSyncType = ClientBuilderSlidingSync.Discovered,
+                homeserverUrl = homeserverUrl,
             )
             .config()
             .build()
@@ -367,6 +369,7 @@ class RustMatrixAuthenticationService(
                 sessionPaths = sessionPaths,
                 passphrase = pendingPassphrase,
                 slidingSyncType = ClientBuilderSlidingSync.Discovered,
+                matrixServerName = qrCodeData.serverName(),
             )
             .serverNameOrHomeserverUrl(qrCodeData.serverName()!!)
             .build()

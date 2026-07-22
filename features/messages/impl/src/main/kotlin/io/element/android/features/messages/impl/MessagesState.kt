@@ -14,6 +14,7 @@ import io.element.android.features.messages.impl.actionlist.ActionListState
 import io.element.android.features.messages.impl.crypto.identity.IdentityChangeState
 import io.element.android.features.messages.impl.link.LinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.timeline.TimelineState
 import io.element.android.features.messages.impl.timeline.components.customreaction.CustomReactionState
@@ -55,9 +56,18 @@ data class MessagesState(
     val appName: String,
     val roomWallpaperStyle: String?,
     val pinnedMessagesBannerState: PinnedMessagesBannerState,
+    val roomMediaPlaybackCoordinator: RoomMediaPlaybackCoordinator,
     val dmUserVerificationState: IdentityState?,
-    /** "В сети" / "Был(-а) недавно" for DMs (best-effort). */
-    val dmUserPresenceText: String?,
+    /** "В сети" / subscribers / "печатает…" under the room title in the top bar. */
+    val roomHeaderSubtitle: String?,
+    val dmUserStatusEmojiMxc: String?,
+    val isSetkaChannel: Boolean = false,
+    /** Main feed composer: admins / moderators / owners only (subscribers use comment threads). */
+    val canPostToSetkaChannelFeed: Boolean = false,
+    val isSetkaChannelJoined: Boolean = true,
+    val channelNotificationsMuted: Boolean = false,
+    val channelNotificationToggleInProgress: Boolean = false,
+    val channelJoinInProgress: Boolean = false,
     val roomMemberModerationState: RoomMemberModerationState,
     /** Type of "shared history" icon to show in the top bar. */
     val topBarSharedHistoryIcon: SharedHistoryIcon,

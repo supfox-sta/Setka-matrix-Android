@@ -16,6 +16,12 @@ import kotlinx.coroutines.flow.StateFlow
 interface FtueService {
     /** The current state of the FTUE. */
     val state: StateFlow<FtueState>
+
+    /**
+     * Skip the session verification onboarding step.
+     * Used when identity was already confirmed elsewhere (e.g. Setka login verification).
+     */
+    suspend fun skipSessionVerificationForOnboarding()
 }
 
 /** The state of the FTUE. */

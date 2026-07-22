@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_comments">Comments</string>
+    <string name="screen_setka_channel_join">Join channel</string>
+    <string name="screen_setka_channel_enable_notifications">Turn on notifications</string>
+    <string name="screen_setka_channel_disable_notifications">Turn off notifications</string>
+    <plurals name="screen_setka_channel_subscribers">
+        <item quantity="one">%1$d subscriber</item>
+        <item quantity="other">%1$d subscribers</item>
+    </plurals>
+</resources>

@@ -13,17 +13,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import dev.zacsweers.metro.Inject
 import im.vector.app.features.analytics.plan.SuperProperties
 import io.element.android.features.rageshake.api.crash.CrashDetectionState
 import io.element.android.features.rageshake.api.detection.RageshakeDetectionState
 import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.matrix.api.SdkMetadata
+import io.element.android.libraries.preferences.api.store.AppPreferencesStore
 import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.apperror.api.AppErrorStateService
+import kotlinx.coroutines.launch
 
 @Inject
 class RootPresenter(
@@ -32,13 +32,17 @@ class RootPresenter(
     private val appErrorStateService: AppErrorStateService,
     private val analyticsService: AnalyticsService,
     private val sdkMetadata: SdkMetadata,
+    private val appPreferencesStore: AppPreferencesStore,
 ) : Presenter<RootState> {
     @Composable
     override fun present(): RootState {
         val rageshakeDetectionState = rageshakeDetectionPresenter.present()
         val crashDetectionState = crashDetectionPresenter.present()
         val appErrorState by appErrorStateService.appErrorStateFlow.collectAsState()
-        var hasDismissedLegacyAndroidCompatibilityWarning by rememberSaveable { mutableStateOf(false) }
+        val hideLegacyWarning by appPreferencesStore
+            .getHideLegacyAndroidCompatibilityWarningFlow()
+            .collectAsState(initial = false)
+        val coroutineScope = rememberCoroutineScope()
 
         LaunchedEffect(Unit) {
             analyticsService.updateSuperProperties(
@@ -55,9 +59,13 @@ class RootPresenter(
             crashDetectionState = crashDetectionState,
             errorState = appErrorState,
             showLegacyAndroidCompatibilityWarning = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
-                !hasDismissedLegacyAndroidCompatibilityWarning,
-            dismissLegacyAndroidCompatibilityWarning = {
-                hasDismissedLegacyAndroidCompatibilityWarning = true
+                !hideLegacyWarning,
+            dismissLegacyAndroidCompatibilityWarning = { doNotShowAgain ->
+                coroutineScope.launch {
+                    if (doNotShowAgain) {
+                        appPreferencesStore.setHideLegacyAndroidCompatibilityWarning(true)
+                    }
+                }
             },
         )
     }

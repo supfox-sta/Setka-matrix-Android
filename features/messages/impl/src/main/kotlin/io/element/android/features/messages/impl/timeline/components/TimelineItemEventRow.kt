@@ -57,6 +57,8 @@ import androidx.constraintlayout.compose.ConstrainScope
 import androidx.constraintlayout.compose.ConstraintLayout
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.messages.impl.channel.SetkaChannelCommentsRow
+import io.element.android.features.messages.impl.channel.SetkaChannelVideoNoteDiscussionBadge
 import io.element.android.features.messages.impl.timeline.TimelineEvent
 import io.element.android.features.messages.impl.timeline.TimelineRoomInfo
 import io.element.android.features.messages.impl.timeline.aTimelineItemEvent
@@ -143,6 +145,8 @@ fun TimelineItemEventRow(
     renderReadReceipts: Boolean,
     isLastOutgoingMessage: Boolean,
     displayThreadSummaries: Boolean,
+    isSetkaChannel: Boolean = false,
+    setkaChannelCommentsEnabled: Boolean = true,
     onEventClick: () -> Unit,
     onLongClick: () -> Unit,
     onLinkClick: (Link) -> Unit,
@@ -159,7 +163,8 @@ fun TimelineItemEventRow(
     eventContentView: @Composable (Modifier, (ContentAvoidingLayoutData) -> Unit) -> Unit = { contentModifier, onContentLayoutChange ->
         // Only pass down a custom clickable lambda if the content can be clicked separately
         val isVideoNoteEvent = (event.content as? TimelineItemVideoContent)?.isVideoNote == true
-        val onContentClick = if (isVideoNoteEvent) onEventClick else onEventClick.takeUnless { event.isWholeContentClickable }
+        // Video notes play inline in the timeline; never open the full-screen media viewer.
+        val onContentClick = if (isVideoNoteEvent) null else onEventClick.takeUnless { event.isWholeContentClickable }
 
         TimelineItemEventContentView(
             content = event.content,
@@ -170,6 +175,8 @@ fun TimelineItemEventRow(
             onLinkClick = onLinkClick,
             onLinkLongClick = onLinkLongClick,
             eventSink = eventSink,
+            localSendState = event.localSendState,
+            eventId = event.eventId,
             modifier = contentModifier,
             onContentLayoutChange = onContentLayoutChange
         )
@@ -221,6 +228,8 @@ fun TimelineItemEventRow(
                         timelineMode = timelineMode,
                         timelineProtectionState = timelineProtectionState,
                         timelineRoomInfo = timelineRoomInfo,
+                        isSetkaChannel = isSetkaChannel,
+                        setkaChannelCommentsEnabled = setkaChannelCommentsEnabled,
                         interactionSource = interactionSource,
                         onContentClick = onContentClick,
                         onLongClick = onLongClick,
@@ -255,6 +264,8 @@ fun TimelineItemEventRow(
                 timelineMode = timelineMode,
                 timelineProtectionState = timelineProtectionState,
                 timelineRoomInfo = timelineRoomInfo,
+                isSetkaChannel = isSetkaChannel,
+                setkaChannelCommentsEnabled = setkaChannelCommentsEnabled,
                 interactionSource = interactionSource,
                 onContentClick = onContentClick,
                 onLongClick = onLongClick,
@@ -268,22 +279,42 @@ fun TimelineItemEventRow(
             )
         }
 
-        if (displayThreadSummaries && timelineMode !is Timeline.Mode.Thread && event.threadInfo is TimelineItemThreadInfo.ThreadRoot) {
-            ThreadSummaryView(
+        val openDiscussion: () -> Unit = {
+            event.eventId?.let { eventSink(TimelineEvent.OpenThread(it.toThreadId(), null)) }
+        }
+        val showChannelComments = isSetkaChannel &&
+            setkaChannelCommentsEnabled &&
+            timelineMode !is Timeline.Mode.Thread &&
+            event.threadInfo !is TimelineItemThreadInfo.ThreadResponse
+        val isVideoNotePost = (event.content as? TimelineItemVideoContent)?.isVideoNote == true
+
+        if (showChannelComments && !isVideoNotePost) {
+            val replyCount = (event.threadInfo as? TimelineItemThreadInfo.ThreadRoot)?.summary?.numberOfReplies ?: 0L
+            SetkaChannelCommentsRow(
                 modifier = if (event.isMine) {
                     Modifier.align(Alignment.End).padding(end = 16.dp)
                 } else {
                     if (timelineRoomInfo.isDm) Modifier else Modifier.padding(start = 16.dp)
                 }.padding(top = 2.dp),
-                threadSummary = event.threadInfo.summary,
-                latestEventText = event.threadInfo.latestEventText,
+                replyCount = replyCount,
                 isOutgoing = event.isMine,
-                onClick = {
-                    event.eventId?.let {
-                        eventSink(TimelineEvent.OpenThread(it.toThreadId(), null))
-                    }
-                }
+                onClick = openDiscussion,
             )
+        } else if (displayThreadSummaries && timelineMode !is Timeline.Mode.Thread) {
+            val threadRoot = event.threadInfo as? TimelineItemThreadInfo.ThreadRoot
+            if (threadRoot != null) {
+                ThreadSummaryView(
+                    modifier = if (event.isMine) {
+                        Modifier.align(Alignment.End).padding(end = 16.dp)
+                    } else {
+                        if (timelineRoomInfo.isDm) Modifier else Modifier.padding(start = 16.dp)
+                    }.padding(top = 2.dp),
+                    threadSummary = threadRoot.summary,
+                    latestEventText = threadRoot.latestEventText,
+                    isOutgoing = event.isMine,
+                    onClick = openDiscussion,
+                )
+            }
         }
 
         // Read receipts / Send state
@@ -405,6 +436,8 @@ private fun TimelineItemEventRowContent(
     timelineMode: Timeline.Mode,
     timelineProtectionState: TimelineProtectionState,
     timelineRoomInfo: TimelineRoomInfo,
+    isSetkaChannel: Boolean,
+    setkaChannelCommentsEnabled: Boolean,
     interactionSource: MutableInteractionSource,
     onContentClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -485,6 +518,20 @@ private fun TimelineItemEventRowContent(
                     eventSink = eventSink,
                     eventContentView = eventContentView,
                 )
+                if (isSetkaChannel &&
+                    setkaChannelCommentsEnabled &&
+                    timelineMode !is Timeline.Mode.Thread &&
+                    event.threadInfo !is TimelineItemThreadInfo.ThreadResponse
+                ) {
+                    SetkaChannelVideoNoteDiscussionBadge(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp),
+                        onClick = {
+                            event.eventId?.let { eventSink(TimelineEvent.OpenThread(it.toThreadId(), null)) }
+                        },
+                    )
+                }
             }
         } else {
             MessageEventBubble(

@@ -54,7 +54,7 @@ class ResolveVerifiedUserSendFailurePresenter(
                     val sendState = event.messageEvent.localSendState as? LocalEventSendState.Failed.VerifiedUser
                     val transactionId = event.messageEvent.transactionId
                     val sendHandle = event.messageEvent.sendhandle
-                    resolver = if (sendState != null && transactionId != null && sendHandle != null) {
+                    val newResolver = if (sendState != null && transactionId != null && sendHandle != null) {
                         VerifiedUserSendFailureResolver(
                             room = room,
                             transactionId = transactionId,
@@ -63,6 +63,17 @@ class ResolveVerifiedUserSendFailurePresenter(
                         )
                     } else {
                         null
+                    }
+                    resolver = newResolver
+                    if (sendState is LocalEventSendState.Failed.VerifiedUserHasUnsignedDevice && newResolver != null) {
+                        coroutineScope.launch {
+                            while (newResolver.currentSendFailure.value != null) {
+                                newResolver.resolveAndResend().getOrElse { break }
+                            }
+                            if (resolver === newResolver) {
+                                resolver = null
+                            }
+                        }
                     }
                 }
                 ResolveVerifiedUserSendFailureEvent.Dismiss -> {

@@ -13,4 +13,7 @@ sealed interface SecureBackupRootEvents {
     data object EnableKeyStorage : SecureBackupRootEvents
     data object DisplayKeyStorageDisabledError : SecureBackupRootEvents
     data object DismissDialog : SecureBackupRootEvents
+    data class ToggleSetkaSKey(val enabled: Boolean) : SecureBackupRootEvents
+    data object CopySetkaRecoveryKey : SecureBackupRootEvents
+    data object ClearSetkaRecoveryKeyToCopy : SecureBackupRootEvents
 }

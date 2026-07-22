@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_storage_settings_title">Память</string>
+    <string name="screen_storage_settings_total">Всего занято</string>
+    <string name="screen_storage_settings_clear_cache">Очистить</string>
+    <string name="screen_storage_settings_chats_title">Чаты</string>
+    <string name="screen_storage_settings_category_photos">Фото</string>
+    <string name="screen_storage_settings_category_videos">Видео</string>
+    <string name="screen_storage_settings_category_voice">Голосовые</string>
+    <string name="screen_storage_settings_category_files">Файлы</string>
+    <string name="screen_storage_settings_category_database">База данных</string>
+    <string name="screen_storage_settings_category_other">Другое</string>
+</resources>

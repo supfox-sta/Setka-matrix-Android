@@ -10,6 +10,8 @@ package io.element.android.features.messages.impl.timeline.components.event
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +53,7 @@ import io.element.android.libraries.designsystem.theme.components.CircularProgre
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.libraries.ui.utils.time.isTalkbackActive
 import io.element.android.libraries.voiceplayer.api.VoiceMessageEvent
@@ -63,6 +66,7 @@ fun TimelineItemVoiceView(
     state: VoiceMessageState,
     content: TimelineItemVoiceContent,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit,
+    localSendState: LocalEventSendState? = null,
     modifier: Modifier = Modifier,
 ) {
     fun playPause() {
@@ -79,19 +83,9 @@ fun TimelineItemVoiceView(
             VoiceMessageState.ButtonType.Disabled -> CommonStrings.error_unknown
         }
     )
-    Row(
+    Box(
         modifier = modifier
-            .clearAndSetSemantics {
-                contentDescription = a11y
-                if (state.buttonType == VoiceMessageState.ButtonType.Disabled) {
-                    disabled()
-                } else if (state.buttonType in listOf(VoiceMessageState.ButtonType.Play, VoiceMessageState.ButtonType.Pause)) {
-                    onClick(label = a11yActionLabel) {
-                        playPause()
-                        true
-                    }
-                }
-            }
+            .fillMaxWidth()
             .onSizeChanged {
                 onContentLayoutChange(
                     ContentAvoidingLayoutData(
@@ -100,8 +94,22 @@ fun TimelineItemVoiceView(
                     )
                 )
             },
-        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Row(
+            modifier = Modifier
+                .clearAndSetSemantics {
+                    contentDescription = a11y
+                    if (state.buttonType == VoiceMessageState.ButtonType.Disabled) {
+                        disabled()
+                    } else if (state.buttonType in listOf(VoiceMessageState.ButtonType.Play, VoiceMessageState.ButtonType.Pause)) {
+                        onClick(label = a11yActionLabel) {
+                            playPause()
+                            true
+                        }
+                    }
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
         if (!isTalkbackActive()) {
             when (state.buttonType) {
                 VoiceMessageState.ButtonType.Play -> PlayButton(onClick = ::playPause)
@@ -138,6 +146,11 @@ fun TimelineItemVoiceView(
                 .height(34.dp),
             seekEnabled = !isTalkbackActive(),
             onSeek = { state.eventSink(VoiceMessageEvent.Seek(it)) },
+        )
+        }
+        MediaUploadProgressOverlay(
+            localSendState = localSendState,
+            showProgressLabel = false,
         )
     }
 }

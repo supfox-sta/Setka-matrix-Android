@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_storage_settings_title">Storage</string>
+    <string name="screen_storage_settings_total">Total used</string>
+    <string name="screen_storage_settings_clear_cache">Clear cache</string>
+    <string name="screen_storage_settings_chats_title">Chats</string>
+    <string name="screen_storage_settings_category_photos">Photos</string>
+    <string name="screen_storage_settings_category_videos">Videos</string>
+    <string name="screen_storage_settings_category_voice">Voice messages</string>
+    <string name="screen_storage_settings_category_files">Files</string>
+    <string name="screen_storage_settings_category_database">Database</string>
+    <string name="screen_storage_settings_category_other">Other</string>
+</resources>

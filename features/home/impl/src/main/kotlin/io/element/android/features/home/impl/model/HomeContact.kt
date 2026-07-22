@@ -22,4 +22,5 @@ data class HomeContact(
      * Filled opportunistically (may be null if not available).
      */
     val presenceText: String? = null,
+    val statusEmojiMxcUrl: String? = null,
 )

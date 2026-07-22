@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_skey_title">S/Key</string>
+    <string name="screen_setka_skey_description">Ключ восстановления хранится на специальном сервере Setka. Доступ к нему есть только у вас — даже администраторы Setka не могут его прочитать.</string>
+    <string name="screen_setka_skey_toggle_title">Хранить S/Key на сервере</string>
+    <string name="screen_setka_skey_copy_action">Скопировать ключ</string>
+    <string name="screen_setka_skey_copied">Ключ скопирован</string>
+    <string name="screen_setka_skey_not_available">Ключ не сохранён на сервере</string>
+</resources>

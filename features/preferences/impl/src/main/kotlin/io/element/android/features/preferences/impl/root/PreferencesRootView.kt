@@ -64,6 +64,7 @@ fun PreferencesRootView(
     onOpenCallSettings: () -> Unit,
     onOpenDeveloperSettings: () -> Unit,
     onOpenAdvancedSettings: () -> Unit,
+    onOpenStorageSettings: () -> Unit,
     onOpenContactsAndPrivacy: () -> Unit,
     onOpenLabs: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
@@ -100,6 +101,7 @@ fun PreferencesRootView(
                 onOpenNotificationSettings = onOpenNotificationSettings,
                 onOpenLockScreenSettings = onOpenLockScreenSettings,
                 onSecureBackupClick = onSecureBackupClick,
+                onOpenStorageSettings = onOpenStorageSettings,
             )
         }
 
@@ -179,6 +181,7 @@ private fun ColumnScope.ManageAppSection(
     onOpenNotificationSettings: () -> Unit,
     onOpenLockScreenSettings: () -> Unit,
     onSecureBackupClick: () -> Unit,
+    onOpenStorageSettings: () -> Unit,
 ) {
     ListItem(
         headlineContent = { Text(stringResource(id = R.string.screen_notification_settings_title)) },
@@ -198,6 +201,11 @@ private fun ColumnScope.ManageAppSection(
             onClick = onSecureBackupClick,
         )
     }
+    ListItem(
+        headlineContent = { Text(stringResource(id = R.string.screen_storage_settings_title)) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Chart())),
+        onClick = onOpenStorageSettings,
+    )
 }
 
 @Composable
@@ -387,6 +395,7 @@ private fun ContentToPreview(matrixUser: MatrixUser) {
         onOpenRageShake = {},
         onOpenDeveloperSettings = {},
         onOpenAdvancedSettings = {},
+        onOpenStorageSettings = {},
         onOpenContactsAndPrivacy = {},
         onOpenLabs = {},
         onOpenAbout = {},

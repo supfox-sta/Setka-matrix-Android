@@ -46,6 +46,7 @@ class PreferencesRootNode(
         fun navigateToNotificationSettings()
         fun navigateToLockScreenSettings()
         fun navigateToAdvancedSettings()
+        fun navigateToStorageSettings()
         fun navigateToContactsAndPrivacy()
         fun navigateToLabs()
         fun navigateToLinkNewDevice()
@@ -89,6 +90,7 @@ class PreferencesRootNode(
             onSecureBackupClick = callback::navigateToSecureBackup,
             onOpenDeveloperSettings = callback::navigateToDeveloperSettings,
             onOpenAdvancedSettings = callback::navigateToAdvancedSettings,
+            onOpenStorageSettings = callback::navigateToStorageSettings,
             onOpenContactsAndPrivacy = callback::navigateToContactsAndPrivacy,
             onOpenLabs = callback::navigateToLabs,
             onLinkNewDeviceClick = callback::navigateToLinkNewDevice,

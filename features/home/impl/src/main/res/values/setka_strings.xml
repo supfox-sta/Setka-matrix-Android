@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="banner_setka_server_backup_title">Keys are not saved on the server</string>
+    <string name="banner_setka_server_backup_content">Upload your recovery key to Setka server for seamless login on other devices.</string>
+    <string name="banner_setka_server_backup_submit">Upload keys</string>
+    <string name="home_setka_sync_checking">Syncing S/Key…</string>
+    <string name="home_setka_sync_uploading">Uploading S/Key…</string>
+    <string name="home_setka_sync_backup_missing">S/Key not saved on server</string>
+    <string name="home_setka_sync_error">S/Key sync error</string>
+    <string name="screen_home_menu_contacts">Contacts</string>
+    <string name="screen_home_contacts_title">Contacts</string>
+    <string name="screen_home_search_filter_all">All</string>
+    <string name="screen_home_search_filter_people">People</string>
+    <string name="screen_home_search_filter_channels">Channels</string>
+    <string name="screen_home_search_filter_spaces">Spaces</string>
+    <string name="screen_home_channels_discover">Discover channels</string>
+    <string name="screen_home_channels_discover_hint">Search public channels</string>
+</resources>

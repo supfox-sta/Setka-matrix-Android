@@ -21,12 +21,14 @@ import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.media.MediaPreviewService
 import io.element.android.libraries.matrix.api.media.isPreviewEnabled
 import io.element.android.libraries.matrix.api.room.BaseRoom
+import io.element.android.libraries.setkalite.api.SetkaLiteMediaGate
 import kotlinx.collections.immutable.toImmutableSet
 
 @Inject
 class TimelineProtectionPresenter(
     private val mediaPreviewService: MediaPreviewService,
     private val room: BaseRoom,
+    private val setkaLiteMediaGate: SetkaLiteMediaGate,
 ) : Presenter<TimelineProtectionState> {
     private val allowedEvents = mutableStateOf<Set<EventId>>(setOf())
 
@@ -36,13 +38,16 @@ class TimelineProtectionPresenter(
             mediaPreviewService.mediaPreviewConfigFlow.mapState { config -> config.mediaPreviewValue }
         }.collectAsState()
         val roomInfo = room.roomInfoFlow.collectAsState()
+        val isSetkaLiteEnabled = setkaLiteMediaGate.isLiteEnabled.collectAsState()
         val protectionState by remember {
             derivedStateOf {
                 val isPreviewEnabled = mediaPreviewValue.value.isPreviewEnabled(roomInfo.value.joinRule)
-                if (isPreviewEnabled) {
-                    ProtectionState.RenderAll
-                } else {
-                    ProtectionState.RenderOnly(eventIds = allowedEvents.value.toImmutableSet())
+                when {
+                    isSetkaLiteEnabled.value -> {
+                        ProtectionState.RenderOnly(eventIds = allowedEvents.value.toImmutableSet())
+                    }
+                    isPreviewEnabled -> ProtectionState.RenderAll
+                    else -> ProtectionState.RenderOnly(eventIds = allowedEvents.value.toImmutableSet())
                 }
             }
         }

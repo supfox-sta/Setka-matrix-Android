@@ -14,6 +14,7 @@ import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarMessage
 import io.element.android.libraries.matrix.api.encryption.BackupState
 import io.element.android.libraries.matrix.api.encryption.RecoveryState
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
 
 open class SecureBackupRootStateProvider : PreviewParameterProvider<SecureBackupRootState> {
     override val values: Sequence<SecureBackupRootState>
@@ -53,18 +54,28 @@ open class SecureBackupRootStateProvider : PreviewParameterProvider<SecureBackup
 
 fun aSecureBackupRootState(
     enableAction: AsyncAction<Unit> = AsyncAction.Uninitialized,
+    setkaToggleAction: AsyncAction<Unit> = AsyncAction.Uninitialized,
     backupState: BackupState = BackupState.UNKNOWN,
     doesBackupExistOnServer: AsyncData<Boolean> = AsyncData.Uninitialized,
     recoveryState: RecoveryState = RecoveryState.UNKNOWN,
     displayKeyStorageDisabledError: Boolean = false,
+    isSetkaSession: Boolean = false,
+    setkaServerBackupEnabled: Boolean = false,
+    setkaSyncState: SetkaServerRecoverySyncState = SetkaServerRecoverySyncState.Unknown,
+    setkaRecoveryKeyToCopy: String? = null,
     snackbarMessage: SnackbarMessage? = null,
 ) = SecureBackupRootState(
     enableAction = enableAction,
+    setkaToggleAction = setkaToggleAction,
     backupState = backupState,
     doesBackupExistOnServer = doesBackupExistOnServer,
     recoveryState = recoveryState,
     appName = "Element",
     displayKeyStorageDisabledError = displayKeyStorageDisabledError,
+    isSetkaSession = isSetkaSession,
+    setkaServerBackupEnabled = setkaServerBackupEnabled,
+    setkaSyncState = setkaSyncState,
+    setkaRecoveryKeyToCopy = setkaRecoveryKeyToCopy,
     snackbarMessage = snackbarMessage,
     eventSink = {},
 )

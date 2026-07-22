@@ -84,11 +84,15 @@ import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
+import androidx.media3.common.util.UnstableApi
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.messages.api.timeline.videonotes.composer.VideoNoteComposerEvent
 import io.element.android.features.messages.api.timeline.videonotes.composer.VideoNoteComposerState
+import io.element.android.features.messages.impl.videonotes.VideoNoteRingProgressCanvas
+import io.element.android.features.messages.impl.videonotes.finalizeVideoNoteFile
 import io.element.android.libraries.androidutils.file.safeDelete
+import io.element.android.libraries.designsystem.theme.components.CircularProgressIndicator
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.Text
@@ -110,6 +114,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import java.io.File
 
+@OptIn(UnstableApi::class)
 @Composable
 internal fun VideoNoteComposerOverlay(
     state: VideoNoteComposerState,
@@ -301,33 +306,15 @@ internal fun VideoNoteComposerOverlay(
                 is VideoNoteState.Recording -> (elapsedMillis.toFloat() / maxDuration.inWholeMilliseconds.toFloat()).coerceIn(0f, 1f)
                 else -> 0f
             }
-            Canvas(
-                modifier = Modifier
-                    .matchParentSize()
-                    .semantics { hideFromAccessibility() },
-            ) {
-                val stroke = Stroke(width = ringStrokePx, cap = StrokeCap.Round)
-                val inset = ringPaddingPx + ringStrokePx / 2f
-                val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
-                drawArc(
-                    color = ringBgColor,
-                    startAngle = -90f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    topLeft = Offset(inset, inset),
-                    size = arcSize,
-                    style = stroke,
-                )
-                drawArc(
-                    color = ringProgressColor,
-                    startAngle = -90f,
-                    sweepAngle = 360f * progress,
-                    useCenter = false,
-                    topLeft = Offset(inset, inset),
-                    size = arcSize,
-                    style = stroke,
-                )
-            }
+            VideoNoteRingProgressCanvas(
+                progress = progress,
+                ringPaddingPx = ringPaddingPx,
+                ringStrokePx = ringStrokePx,
+                backgroundColor = ringBgColor,
+                progressColor = ringProgressColor,
+                showScrubberDot = videoNoteState is VideoNoteState.Recording && progress > 0f,
+                modifier = Modifier.matchParentSize(),
+            )
 
             Box(
                 modifier = Modifier
@@ -403,28 +390,33 @@ internal fun VideoNoteComposerOverlay(
                                                      isMergingSegments = true
                                                      coroutineScope.launch {
                                                          val merged = concatVideoSegments(context, allSegments)
-                                                         // Clean up intermediate segments if merge succeeded.
                                                          if (merged != out) {
                                                              allSegments.forEach { if (it != merged) it.safeDelete() }
                                                          }
                                                          segments.clear()
+                                                         val square = finalizeVideoNoteFile(context, merged)
                                                          isMergingSegments = false
                                                          state.eventSink(
                                                              VideoNoteComposerEvent.RecordingFinished(
-                                                                 file = merged,
+                                                                 file = square,
                                                                  mimeType = "video/mp4",
                                                                  durationMillis = fullDurationMs,
                                                              )
                                                          )
                                                      }
                                                  } else {
-                                                     state.eventSink(
-                                                         VideoNoteComposerEvent.RecordingFinished(
-                                                             file = out,
-                                                             mimeType = "video/mp4",
-                                                             durationMillis = fullDurationMs,
+                                                     isMergingSegments = true
+                                                     coroutineScope.launch {
+                                                         val square = finalizeVideoNoteFile(context, out)
+                                                         isMergingSegments = false
+                                                         state.eventSink(
+                                                             VideoNoteComposerEvent.RecordingFinished(
+                                                                 file = square,
+                                                                 mimeType = "video/mp4",
+                                                                 durationMillis = fullDurationMs,
+                                                             )
                                                          )
-                                                     )
+                                                     }
                                                  }
                                              }
                                              else -> Unit
@@ -445,6 +437,19 @@ internal fun VideoNoteComposerOverlay(
                         )
                     }
                     VideoNoteState.Idle -> Unit
+                }
+            }
+            val showProcessingSpinner = isMergingSegments ||
+                (videoNoteState is VideoNoteState.Preview && videoNoteState.isSending)
+            if (showProcessingSpinner) {
+                Box(
+                    modifier = Modifier
+                        .size(circleSize)
+                        .clip(CircleShape)
+                        .background(ElementTheme.colors.bgCanvasDefault.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(36.dp))
                 }
             }
         }
@@ -718,33 +723,15 @@ private fun VideoNotePreview(
         }
 
         // Scrubbable ring overlay.
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .semantics { hideFromAccessibility() },
-        ) {
-            val stroke = Stroke(width = ringStrokePx, cap = StrokeCap.Round)
-            val inset = ringPaddingPx + ringStrokePx / 2f
-            val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
-            drawArc(
-                color = ringBgColor,
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = Offset(inset, inset),
-                size = arcSize,
-                style = stroke,
-            )
-            drawArc(
-                color = ringProgressColor,
-                startAngle = -90f,
-                sweepAngle = 360f * progress,
-                useCenter = false,
-                topLeft = Offset(inset, inset),
-                size = arcSize,
-                style = stroke,
-            )
-        }
+        VideoNoteRingProgressCanvas(
+            progress = progress,
+            ringPaddingPx = ringPaddingPx,
+            ringStrokePx = ringStrokePx,
+            backgroundColor = ringBgColor,
+            progressColor = ringProgressColor,
+            showScrubberDot = progress > 0f,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

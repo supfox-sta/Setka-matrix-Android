@@ -28,6 +28,7 @@ import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.call.api.CallType
 import io.element.android.features.call.impl.data.WidgetMessage
 import io.element.android.features.call.impl.utils.ActiveCallManager
+import io.element.android.features.call.impl.utils.CallHistoryRecorder
 import io.element.android.features.call.impl.utils.CallWidgetProvider
 import io.element.android.features.call.impl.utils.WidgetMessageInterceptor
 import io.element.android.features.call.impl.utils.WidgetMessageSerializer
@@ -59,8 +60,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import timber.log.Timber
 import java.util.UUID
-import java.net.URLDecoder
-import java.net.URLEncoder
 import kotlin.time.Duration.Companion.seconds
 
 @AssistedInject
@@ -77,6 +76,7 @@ class CallScreenPresenter(
     private val languageTagProvider: LanguageTagProvider,
     private val appForegroundStateService: AppForegroundStateService,
     private val appPreferencesStore: AppPreferencesStore,
+    private val callHistoryRecorder: CallHistoryRecorder,
     @AppCoroutineScope
     private val appCoroutineScope: CoroutineScope,
     private val widgetMessageSerializer: WidgetMessageSerializer,
@@ -107,6 +107,7 @@ class CallScreenPresenter(
         var shouldAutoJoin by rememberSaveable { mutableStateOf(false) }
         var autoJoinInFlight by rememberSaveable { mutableStateOf(false) }
         var autoJoinAttempted by rememberSaveable { mutableStateOf(false) }
+        var wasCallConnected by rememberSaveable { mutableStateOf(false) }
         var callPeerId by remember { mutableStateOf<String?>(null) }
         var callPeerName by remember { mutableStateOf<String?>(null) }
         var callPeerAvatarUrl by remember { mutableStateOf<String?>(null) }
@@ -149,6 +150,21 @@ class CallScreenPresenter(
                 RoomWallpaperStyles.LIGHT -> LIGHT_WALLPAPER_URL
                 RoomWallpaperStyles.DARK -> DARK_WALLPAPER_URL
                 else -> if (theme == "light") LIGHT_WALLPAPER_URL else DARK_WALLPAPER_URL
+            }
+        }
+
+        LaunchedEffect(callPeerId, callPeerName) {
+            callHistoryRecorder.onCallPrepared(
+                peerName = callPeerName,
+                peerId = callPeerId,
+                incoming = false,
+            )
+        }
+
+        LaunchedEffect(callConnectionState) {
+            if (callConnectionState == CallConnectionState.Connected) {
+                wasCallConnected = true
+                callHistoryRecorder.onCallConnected()
             }
         }
 
@@ -281,6 +297,7 @@ class CallScreenPresenter(
                 is CallScreenEvents.Hangup -> {
                     isCallEnded = true
                     hasLocalParticipant = false
+                    callHistoryRecorder.onCallEnded(wasConnected = wasCallConnected)
                     val widgetId = callWidgetDriver.value?.id
                     val interceptor = messageInterceptor.value
                     if (widgetId != null && interceptor != null && isWidgetLoaded) {
@@ -400,10 +417,6 @@ class CallScreenPresenter(
                     shouldAutoJoinState(result.shouldAutoJoin)
                     Timber.d("Call widget driver initialized for sessionId: ${inputs.sessionId}, roomId: ${inputs.roomId}")
                     result.url
-                        .withEmbeddedCallParam(name = "header", value = "none")
-                        .withEmbeddedCallParam(name = "showControls", value = "false")
-                        .withEmbeddedCallParam(name = "preload", value = "true")
-                        .withEmbeddedCallParam(name = "skipLobby", value = "true")
                 }
             }
         }
@@ -506,58 +519,6 @@ private fun kotlinx.serialization.json.JsonElement?.asJsonObjectOrNull(): JsonOb
 
 private fun JsonObject.boolean(key: String): Boolean? {
     return (get(key) as? JsonPrimitive)?.booleanOrNull
-}
-
-private fun String.withEmbeddedCallParam(name: String, value: String): String {
-    val hashIndex = indexOf('#')
-    if (hashIndex == -1) {
-        val questionIndex = indexOf('?')
-        val path = if (questionIndex == -1) this else substring(0, questionIndex)
-        val rawQuery = if (questionIndex == -1) "" else substring(questionIndex + 1)
-        val encoded = rawQuery
-            .toMutableParamMap()
-            .apply { put(name, value) }
-            .toEncodedQuery()
-        return "$path?$encoded"
-    }
-    val prefix = substring(0, hashIndex + 1)
-    val fragment = substring(hashIndex + 1)
-    val questionIndex = fragment.indexOf('?')
-    val path = if (questionIndex == -1) fragment else fragment.substring(0, questionIndex)
-    val rawQuery = if (questionIndex == -1) "" else fragment.substring(questionIndex + 1)
-    val encoded = rawQuery
-        .toMutableParamMap()
-        .apply { put(name, value) }
-        .toEncodedQuery()
-    return "$prefix$path?$encoded"
-}
-
-private fun String.toMutableParamMap(): LinkedHashMap<String, String> {
-    val params = linkedMapOf<String, String>()
-    if (isBlank()) return params
-    split('&')
-        .filter { it.isNotBlank() }
-        .forEach { entry ->
-            val parts = entry.split('=', limit = 2)
-            val key = decodeUrlComponent(parts[0])
-            val value = decodeUrlComponent(parts.getOrElse(1) { "" })
-            params[key] = value
-        }
-    return params
-}
-
-private fun Map<String, String>.toEncodedQuery(): String {
-    return entries.joinToString("&") { (key, value) ->
-        "${encodeUrlComponent(key)}=${encodeUrlComponent(value)}"
-    }
-}
-
-private fun decodeUrlComponent(value: String): String {
-    return URLDecoder.decode(value, Charsets.UTF_8.name())
-}
-
-private fun encodeUrlComponent(value: String): String {
-    return URLEncoder.encode(value, Charsets.UTF_8.name())
 }
 
 private const val LIGHT_WALLPAPER_URL = "https://web.setka-matrix.ru/themes/element/img/backgrounds/light_bg.png"

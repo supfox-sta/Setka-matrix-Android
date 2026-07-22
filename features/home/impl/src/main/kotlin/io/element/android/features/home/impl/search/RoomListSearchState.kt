@@ -15,6 +15,7 @@ import kotlinx.collections.immutable.ImmutableList
 data class RoomListSearchState(
     val isSearchActive: Boolean,
     val query: TextFieldState,
-    val results: ImmutableList<RoomListRoomSummary>,
+    val filter: RoomListSearchFilter,
+    val results: ImmutableList<RoomListSearchResultItem>,
     val eventSink: (RoomListSearchEvent) -> Unit
 )

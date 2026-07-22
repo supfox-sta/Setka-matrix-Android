@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import dev.zacsweers.metro.Inject
 import io.element.android.features.call.api.CurrentCall
 import io.element.android.features.call.api.CurrentCallService
+import io.element.android.appconfig.SetkaChannelCallPolicy
 import io.element.android.features.enterprise.api.SessionEnterpriseService
 import io.element.android.features.roomcall.api.RoomCallState
 import io.element.android.libraries.architecture.Presenter
@@ -36,7 +37,18 @@ class RoomCallStatePresenter(
             value = sessionEnterpriseService.isElementCallAvailable()
         }
         val roomInfo by room.roomInfoFlow.collectAsState()
-        val canJoinCall by room.permissionsAsState(false) { perms -> perms.canCall() }
+        val homeserver = room.sessionId.domainName.orEmpty()
+        val canJoinCallFromPermissions by room.permissionsAsState(false) { perms -> perms.canCall() }
+        val canJoinCall by remember {
+            derivedStateOf {
+                SetkaChannelCallPolicy.canUseRoomCall(
+                    roomInfo = roomInfo,
+                    sessionId = room.sessionId,
+                    homeserver = homeserver,
+                    permissionsCanCall = canJoinCallFromPermissions,
+                )
+            }
+        }
         val isUserInTheCall by remember {
             derivedStateOf {
                 room.sessionId in roomInfo.activeRoomCallParticipants

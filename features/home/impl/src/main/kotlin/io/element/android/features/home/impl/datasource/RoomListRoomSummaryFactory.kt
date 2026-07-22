@@ -9,6 +9,7 @@
 package io.element.android.features.home.impl.datasource
 
 import dev.zacsweers.metro.Inject
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.features.home.impl.model.LatestEvent
 import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.home.impl.model.RoomSummaryDisplayType
@@ -19,6 +20,12 @@ import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.eventformatter.api.RoomLatestEventFormatter
 import io.element.android.libraries.matrix.api.room.CurrentUserMembership
 import io.element.android.libraries.matrix.api.room.isDm
+import io.element.android.libraries.matrix.api.timeline.item.EventThreadInfo
+import io.element.android.libraries.matrix.api.timeline.item.event.EventContent
+import io.element.android.libraries.matrix.api.timeline.item.event.MessageContent
+import io.element.android.libraries.matrix.api.timeline.item.event.PollContent
+import io.element.android.libraries.matrix.api.timeline.item.event.StickerContent
+import io.element.android.libraries.matrix.api.timeline.item.event.UnableToDecryptContent
 import io.element.android.libraries.matrix.api.roomlist.LatestEventValue
 import io.element.android.libraries.matrix.api.roomlist.RoomSummary
 import io.element.android.libraries.matrix.ui.model.getAvatarData
@@ -46,7 +53,7 @@ class RoomListRoomSummaryFactory(
                 mode = DateFormatterMode.TimeOrDate,
                 useRelative = true,
             ),
-            latestEvent = computeLatestEvent(roomSummary.latestEvent, roomInfo.isDm),
+            latestEvent = computeLatestEvent(roomSummary.latestEvent, roomInfo.isDm, SetkaChannelConfig.isChannelTopic(roomInfo.topic)),
             avatarData = avatarData,
             userDefinedNotificationMode = roomInfo.userDefinedNotificationMode,
             hasRoomCall = roomInfo.hasRoomCall,
@@ -71,17 +78,21 @@ class RoomListRoomSummaryFactory(
             }.toImmutableList(),
             isTombstoned = roomInfo.successorRoom != null,
             isSpace = roomInfo.isSpace,
+            isSetkaChannel = SetkaChannelConfig.isChannelTopic(roomInfo.topic),
         )
     }
 
-    private fun computeLatestEvent(latestEvent: LatestEventValue, dm: Boolean): LatestEvent {
+    private fun computeLatestEvent(latestEvent: LatestEventValue, dm: Boolean, isSetkaChannel: Boolean): LatestEvent {
+        val formatAsDmStylePreview = dm || isSetkaChannel
         return when (latestEvent) {
             is LatestEventValue.None -> {
                 LatestEvent.None
             }
             is LatestEventValue.Local -> {
-                if (latestEvent.isSending) {
-                    val content = roomLatestEventFormatter.format(latestEvent, dm).orEmpty()
+                if (isSetkaChannel && isSetkaChannelThreadComment(latestEvent.content)) {
+                    LatestEvent.None
+                } else if (latestEvent.isSending) {
+                    val content = roomLatestEventFormatter.format(latestEvent, formatAsDmStylePreview).orEmpty()
                     LatestEvent.Sending(
                         content = content,
                     )
@@ -90,12 +101,27 @@ class RoomListRoomSummaryFactory(
                 }
             }
             is LatestEventValue.Remote -> {
-                val content = roomLatestEventFormatter.format(latestEvent, dm).orEmpty()
-                LatestEvent.Synced(
-                    content = content,
-                )
+                if (isSetkaChannel && isSetkaChannelThreadComment(latestEvent.content)) {
+                    LatestEvent.None
+                } else {
+                    val content = roomLatestEventFormatter.format(latestEvent, formatAsDmStylePreview).orEmpty()
+                    LatestEvent.Synced(
+                        content = content,
+                    )
+                }
             }
             is LatestEventValue.RoomInvite -> LatestEvent.None
         }
+    }
+
+    private fun isSetkaChannelThreadComment(content: EventContent): Boolean {
+        val threadInfo = when (content) {
+            is MessageContent -> content.threadInfo
+            is StickerContent -> content.threadInfo
+            is PollContent -> content.threadInfo
+            is UnableToDecryptContent -> content.threadInfo
+            else -> null
+        }
+        return threadInfo is EventThreadInfo.ThreadResponse
     }
 }

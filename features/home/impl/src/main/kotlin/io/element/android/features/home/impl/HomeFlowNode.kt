@@ -34,6 +34,7 @@ import io.element.android.annotations.ContributesNode
 import io.element.android.features.home.api.HomeEntryPoint
 import io.element.android.features.home.impl.components.RoomListMenuAction
 import io.element.android.features.home.impl.model.RoomListRoomSummary
+import io.element.android.features.home.impl.recent.SetkaRecentRoomsStore
 import io.element.android.features.home.impl.roomlist.RoomListEvent
 import io.element.android.features.invite.api.InviteData
 import io.element.android.features.invite.api.acceptdecline.AcceptDeclineInviteView
@@ -90,6 +91,7 @@ class HomeFlowNode(
     private val declineInviteAndBlockUserEntryPoint: DeclineInviteAndBlockEntryPoint,
     private val changeRoomMemberRolesEntryPoint: ChangeRoomMemberRolesEntryPoint,
     private val leaveRoomRenderer: LeaveRoomRenderer,
+    private val setkaRecentRoomsStore: SetkaRecentRoomsStore,
     @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
 ) : BaseFlowNode<HomeFlowNode.NavTarget>(
     backstack = BackStack(
@@ -191,6 +193,10 @@ class HomeFlowNode(
                     return
                 }
 
+                sessionCoroutineScope.launch {
+                    setkaRecentRoomsStore.recordRoom(roomId)
+                }
+
                 val job = sessionCoroutineScope.launch {
                     runCatchingExceptions {
                         matrixClient.getJoinedRoom(roomId)
@@ -219,12 +225,38 @@ class HomeFlowNode(
                 loadingJoinedRoomJob.value = AsyncData.Loading(job)
             }
 
+            fun navigateToUserFromSearch(userId: UserId) {
+                sessionCoroutineScope.launch {
+                    when (val dmResult = matrixClient.startDM(userId, createIfDmDoesNotExist = true)) {
+                        is StartDMResult.Success -> navigateToRoom(dmResult.roomId)
+                        else -> callback.navigateToUserProfile(userId)
+                    }
+                }
+            }
+
+            fun navigateToPublicChannel(roomId: RoomId) {
+                sessionCoroutineScope.launch {
+                    runCatchingExceptions {
+                        matrixClient.getJoinedRoom(roomId) ?: matrixClient.joinRoom(roomId).getOrThrow()
+                    }.onSuccess {
+                        navigateToRoom(roomId)
+                    }.onFailure { error ->
+                        if (error !is CancellationException) {
+                            Timber.w(error, "Failed to join public channel $roomId")
+                        }
+                    }
+                }
+            }
+
             HomeView(
                 homeState = state,
                 onRoomClick = ::navigateToRoom,
                 onUserProfileClick = callback::navigateToUserProfile,
                 onSettingsClick = callback::navigateToSettings,
                 onStartChatClick = callback::navigateToCreateRoom,
+                onCreateChannelClick = callback::navigateToCreateChannel,
+                onJoinPublicChannelClick = ::navigateToRoom,
+                onSearchUserClick = ::navigateToUserFromSearch,
                 onSearchUsers = { query ->
                     val trimmed = query.trim()
                     val isEmail = !trimmed.startsWith("@") && trimmed.contains("@") && trimmed.contains(".")

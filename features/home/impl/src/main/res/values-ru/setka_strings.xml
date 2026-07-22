@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="banner_setka_server_backup_title">Ключи не сохранены на сервере</string>
+    <string name="banner_setka_server_backup_content">Загрузите ключ восстановления на сервер Setka, чтобы входить с других устройств без подтверждения.</string>
+    <string name="banner_setka_server_backup_submit">Загрузить ключи</string>
+    <string name="home_setka_sync_checking">Синхронизация S/Key…</string>
+    <string name="home_setka_sync_uploading">Загрузка S/Key…</string>
+    <string name="home_setka_sync_backup_missing">S/Key не сохранён на сервере</string>
+    <string name="home_setka_sync_error">Ошибка синхронизации S/Key</string>
+    <string name="screen_home_menu_contacts">Контакты</string>
+    <string name="screen_home_contacts_title">Контакты</string>
+    <string name="screen_home_search_filter_all">Все</string>
+    <string name="screen_home_search_filter_people">Люди</string>
+    <string name="screen_home_search_filter_channels">Каналы</string>
+    <string name="screen_home_search_filter_spaces">Пространства</string>
+    <string name="screen_home_channels_discover">Найти каналы</string>
+    <string name="screen_home_channels_discover_hint">Поиск публичных каналов</string>
+</resources>

@@ -10,6 +10,7 @@ package io.element.android.features.messages.impl
 
 import android.os.Build
 import android.net.Uri
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -21,11 +22,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
 import im.vector.app.features.analytics.plan.PinUnpinAction
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.appconfig.MessageComposerConfig
 import io.element.android.features.messages.api.timeline.HtmlConverterProvider
 import io.element.android.features.messages.impl.actionlist.ActionListState
@@ -34,6 +37,10 @@ import io.element.android.features.messages.impl.crypto.identity.IdentityChangeS
 import io.element.android.features.messages.impl.link.LinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
+import io.element.android.features.messages.impl.typing.typingNotificationPlainText
+import io.element.android.libraries.matrix.api.setka.fetchSetkaStatusEmojiMxc
+import io.element.android.features.messages.impl.R
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.timeline.MarkAsFullyRead
 import io.element.android.features.messages.impl.timeline.TimelineController
@@ -74,12 +81,18 @@ import io.element.android.libraries.matrix.api.core.toThreadId
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
 import io.element.android.libraries.matrix.api.permalink.PermalinkParser
+import io.element.android.libraries.matrix.api.room.CurrentUserMembership
 import io.element.android.libraries.matrix.api.room.JoinedRoom
+import io.element.android.libraries.matrix.api.room.RoomNotificationMode
+import io.element.android.libraries.matrix.api.room.roomNotificationSettings
+import io.element.android.libraries.mediaplayer.api.MediaPlayer
 import io.element.android.libraries.matrix.api.room.RoomInfo
 import io.element.android.libraries.matrix.api.room.RoomMembersState
 import io.element.android.libraries.matrix.api.room.history.RoomHistoryVisibility
 import io.element.android.libraries.matrix.api.room.isDm
 import io.element.android.libraries.matrix.api.room.powerlevels.permissionsAsState
+import io.element.android.libraries.matrix.ui.model.powerLevelOf
+import io.element.android.libraries.matrix.ui.model.roleOf
 import io.element.android.libraries.matrix.api.timeline.item.event.EventOrTransactionId
 import io.element.android.libraries.matrix.ui.messages.reply.map
 import io.element.android.libraries.matrix.ui.model.getAvatarData
@@ -113,6 +126,8 @@ class MessagesPresenter(
     private val reactionSummaryPresenter: Presenter<ReactionSummaryState>,
     private val readReceiptBottomSheetPresenter: Presenter<ReadReceiptBottomSheetState>,
     private val pinnedMessagesBannerPresenter: Presenter<PinnedMessagesBannerState>,
+    private val roomMediaPlaybackCoordinator: RoomMediaPlaybackCoordinator,
+    private val mediaPlayer: MediaPlayer,
     private val roomCallStatePresenter: Presenter<RoomCallState>,
     private val roomMemberModerationPresenter: Presenter<RoomMemberModerationState>,
     private val snackbarDispatcher: SnackbarDispatcher,
@@ -170,6 +185,12 @@ class MessagesPresenter(
         val reactionSummaryState = reactionSummaryPresenter.present()
         val readReceiptBottomSheetState = readReceiptBottomSheetPresenter.present()
         val pinnedMessagesBannerState = pinnedMessagesBannerPresenter.present()
+        DisposableEffect(roomMediaPlaybackCoordinator) {
+            roomMediaPlaybackCoordinator.registerVoiceMediaPlayer(mediaPlayer)
+            onDispose {
+                roomMediaPlaybackCoordinator.unregisterVoiceMediaPlayer()
+            }
+        }
         val roomCallState = roomCallStatePresenter.present()
         val roomMemberModerationState = roomMemberModerationPresenter.present()
 
@@ -207,6 +228,59 @@ class MessagesPresenter(
             derivedStateOf { roomInfo.heroes().toImmutableList() }
         }
 
+        val homeserver = remember(matrixClient.sessionId) {
+            matrixClient.sessionId.value.substringAfter(':', "")
+        }
+        val isSetkaChannel by remember(roomInfo.topic, homeserver) {
+            derivedStateOf { SetkaChannelConfig.isSetkaChannelRoom(roomInfo.topic, homeserver) }
+        }
+        val canPostToSetkaChannelFeed by remember(isSetkaChannel, roomInfo.roomPowerLevels, matrixClient.sessionId) {
+            derivedStateOf {
+                if (!isSetkaChannel) return@derivedStateOf false
+                SetkaChannelConfig.canPostToChannelMainFeed(roomInfo.roleOf(matrixClient.sessionId))
+            }
+        }
+
+        /** PL `events_default` may be 50 in channels; subscribers may still comment in threads once the server allows it. */
+        val userEventPermissionsForUi by remember(
+            userEventPermissions,
+            isSetkaChannel,
+            timelineState.timelineMode,
+        ) {
+            derivedStateOf {
+                val inChannelComments = isSetkaChannel &&
+                    timelineState.timelineMode is io.element.android.libraries.matrix.api.timeline.Timeline.Mode.Thread
+                if (inChannelComments) {
+                    userEventPermissions.copy(canSendMessage = true)
+                } else {
+                    userEventPermissions
+                }
+            }
+        }
+
+        LaunchedEffect(isSetkaChannel) {
+            if (isSetkaChannel) {
+                withContext(dispatchers.io) {
+                    room.updateRoomNotificationSettings()
+                }
+            }
+        }
+
+        val roomNotificationSettingsState by room.roomNotificationSettingsStateFlow.collectAsState()
+        val channelNotificationsMuted by remember(roomNotificationSettingsState) {
+            derivedStateOf {
+                roomNotificationSettingsState.roomNotificationSettings()?.mode == RoomNotificationMode.MUTE
+            }
+        }
+        var channelNotificationToggleInProgress by remember { mutableStateOf(false) }
+        var channelJoinInProgress by remember { mutableStateOf(false) }
+
+        val isSetkaChannelJoined by remember(isSetkaChannel, roomInfo.currentUserMembership) {
+            derivedStateOf {
+                !isSetkaChannel || roomInfo.currentUserMembership == CurrentUserMembership.JOINED
+            }
+        }
+
         var hasDismissedInviteDialog by rememberSaveable {
             mutableStateOf(false)
         }
@@ -236,6 +310,48 @@ class MessagesPresenter(
 
         var dmUserVerificationState by remember { mutableStateOf<IdentityState?>(null) }
         var dmUserPresenceText by remember { mutableStateOf<String?>(null) }
+        var dmUserStatusEmojiMxc by remember { mutableStateOf<String?>(null) }
+        val context = LocalContext.current
+        val typingNotificationState = timelineState.timelineRoomInfo.typingNotificationState
+        val dmHeaderSubtitle by remember(
+            roomInfo.isDm,
+            dmUserPresenceText,
+            typingNotificationState.typingMembers,
+            typingNotificationState.renderTypingNotifications,
+        ) {
+            derivedStateOf {
+                if (!roomInfo.isDm) return@derivedStateOf null
+                if (typingNotificationState.renderTypingNotifications &&
+                    typingNotificationState.typingMembers.isNotEmpty()
+                ) {
+                    typingNotificationPlainText(context, typingNotificationState.typingMembers)
+                } else {
+                    dmUserPresenceText
+                }
+            }
+        }
+
+        val roomHeaderSubtitle by remember(
+            isSetkaChannel,
+            roomInfo.isDm,
+            roomInfo.joinedMembersCount,
+            dmHeaderSubtitle,
+        ) {
+            derivedStateOf {
+                when {
+                    isSetkaChannel -> {
+                        val count = roomInfo.joinedMembersCount.coerceAtLeast(0).toInt()
+                        context.resources.getQuantityString(
+                            R.plurals.screen_setka_channel_subscribers,
+                            count,
+                            count,
+                        )
+                    }
+                    roomInfo.isDm -> dmHeaderSubtitle
+                    else -> null
+                }
+            }
+        }
 
         val membersState by room.membersStateFlow.collectAsState()
         val dmRoomMember by room.getDirectRoomMember(membersState)
@@ -264,15 +380,20 @@ class MessagesPresenter(
         LaunchedEffect(dmRoomMember?.userId, roomInfo.isDm) {
             if (!roomInfo.isDm) {
                 dmUserPresenceText = null
+                dmUserStatusEmojiMxc = null
                 return@LaunchedEffect
             }
-            val userId = dmRoomMember?.userId?.value
-            if (userId.isNullOrBlank()) {
+            val userId = dmRoomMember?.userId
+            if (userId == null) {
                 dmUserPresenceText = null
+                dmUserStatusEmojiMxc = null
                 return@LaunchedEffect
             }
             dmUserPresenceText = withContext(dispatchers.io) {
-                fetchPresenceText(matrixClient, userId)
+                fetchPresenceText(matrixClient, userId.value)
+            }
+            dmUserStatusEmojiMxc = withContext(dispatchers.io) {
+                matrixClient.fetchSetkaStatusEmojiMxc(userId)
             }
         }
 
@@ -317,6 +438,38 @@ class MessagesPresenter(
                         markingAsReadAndExiting.set(false)
                     }
                 }
+                MessagesEvent.ToggleChannelNotifications -> localCoroutineScope.launch {
+                    if (!isSetkaChannel || !isSetkaChannelJoined || channelNotificationToggleInProgress) return@launch
+                    channelNotificationToggleInProgress = true
+                    val isEncrypted = roomInfo.isEncrypted ?: room.getUpdatedIsEncrypted().getOrNull() ?: false
+                    val result = if (channelNotificationsMuted) {
+                        matrixClient.notificationSettingsService.unmuteRoom(
+                            roomId = room.roomId,
+                            isEncrypted = isEncrypted,
+                            isOneToOne = room.isOneToOne,
+                        )
+                    } else {
+                        matrixClient.notificationSettingsService.muteRoom(room.roomId)
+                    }
+                    result.onSuccess {
+                        withContext(dispatchers.io) {
+                            room.updateRoomNotificationSettings()
+                        }
+                    }.onFailure { Timber.w(it, "Failed to toggle channel notifications") }
+                    channelNotificationToggleInProgress = false
+                }
+                MessagesEvent.JoinSetkaChannel -> localCoroutineScope.launch {
+                    if (!isSetkaChannel || isSetkaChannelJoined || channelJoinInProgress) return@launch
+                    channelJoinInProgress = true
+                    matrixClient.joinRoom(room.roomId)
+                        .onSuccess {
+                            withContext(dispatchers.io) {
+                                room.updateRoomNotificationSettings()
+                            }
+                        }
+                        .onFailure { Timber.w(it, "Failed to join Setka channel") }
+                    channelJoinInProgress = false
+                }
             }
         }
 
@@ -325,7 +478,7 @@ class MessagesPresenter(
             roomName = effectiveRoomName,
             roomAvatar = roomAvatar,
             heroes = heroes,
-            userEventPermissions = userEventPermissions,
+            userEventPermissions = userEventPermissionsForUi,
             composerState = composerState,
             voiceMessageComposerState = voiceMessageComposerState,
             videoNoteComposerState = videoNoteComposerState,
@@ -345,8 +498,16 @@ class MessagesPresenter(
             appName = buildMeta.applicationName,
             roomWallpaperStyle = roomWallpaperStyle,
             pinnedMessagesBannerState = pinnedMessagesBannerState,
+            roomMediaPlaybackCoordinator = roomMediaPlaybackCoordinator,
             dmUserVerificationState = dmUserVerificationState,
-            dmUserPresenceText = dmUserPresenceText,
+            roomHeaderSubtitle = roomHeaderSubtitle,
+            dmUserStatusEmojiMxc = dmUserStatusEmojiMxc,
+            isSetkaChannel = isSetkaChannel,
+            canPostToSetkaChannelFeed = canPostToSetkaChannelFeed,
+            isSetkaChannelJoined = isSetkaChannelJoined,
+            channelNotificationsMuted = channelNotificationsMuted,
+            channelNotificationToggleInProgress = channelNotificationToggleInProgress,
+            channelJoinInProgress = channelJoinInProgress,
             roomMemberModerationState = roomMemberModerationState,
             topBarSharedHistoryIcon = topBarSharedHistoryIcon,
             successorRoom = roomInfo.successorRoom,
@@ -401,7 +562,8 @@ class MessagesPresenter(
             TimelineItemAction.RemoveCaption -> handleRemoveCaption(targetEvent)
             TimelineItemAction.Reply -> handleActionReply(targetEvent, composerState, timelineProtectionState)
             TimelineItemAction.ReplyInThread -> {
-                val displayThreads = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
+                val displayThreads = featureFlagService.isFeatureEnabled(FeatureFlags.Threads) ||
+                    timelineState.isSetkaChannel
                 if (displayThreads) {
                     // Get either the thread id this event is in, or the event id if it's not in a thread so we can start one
                     val threadId = when (targetEvent.threadInfo) {

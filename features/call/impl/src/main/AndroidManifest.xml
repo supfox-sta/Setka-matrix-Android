@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_CALL_LOG" />
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Permissions for call foreground services -->
@@ -45,6 +47,7 @@
 
                 <!-- Matching asset file: https://call.element.io/.well-known/assetlinks.json -->
                 <data android:host="call.element.io" />
+                <data android:host="call.setka-matrix.ru" />
             </intent-filter>
             <!-- Custom scheme to handle urls from other domains in the format: element://call?url=https%3A%2F%2Felement.io -->
             <intent-filter>

@@ -8,14 +8,20 @@
 
 package io.element.android.features.home.impl
 
+import io.element.android.features.home.impl.channels.SetkaPublicChannelsState
 import io.element.android.features.home.impl.roomlist.RoomListState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spaces.HomeSpacesState
 import io.element.android.features.home.impl.model.HomeContact
+import io.element.android.features.home.impl.model.RoomListRoomSummary
 import io.element.android.features.logout.api.direct.DirectLogoutState
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarMessage
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
+import io.element.android.libraries.setkalite.api.SetkaLiteState
 import io.element.android.libraries.matrix.api.user.MatrixUser
+import io.element.android.features.roomdirectory.api.RoomDescription
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 data class HomeState(
     /**
@@ -33,10 +39,21 @@ data class HomeState(
     val canReportBug: Boolean,
     val directLogoutState: DirectLogoutState,
     val setkaPlusState: HomeSetkaPlusState = HomeSetkaPlusState(),
+    val statusEmojiState: HomeStatusEmojiState = HomeStatusEmojiState(),
+    val statusEmojiByUserId: kotlinx.collections.immutable.ImmutableMap<String, String> =
+        kotlinx.collections.immutable.persistentMapOf(),
+    val setkaSyncState: SetkaServerRecoverySyncState? = null,
+    val setkaLiteState: SetkaLiteState = SetkaLiteState(),
+    val showTransferQueueSheet: Boolean = false,
+    val canCreateSetkaChannel: Boolean = false,
+    val showSetkaChannelsTab: Boolean = false,
+    val setkaPublicChannelsState: SetkaPublicChannelsState? = null,
+    val loadPublicChannelsForDiscovery: suspend () -> Result<ImmutableList<RoomDescription>> = { Result.success(persistentListOf()) },
+    val recentRoomSummaries: ImmutableList<RoomListRoomSummary> = kotlinx.collections.immutable.persistentListOf(),
     val eventSink: (HomeEvent) -> Unit,
 ) {
     val isBackHandlerEnabled = currentHomeNavigationBarItem != HomeNavigationBarItem.Chats || roomListState.spaceFiltersState is SpaceFiltersState.Selected
-    val displayActions = currentHomeNavigationBarItem == HomeNavigationBarItem.Chats || currentHomeNavigationBarItem == HomeNavigationBarItem.Contacts
+    val displayActions = currentHomeNavigationBarItem == HomeNavigationBarItem.Chats
     val displayRoomListFilters = currentHomeNavigationBarItem == HomeNavigationBarItem.Chats && roomListState.displayFilters
     val showNavigationBar = true
 }

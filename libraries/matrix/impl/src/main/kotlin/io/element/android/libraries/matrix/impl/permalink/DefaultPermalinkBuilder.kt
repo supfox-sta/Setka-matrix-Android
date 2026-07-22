@@ -10,6 +10,7 @@ package io.element.android.libraries.matrix.impl.permalink
 
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
+import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.matrix.api.core.MatrixPatterns
 import io.element.android.libraries.matrix.api.core.RoomAlias
@@ -26,7 +27,7 @@ class DefaultPermalinkBuilder : PermalinkBuilder {
             return Result.failure(PermalinkBuilderError.InvalidData)
         }
         return runCatchingExceptions {
-            matrixToUserPermalink(userId.value)
+            matrixToUserPermalink(userId.value).toSetkaSharePermalink()
         }
     }
 
@@ -35,7 +36,12 @@ class DefaultPermalinkBuilder : PermalinkBuilder {
             return Result.failure(PermalinkBuilderError.InvalidData)
         }
         return runCatchingExceptions {
-            matrixToRoomAliasPermalink(roomAlias.value)
+            matrixToRoomAliasPermalink(roomAlias.value).toSetkaSharePermalink()
         }
+    }
+
+    private fun String.toSetkaSharePermalink(): String {
+        return replace("https://matrix.to", SetkaMatrixConfig.SHARE_BASE_URL)
+            .replace("https://www.matrix.to", SetkaMatrixConfig.SHARE_BASE_URL)
     }
 }

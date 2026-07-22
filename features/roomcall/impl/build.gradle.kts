@@ -24,6 +24,7 @@ dependencies {
     implementation(libs.kotlinx.collections.immutable)
     implementation(projects.features.call.api)
     implementation(projects.features.enterprise.api)
+    implementation(projects.appconfig)
     implementation(projects.libraries.architecture)
     implementation(projects.libraries.matrix.api)
     implementation(projects.libraries.matrixui)

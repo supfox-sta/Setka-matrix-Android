@@ -179,6 +179,8 @@ fun TimelineView(
                         isLastOutgoingMessage = state.isLastOutgoingMessage(timelineItem.identifier()),
                         focusedEventId = state.focusedEventId,
                         displayThreadSummaries = state.displayThreadSummaries,
+                        isSetkaChannel = state.isSetkaChannel,
+                        setkaChannelCommentsEnabled = state.setkaChannelCommentsEnabled,
                         onUserDataClick = onUserDataClick,
                         onLinkClick = onLinkClick,
                         onLinkLongClick = ::onLinkLongClick,

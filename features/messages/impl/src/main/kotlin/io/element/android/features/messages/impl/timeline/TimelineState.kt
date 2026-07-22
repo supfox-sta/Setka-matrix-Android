@@ -34,6 +34,9 @@ data class TimelineState(
     val messageShieldDialogData: MessageShieldData?,
     val resolveVerifiedUserSendFailureState: ResolveVerifiedUserSendFailureState,
     val displayThreadSummaries: Boolean,
+    val isSetkaChannel: Boolean,
+    /** False when the room only allows moderators to send (no subscriber comments). */
+    val setkaChannelCommentsEnabled: Boolean = true,
     val eventSink: (TimelineEvent) -> Unit,
 ) {
     private val lastTimelineEvent = timelineItems.firstOrNull { it is TimelineItem.Event } as? TimelineItem.Event

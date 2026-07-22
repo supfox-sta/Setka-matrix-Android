@@ -53,6 +53,7 @@ import io.element.android.libraries.designsystem.atomic.molecules.ButtonColumnMo
 import io.element.android.libraries.designsystem.atomic.molecules.IconTitleSubtitleMolecule
 import io.element.android.libraries.designsystem.components.BigIcon
 import io.element.android.libraries.designsystem.components.button.BackButton
+import io.element.android.libraries.designsystem.components.dialogs.AlertDialog
 import io.element.android.libraries.designsystem.components.dialogs.ErrorDialog
 import io.element.android.libraries.designsystem.components.form.textFieldState
 import io.element.android.libraries.designsystem.modifiers.onTabOrEnterKeyFocusNext
@@ -62,6 +63,7 @@ import io.element.android.libraries.designsystem.theme.components.Button
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.TextField
+import io.element.android.libraries.designsystem.theme.components.TextButton
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.testtags.TestTags
 import io.element.android.libraries.testtags.testTag
@@ -75,6 +77,7 @@ fun LoginPasswordView(
     modifier: Modifier = Modifier,
 ) {
     val autofillManager = LocalAutofillManager.current
+    var showMigrationHelp by remember { mutableStateOf(false) }
 
     BackHandler {
         autofillManager?.cancel()
@@ -157,6 +160,11 @@ fun LoginPasswordView(
                             .fillMaxWidth()
                             .testTag(TestTags.loginContinue)
                     )
+                    TextButton(
+                        text = stringResource(R.string.screen_login_migration_help_button),
+                        onClick = { showMigrationHelp = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Spacer(modifier = Modifier.height(48.dp))
                 }
             }
@@ -165,6 +173,13 @@ fun LoginPasswordView(
                 LoginErrorDialog(error = state.loginAction.error, onDismiss = {
                     state.eventSink(LoginPasswordEvents.ClearError)
                 })
+            }
+            if (showMigrationHelp) {
+                AlertDialog(
+                    title = stringResource(R.string.screen_login_migration_help_title),
+                    content = stringResource(R.string.screen_login_migration_help_content),
+                    onDismiss = { showMigrationHelp = false },
+                )
             }
         }
     }

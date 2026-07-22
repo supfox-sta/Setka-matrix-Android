@@ -56,6 +56,7 @@ data class RoomDetailsState(
     val roomVersion: String?,
     val enableKeyShareOnInvite: Boolean,
     val roomHistoryVisibility: RoomHistoryVisibility,
+    val isSetkaChannel: Boolean = false,
     val eventSink: (RoomDetailsEvent) -> Unit
 ) {
     val roomBadges = buildList {

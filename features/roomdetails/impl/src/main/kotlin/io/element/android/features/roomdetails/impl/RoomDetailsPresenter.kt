@@ -42,6 +42,7 @@ import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
 import io.element.android.libraries.matrix.api.notificationsettings.NotificationSettingsService
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.libraries.matrix.api.room.JoinedRoom
 import io.element.android.libraries.matrix.api.room.RoomMember
 import io.element.android.libraries.matrix.api.room.isDm
@@ -107,7 +108,14 @@ class RoomDetailsPresenter(
         val roomType = getRoomType(dmMember, currentMember)
         val roomCallState = roomCallStatePresenter.present()
         val joinedMemberCount by remember { derivedStateOf { roomInfo.joinedMembersCount } }
-        val canToggleContact by remember { derivedStateOf { joinedMemberCount == 2L } }
+        val isSetkaChannel by remember(roomTopic) {
+            derivedStateOf {
+                SetkaChannelConfig.isSetkaChannelRoom(roomTopic, client.userIdServerName())
+            }
+        }
+        val canToggleContact by remember(isSetkaChannel, joinedMemberCount) {
+            derivedStateOf { joinedMemberCount == 2L || isSetkaChannel }
+        }
         var contactByRoomId by remember { mutableStateOf<Map<String, io.element.android.libraries.matrix.api.contact.MatrixContact>>(emptyMap()) }
         val isInContacts by remember(canToggleContact, contactByRoomId) {
             derivedStateOf { canToggleContact && contactByRoomId.containsKey(room.roomId.value) }
@@ -128,8 +136,13 @@ class RoomDetailsPresenter(
             refreshContacts()
         }
 
-        val topicState = remember(permissions.editDetailsPermissions.canEditTopic, roomTopic, roomType) {
-            val topic = roomTopic
+        val topicState = remember(permissions.editDetailsPermissions.canEditTopic, roomTopic, roomType, client) {
+            val isSetkaChannel = SetkaChannelConfig.isSetkaChannelRoom(roomTopic, client.userIdServerName())
+            val topic = if (isSetkaChannel) {
+                SetkaChannelConfig.displayTopic(roomTopic)
+            } else {
+                roomTopic?.trim()?.takeIf { it.isNotBlank() }
+            }
             when {
                 !topic.isNullOrBlank() -> RoomTopicState.ExistingTopic(topic)
                 permissions.editDetailsPermissions.canEditTopic && roomType is RoomDetailsType.Room -> RoomTopicState.CanAddTopic
@@ -261,6 +274,7 @@ class RoomDetailsPresenter(
             roomVersion = roomInfo.roomVersion,
             enableKeyShareOnInvite = enableKeyShareOnInvite,
             roomHistoryVisibility = roomInfo.historyVisibility,
+            isSetkaChannel = isSetkaChannel,
             eventSink = ::handleEvent,
         )
     }

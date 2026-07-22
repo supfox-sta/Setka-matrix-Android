@@ -12,6 +12,7 @@ import io.element.android.libraries.core.coroutine.CoroutineDispatchers
 import io.element.android.libraries.core.coroutine.childScope
 import io.element.android.libraries.core.extensions.mapFailure
 import io.element.android.libraries.core.extensions.runCatchingExceptions
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.matrix.api.core.DeviceId
@@ -176,7 +177,11 @@ class JoinedRustRoom(
     override suspend fun createTimeline(
         createTimelineParams: CreateTimelineParams,
     ): Result<Timeline> = withContext(roomDispatcher) {
-        val hideThreadedEvents = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
+        val hideThreadedEvents = featureFlagService.isFeatureEnabled(FeatureFlags.Threads) ||
+            SetkaChannelConfig.isSetkaChannelRoom(
+                topic = baseRoom.info().topic,
+                homeserver = baseRoom.sessionId.value.substringAfter(':', ""),
+            )
         val focus = when (createTimelineParams) {
             is CreateTimelineParams.PinnedOnly -> TimelineFocus.PinnedEvents
             is CreateTimelineParams.MediaOnly -> TimelineFocus.Live(hideThreadedEvents = hideThreadedEvents)

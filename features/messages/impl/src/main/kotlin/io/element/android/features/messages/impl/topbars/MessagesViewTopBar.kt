@@ -53,6 +53,7 @@ import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
 import io.element.android.libraries.matrix.ui.components.aMatrixUserList
 import io.element.android.libraries.matrix.ui.model.getAvatarData
+import io.element.android.libraries.matrix.ui.setka.SetkaStatusEmojiInline
 import io.element.android.libraries.ui.strings.CommonStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -67,7 +68,8 @@ internal fun MessagesViewTopBar(
     heroes: ImmutableList<AvatarData>,
     roomCallState: RoomCallState,
     dmUserIdentityState: IdentityState?,
-    dmUserPresenceText: String?,
+    headerSubtitle: String?,
+    dmUserStatusEmojiMxc: String? = null,
     sharedHistoryIcon: SharedHistoryIcon,
     onRoomDetailsClick: () -> Unit,
     onJoinCallClick: () -> Unit,
@@ -96,7 +98,8 @@ internal fun MessagesViewTopBar(
                 val titleModifier = Modifier.weight(1f, fill = false)
                 RoomAvatarAndNameRow(
                     roomName = roomName,
-                    subtitle = dmUserPresenceText,
+                    subtitle = headerSubtitle,
+                    statusEmojiMxc = dmUserStatusEmojiMxc,
                     roomAvatar = roomAvatar,
                     isTombstoned = isTombstoned,
                     heroes = heroes,
@@ -161,6 +164,7 @@ internal fun MessagesViewTopBar(
 private fun RoomAvatarAndNameRow(
     roomName: String?,
     subtitle: String?,
+    statusEmojiMxc: String?,
     roomAvatar: AvatarData,
     heroes: ImmutableList<AvatarData>,
     isTombstoned: Boolean,
@@ -178,14 +182,19 @@ private fun RoomAvatarAndNameRow(
             ),
         )
         Column(modifier = Modifier.padding(horizontal = 8.dp)) {
-            Text(
-                modifier = Modifier.semantics { heading() },
-                text = roomName ?: stringResource(CommonStrings.common_no_room_name),
-                style = ElementTheme.typography.fontBodyLgMedium,
-                fontStyle = FontStyle.Italic.takeIf { roomName == null },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .semantics { heading() },
+                    text = roomName ?: stringResource(CommonStrings.common_no_room_name),
+                    style = ElementTheme.typography.fontBodyLgMedium,
+                    fontStyle = FontStyle.Italic.takeIf { roomName == null },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                SetkaStatusEmojiInline(mxcUrl = statusEmojiMxc)
+            }
             subtitle?.takeIf { it.isNotBlank() }?.let { value ->
                 Text(
                     text = value,
@@ -213,7 +222,8 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         heroes: ImmutableList<AvatarData> = persistentListOf(),
         roomCallState: RoomCallState = RoomCallState.Unavailable,
         dmUserIdentityState: IdentityState? = null,
-        dmUserPresenceText: String? = "В сети",
+        headerSubtitle: String? = "В сети",
+        dmUserStatusEmojiMxc: String? = null,
         sharedHistoryIcon: SharedHistoryIcon = SharedHistoryIcon.NONE,
     ) = MessagesViewTopBar(
         roomName = roomName,
@@ -222,7 +232,8 @@ internal fun MessagesViewTopBarPreview() = ElementPreview {
         heroes = heroes,
         roomCallState = roomCallState,
         dmUserIdentityState = dmUserIdentityState,
-        dmUserPresenceText = dmUserPresenceText,
+        headerSubtitle = headerSubtitle,
+        dmUserStatusEmojiMxc = dmUserStatusEmojiMxc,
         sharedHistoryIcon = sharedHistoryIcon,
         onRoomDetailsClick = {},
         onJoinCallClick = {},

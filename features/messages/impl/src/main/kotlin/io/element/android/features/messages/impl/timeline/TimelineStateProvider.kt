@@ -75,6 +75,7 @@ fun aTimelineState(
         messageShieldDialogData = messageShield?.let { MessageShieldData(it) },
         resolveVerifiedUserSendFailureState = resolveVerifiedUserSendFailureState,
         displayThreadSummaries = displayThreadSummaries,
+        isSetkaChannel = false,
         eventSink = eventSink,
     )
 }

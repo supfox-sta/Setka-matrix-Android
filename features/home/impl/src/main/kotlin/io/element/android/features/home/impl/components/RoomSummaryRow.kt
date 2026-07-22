@@ -56,6 +56,7 @@ import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.matrix.ui.setka.SetkaStatusEmojiInline
 import io.element.android.libraries.designsystem.theme.roomListRoomMessage
 import io.element.android.libraries.designsystem.theme.roomListRoomMessageDate
 import io.element.android.libraries.designsystem.theme.roomListRoomName
@@ -73,10 +74,17 @@ internal fun RoomSummaryRow(
     room: RoomListRoomSummary,
     hideInviteAvatars: Boolean,
     isInviteSeen: Boolean,
+    statusEmojiByUserId: Map<String, String> = emptyMap(),
     onClick: (RoomListRoomSummary) -> Unit,
     eventSink: (RoomListEvent) -> Unit,
+    searchSubtitle: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    val statusEmojiMxc = if (room.isDm) {
+        room.heroes.firstOrNull()?.id?.let(statusEmojiByUserId::get)
+    } else {
+        null
+    }
     Box(modifier = modifier) {
         when (room.displayType) {
             RoomSummaryDisplayType.PLACEHOLDER -> {
@@ -123,9 +131,20 @@ internal fun RoomSummaryRow(
                     NameAndTimestampRow(
                         name = room.name,
                         timestamp = room.timestamp,
-                        isHighlighted = room.isHighlighted
+                        isHighlighted = room.isHighlighted,
+                        statusEmojiMxc = statusEmojiMxc,
                     )
-                    MessagePreviewAndIndicatorRow(room = room)
+                    if (searchSubtitle != null) {
+                        Text(
+                            text = searchSubtitle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = ElementTheme.typography.fontBodyMdRegular,
+                            color = ElementTheme.colors.textSecondary,
+                        )
+                    } else {
+                        MessagePreviewAndIndicatorRow(room = room)
+                    }
                 }
             }
             RoomSummaryDisplayType.KNOCKED -> {
@@ -139,7 +158,8 @@ internal fun RoomSummaryRow(
                     NameAndTimestampRow(
                         name = room.name,
                         timestamp = null,
-                        isHighlighted = room.isHighlighted
+                        isHighlighted = room.isHighlighted,
+                        statusEmojiMxc = statusEmojiMxc,
                     )
                     if (room.canonicalAlias != null) {
                         Text(
@@ -215,6 +235,7 @@ private fun NameAndTimestampRow(
     name: String?,
     timestamp: String?,
     isHighlighted: Boolean,
+    statusEmojiMxc: String? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -234,6 +255,7 @@ private fun NameAndTimestampRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            SetkaStatusEmojiInline(mxcUrl = statusEmojiMxc)
         }
         // Timestamp
         Text(
@@ -345,6 +367,14 @@ private fun MessagePreviewAndIndicatorRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (room.isSetkaChannel) {
+                Icon(
+                    imageVector = CompoundIcons.VolumeOn(),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = ElementTheme.colors.iconSecondary.copy(alpha = 0.55f),
+                )
+            }
             val tint = if (room.isHighlighted) ElementTheme.colors.unreadIndicator else ElementTheme.colors.iconQuaternary
             if (room.hasRoomCall) {
                 OnGoingCallIcon(

@@ -15,6 +15,8 @@ import io.element.android.features.home.api.HomeEntryPoint
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.room.JoinedRoom
+import androidx.test.core.app.ApplicationProvider
+import io.element.android.features.home.impl.recent.SetkaRecentRoomsStore
 import io.element.android.libraries.matrix.test.FakeMatrixClient
 import io.element.android.services.analytics.test.FakeAnalyticsService
 import io.element.android.tests.testutils.lambda.lambdaError
@@ -28,12 +30,13 @@ class DefaultHomeEntryPointTest {
     @Test
     fun `test node builder`() = runTest {
         val entryPoint = DefaultHomeEntryPoint()
+        val matrixClient = FakeMatrixClient()
         val parentNode = TestParentNode.create { buildContext, plugins ->
             HomeFlowNode(
                 buildContext = buildContext,
                 plugins = plugins,
-                matrixClient = FakeMatrixClient(),
-                presenter = createHomePresenter(),
+                matrixClient = matrixClient,
+                presenter = createHomePresenter(client = matrixClient),
                 inviteFriendsUseCase = { lambdaError() },
                 analyticsService = FakeAnalyticsService(),
                 acceptDeclineInviteView = { _, _, _, _ -> lambdaError() },
@@ -42,12 +45,17 @@ class DefaultHomeEntryPointTest {
                 declineInviteAndBlockUserEntryPoint = { _, _, _ -> lambdaError() },
                 changeRoomMemberRolesEntryPoint = { _, _, _, _ -> lambdaError() },
                 leaveRoomRenderer = { _, _, _ -> lambdaError() },
+                setkaRecentRoomsStore = SetkaRecentRoomsStore(
+                    context = ApplicationProvider.getApplicationContext(),
+                    matrixClient = matrixClient,
+                ),
                 sessionCoroutineScope = backgroundScope,
             )
         }
         val callback = object : HomeEntryPoint.Callback {
             override fun navigateToRoom(roomId: RoomId, joinedRoom: JoinedRoom?) = lambdaError()
             override fun navigateToCreateRoom() = lambdaError()
+            override fun navigateToCreateChannel() = lambdaError()
             override fun navigateToCreateSpace() = lambdaError()
             override fun navigateToSettings() = lambdaError()
             override fun navigateToUserProfile(userId: UserId) = lambdaError()

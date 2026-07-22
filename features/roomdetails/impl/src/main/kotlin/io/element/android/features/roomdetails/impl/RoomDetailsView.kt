@@ -44,6 +44,7 @@ import im.vector.app.features.analytics.plan.Interaction
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.roomcall.api.hasPermissionToJoin
+import io.element.android.features.roomdetails.impl.channel.SetkaChannelAboutSection
 import io.element.android.features.userprofile.api.UserProfileState
 import io.element.android.features.userprofile.api.UserProfileVerificationState
 import io.element.android.features.userprofile.shared.UserProfileHeaderSection
@@ -216,7 +217,15 @@ fun RoomDetailsView(
             )
             Spacer(Modifier.height(12.dp))
 
-            if (state.roomTopic !is RoomTopicState.Hidden) {
+            if (state.isSetkaChannel && state.roomType is RoomDetailsType.Room) {
+                if (state.roomTopic !is RoomTopicState.Hidden) {
+                    SetkaChannelAboutSection(
+                        roomTopic = state.roomTopic,
+                        memberCount = state.memberCount,
+                        onActionClick = onActionClick,
+                    )
+                }
+            } else if (state.roomTopic !is RoomTopicState.Hidden) {
                 TopicSection(
                     roomTopic = state.roomTopic,
                     onActionClick = onActionClick,
@@ -245,42 +254,44 @@ fun RoomDetailsView(
                     )
                 }
 
-                WallpaperItem(
-                    wallpaperStyle = state.roomWallpaperStyle,
-                    onClick = { showWallpaperMenu = true },
-                )
-                DropdownMenu(
-                    expanded = showWallpaperMenu,
-                    onDismissRequest = { showWallpaperMenu = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_auto)) },
-                        onClick = {
-                            showWallpaperMenu = false
-                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.AUTO))
-                        },
+                if (!state.isSetkaChannel) {
+                    WallpaperItem(
+                        wallpaperStyle = state.roomWallpaperStyle,
+                        onClick = { showWallpaperMenu = true },
                     )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_light)) },
-                        onClick = {
-                            showWallpaperMenu = false
-                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.LIGHT))
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_dark)) },
-                        onClick = {
-                            showWallpaperMenu = false
-                            state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.DARK))
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.screen_room_details_wallpaper_custom)) },
-                        onClick = {
-                            showWallpaperMenu = false
-                            customWallpaperPicker.launch(arrayOf("image/*"))
-                        },
-                    )
+                    DropdownMenu(
+                        expanded = showWallpaperMenu,
+                        onDismissRequest = { showWallpaperMenu = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screen_room_details_wallpaper_auto)) },
+                            onClick = {
+                                showWallpaperMenu = false
+                                state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.AUTO))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screen_room_details_wallpaper_light)) },
+                            onClick = {
+                                showWallpaperMenu = false
+                                state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.LIGHT))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screen_room_details_wallpaper_dark)) },
+                            onClick = {
+                                showWallpaperMenu = false
+                                state.eventSink(RoomDetailsEvent.SetWallpaper(RoomWallpaperStyles.DARK))
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.screen_room_details_wallpaper_custom)) },
+                            onClick = {
+                                showWallpaperMenu = false
+                                customWallpaperPicker.launch(arrayOf("image/*"))
+                            },
+                        )
+                    }
                 }
 
                 if (state.canShowSecurityAndPrivacy) {
@@ -327,9 +338,11 @@ fun RoomDetailsView(
                     pinnedMessagesCount = state.pinnedMessagesCount,
                     onPinnedMessagesClick = onPinnedMessagesClick
                 )
-                PollsItem(
-                    openPollHistory = openPollHistory
-                )
+                if (!state.isSetkaChannel) {
+                    PollsItem(
+                        openPollHistory = openPollHistory
+                    )
+                }
                 MediaGalleryItem(
                     onClick = openMediaGallery
                 )
@@ -347,7 +360,7 @@ fun RoomDetailsView(
                 onLeaveRoomClick = { state.eventSink(RoomDetailsEvent.LeaveRoom(needsConfirmation = true)) }
             )
 
-            if (state.showDebugInfo) {
+            if (state.showDebugInfo && !state.isSetkaChannel) {
                 DebugInfoSection(
                     roomId = state.roomId,
                     roomVersion = state.roomVersion,
@@ -441,12 +454,13 @@ private fun MainActionsSection(
             }
         }
         if (state.roomCallState.hasPermissionToJoin()) {
-            // TODO Improve the view depending on all the cases here?
-            MainActionButton(
-                title = stringResource(CommonStrings.action_audio_call),
-                imageVector = CompoundIcons.VoiceCallSolid(),
-                onClick = onAudioCall,
-            )
+            if (!state.isSetkaChannel) {
+                MainActionButton(
+                    title = stringResource(CommonStrings.action_audio_call),
+                    imageVector = CompoundIcons.VoiceCallSolid(),
+                    onClick = onAudioCall,
+                )
+            }
             MainActionButton(
                 title = stringResource(CommonStrings.action_call),
                 imageVector = CompoundIcons.VideoCall(),
@@ -606,14 +620,6 @@ private fun DmMergedProfileSection(
                             label = "Статус",
                             value = lastSeen,
                             onClick = { onCopyValue(lastSeen) },
-                        )
-                    }
-                    state.bio?.takeIf { it.isNotBlank() }?.let { bio ->
-                        ProfileInfoDivider()
-                        DmProfileInfoRow(
-                            label = "О себе",
-                            value = bio,
-                            onClick = { onCopyValue(bio) },
                         )
                     }
                 }

@@ -234,6 +234,23 @@ interface MatrixClient {
      * Resets the cached client `well-known` config by the SDK.
      */
     suspend fun resetWellKnownConfig(): Result<Unit>
+
+    /**
+     * Import room timeline events from an external backwards-pagination source (Setka Lite).
+     * Requires matrix-rust-sdk support; fails with [MatrixClientImportEventsException] until then.
+     */
+    suspend fun importBackwardsRoomEvents(
+        roomId: RoomId,
+        eventsJson: String,
+        prevToken: String?,
+        fromToken: String? = null,
+    ): Result<ImportedRoomEventsResult>
+
+    /**
+     * Import to-device events as if delivered by `/sync` (Setka Lite crypto phase).
+     * Requires matrix-rust-sdk support; fails with [MatrixClientImportEventsException] until then.
+     */
+    suspend fun importToDeviceEvents(eventsJson: String): Result<Int>
 }
 
 /**

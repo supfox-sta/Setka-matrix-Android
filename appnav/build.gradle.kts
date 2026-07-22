@@ -26,6 +26,7 @@ setupDependencyInjection()
 dependencies {
     allFeaturesApi(project)
 
+    implementation(projects.appconfig)
     implementation(projects.libraries.core)
     implementation(projects.libraries.accountselect.api)
     implementation(projects.libraries.androidutils)
@@ -42,6 +43,7 @@ dependencies {
     implementation(projects.libraries.matrixmedia.api)
     implementation(projects.libraries.uiCommon)
     implementation(projects.libraries.uiStrings)
+    implementation(projects.features.messages.impl)
     implementation(projects.features.login.api)
 
     implementation(libs.coil)

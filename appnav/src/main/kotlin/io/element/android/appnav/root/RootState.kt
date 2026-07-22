@@ -17,5 +17,5 @@ data class RootState(
     val crashDetectionState: CrashDetectionState,
     val errorState: AppErrorState,
     val showLegacyAndroidCompatibilityWarning: Boolean,
-    val dismissLegacyAndroidCompatibilityWarning: () -> Unit,
+    val dismissLegacyAndroidCompatibilityWarning: (doNotShowAgain: Boolean) -> Unit,
 )

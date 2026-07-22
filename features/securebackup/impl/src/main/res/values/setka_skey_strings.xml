@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_skey_title">S/Key</string>
+    <string name="screen_setka_skey_description">Your recovery key is stored on a dedicated Setka server. Only you can access it — not even Setka staff can read it.</string>
+    <string name="screen_setka_skey_toggle_title">Store S/Key on server</string>
+    <string name="screen_setka_skey_copy_action">Copy recovery key</string>
+    <string name="screen_setka_skey_copied">Recovery key copied</string>
+    <string name="screen_setka_skey_not_available">Recovery key is not stored on the server</string>
+</resources>

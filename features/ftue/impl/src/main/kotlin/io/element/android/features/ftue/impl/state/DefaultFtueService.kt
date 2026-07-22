@@ -66,11 +66,22 @@ class DefaultFtueService(
                 }
             },
             userNeedsToConfirmSessionVerificationSuccess,
+            sessionPreferencesStore.isSessionVerificationSkipped(),
             analyticsService.didAskUserConsentFlow.distinctUntilChanged(),
         ) {
             updateFtueStep()
         }
             .launchIn(sessionCoroutineScope)
+    }
+
+    override suspend fun skipSessionVerificationForOnboarding() {
+        sessionPreferencesStore.setSkipSessionVerification(true)
+        onUserCompletedSessionVerification()
+        val step = getNextStep(null)
+        ftueStepStateFlow.value = when (step) {
+            null -> InternalFtueState.Complete
+            else -> InternalFtueState.Incomplete(step)
+        }
     }
 
     fun updateFtueStep() = sessionCoroutineScope.launch {

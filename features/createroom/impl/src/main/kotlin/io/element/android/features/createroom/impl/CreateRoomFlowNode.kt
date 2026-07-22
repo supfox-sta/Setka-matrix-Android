@@ -47,6 +47,7 @@ class CreateRoomFlowNode(
     @Parcelize
     data class Inputs(
         val isSpace: Boolean,
+        val isChannel: Boolean,
         val parentSpaceId: RoomId?,
     ) : NodeInputs, Parcelable
 
@@ -55,16 +56,23 @@ class CreateRoomFlowNode(
     override fun resolve(navTarget: NavTarget, buildContext: BuildContext): Node {
         return when (navTarget) {
             is NavTarget.ConfigureRoom -> {
-                val inputs = ConfigureRoomNode.Inputs(isSpace = navTarget.isSpace, parentSpaceId = navTarget.parentSpaceId)
+                val inputs = ConfigureRoomNode.Inputs(
+                    isSpace = navTarget.isSpace,
+                    isChannel = navTarget.isChannel,
+                    parentSpaceId = navTarget.parentSpaceId,
+                )
                 val callback = object : ConfigureRoomNode.Callback {
                     override fun onCreateRoomSuccess(roomId: RoomId) {
-                        backstack.replace(NavTarget.AddPeople(roomId))
+                        backstack.replace(NavTarget.AddPeople(roomId, navTarget.isChannel))
                     }
                 }
                 createNode<ConfigureRoomNode>(buildContext, plugins = listOf(inputs, callback))
             }
             is NavTarget.AddPeople -> {
-                val inputs = AddPeopleNode.Inputs(navTarget.roomId)
+                val inputs = AddPeopleNode.Inputs(
+                    roomId = navTarget.roomId,
+                    isChannel = navTarget.isChannel,
+                )
                 val callback: AddPeopleNode.Callback = object : AddPeopleNode.Callback {
                     override fun onFinish() {
                         callback.onRoomCreated(navTarget.roomId)
@@ -82,14 +90,15 @@ class CreateRoomFlowNode(
 
     sealed interface NavTarget : Parcelable {
         @Parcelize
-        data class ConfigureRoom(val isSpace: Boolean, val parentSpaceId: RoomId?) : NavTarget
+        data class ConfigureRoom(val isSpace: Boolean, val isChannel: Boolean, val parentSpaceId: RoomId?) : NavTarget
 
         @Parcelize
-        data class AddPeople(val roomId: RoomId) : NavTarget
+        data class AddPeople(val roomId: RoomId, val isChannel: Boolean) : NavTarget
     }
 }
 
 private fun initialElementFromInputs(inputs: CreateRoomFlowNode.Inputs) = CreateRoomFlowNode.NavTarget.ConfigureRoom(
     isSpace = inputs.isSpace,
+    isChannel = inputs.isChannel,
     parentSpaceId = inputs.parentSpaceId,
 )

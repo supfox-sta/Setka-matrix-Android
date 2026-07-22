@@ -33,6 +33,7 @@ dependencies {
     implementation(projects.libraries.di)
     implementation(projects.libraries.featureflag.api)
     implementation(projects.libraries.matrix.api)
+    implementation(projects.libraries.setkalite.api)
     implementation(projects.services.toolbox.api)
     implementation(libs.androidx.exifinterface)
     implementation(libs.androidx.media3.transformer)

@@ -290,6 +290,8 @@ private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomL
             onSetUpRecoveryClick = onSetUpRecoveryClick,
             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
             onStartChatClick = onCreateRoomClick,
+            onCreateChannelClick = {},
+            onSearchUserClick = {},
             onSearchUsers = { emptyList() },
             onAddContact = { _, _, _, _ -> false },
             onUpdateContact = { _, _, _, _ -> false },

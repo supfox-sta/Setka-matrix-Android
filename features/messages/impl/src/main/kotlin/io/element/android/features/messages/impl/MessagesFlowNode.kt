@@ -549,13 +549,17 @@ class MessagesFlowNode(
                 )
             }
             is TimelineItemVideoContent -> {
-                buildMediaViewerNavTarget(
-                    mode = MediaViewerEntryPoint.MediaViewerMode.TimelineImagesAndVideos(timelineMode),
-                    event = event,
-                    content = event.content,
-                    mediaSource = event.content.mediaSource,
-                    thumbnailSource = event.content.thumbnailSource,
-                )
+                if (event.content.isVideoNote) {
+                    null
+                } else {
+                    buildMediaViewerNavTarget(
+                        mode = MediaViewerEntryPoint.MediaViewerMode.TimelineImagesAndVideos(timelineMode),
+                        event = event,
+                        content = event.content,
+                        mediaSource = event.content.mediaSource,
+                        thumbnailSource = event.content.thumbnailSource,
+                    )
+                }
             }
             is TimelineItemFileContent -> {
                 buildMediaViewerNavTarget(

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_login_migration_help_button">Помощь с переносом</string>
+    <string name="screen_login_migration_help_title">Как перенести данные со старого приложения</string>
+    <string name="screen_login_migration_help_content">1. Не удаляйте старое приложение.\n\n2. Войдите в этот аккаунт по логину и паролю в новом приложении.\n\n3. После входа подтвердите новое устройство через старое приложение, если появится запрос.\n\n4. Дождитесь синхронизации чатов и профиля.\n\n5. Удаляйте старое приложение только после того, как убедитесь, что новое работает нормально.</string>
+</resources>

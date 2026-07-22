@@ -34,13 +34,14 @@ fun AddPeopleView(
     state: InvitePeopleState,
     onFinish: () -> Unit,
     modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.screen_create_room_add_people_title),
     invitePeopleView: @Composable () -> Unit,
 ) {
     HeaderFooterPage(
         modifier = modifier,
         contentPadding = PaddingValues(0.dp),
         topBar = {
-            AddPeopleTopBar(onSkipClick = onFinish)
+            AddPeopleTopBar(title = title, onSkipClick = onFinish)
         },
         footer = {
             Button(
@@ -62,10 +63,11 @@ fun AddPeopleView(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddPeopleTopBar(
+    title: String,
     onSkipClick: () -> Unit,
 ) {
     TopAppBar(
-        titleStr = stringResource(R.string.screen_create_room_add_people_title),
+        titleStr = title,
         actions = {
             TextButton(
                 text = stringResource(CommonStrings.action_skip),

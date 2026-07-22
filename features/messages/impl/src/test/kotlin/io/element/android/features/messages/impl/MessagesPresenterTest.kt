@@ -22,7 +22,9 @@ import io.element.android.features.messages.impl.fixtures.aMessageEvent
 import io.element.android.features.messages.impl.link.aLinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
-import io.element.android.features.messages.impl.messagecomposer.aMessageComposerState
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
+import io.element.android.libraries.mediaplayer.api.MediaPlayer
+import kotlinx.coroutines.flow.MutableStateFlow
 import io.element.android.features.messages.impl.pinned.banner.aLoadedPinnedMessagesBannerState
 import io.element.android.features.messages.impl.timeline.FakeMarkAsFullyRead
 import io.element.android.features.messages.impl.timeline.MarkAsFullyRead
@@ -1342,6 +1344,8 @@ class MessagesPresenterTest {
             reactionSummaryPresenter = { aReactionSummaryState() },
             readReceiptBottomSheetPresenter = { aReadReceiptBottomSheetState() },
             pinnedMessagesBannerPresenter = { aLoadedPinnedMessagesBannerState() },
+            roomMediaPlaybackCoordinator = previewRoomMediaPlaybackCoordinator,
+            mediaPlayer = previewMediaPlayer,
             roomCallStatePresenter = { aStandByCallState() },
             roomMemberModerationPresenter = roomMemberModerationPresenter,
             snackbarDispatcher = SnackbarDispatcher(),
@@ -1361,4 +1365,34 @@ class MessagesPresenterTest {
             sessionCoroutineScope = backgroundScope,
         )
     }
+
+    private val previewMediaPlayer = object : MediaPlayer {
+        override val state = MutableStateFlow(
+            MediaPlayer.State(
+                isReady = false,
+                isPlaying = false,
+                isEnded = false,
+                mediaId = null,
+                currentPosition = 0L,
+                duration = null,
+            )
+        )
+
+        override suspend fun setMedia(
+            uri: String,
+            mediaId: String,
+            mimeType: String,
+            startPositionMs: Long,
+        ): MediaPlayer.State = state.value
+
+        override fun play() = Unit
+        override fun pause() = Unit
+        override fun seekTo(positionMs: Long) = Unit
+        override fun setPlaybackSpeed(speed: Float) = Unit
+        override fun close() = Unit
+    }
+
+    private val previewRoomMediaPlaybackCoordinator = RoomMediaPlaybackCoordinator(
+        videoNotePlayback = io.element.android.features.messages.impl.mediaplayback.NoOpVideoNotePlayback,
+    )
 }

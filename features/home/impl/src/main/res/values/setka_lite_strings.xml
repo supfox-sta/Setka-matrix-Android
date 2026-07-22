@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_home_menu_setka_lite">Слабый интернет</string>
+    <string name="screen_home_menu_setka_lite_on">Слабый интернет: вкл</string>
+    <string name="screen_home_menu_setka_lite_off">Слабый интернет: выкл</string>
+    <string name="screen_home_setka_lite_syncing">Синхронизировано %1$d%%</string>
+    <string name="screen_home_setka_lite_transfer_queue">Очередь передач</string>
+    <string name="screen_home_setka_lite_transfer_queue_empty">Очередь пуста</string>
+    <string name="screen_home_setka_lite_transfer_kind_sync">Синхронизация</string>
+    <string name="screen_home_setka_lite_transfer_kind_upload">Отправка</string>
+    <string name="screen_home_setka_lite_transfer_kind_download">Загрузка</string>
+    <string name="screen_home_setka_lite_transfer_clear_done">Очистить завершённые</string>
+    <string name="screen_home_setka_lite_transfer_refresh_sync">Обновить синхронизацию</string>
+    <string name="screen_home_setka_lite_transfer_state_active">В процессе</string>
+    <string name="screen_home_setka_lite_transfer_state_queued">В очереди</string>
+    <string name="screen_home_setka_lite_transfer_state_done">Готово</string>
+    <string name="screen_home_setka_lite_transfer_state_failed">Ошибка</string>
+    <string name="screen_home_setka_lite_suggestion">Медленный интернет — включить режим «Слабый интернет»?</string>
+    <string name="screen_home_setka_lite_suggestion_enable">Включить</string>
+    <string name="screen_home_setka_lite_suggestion_dismiss">Не сейчас</string>
+</resources>

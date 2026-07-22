@@ -31,6 +31,7 @@ import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.architecture.runCatchingUpdatingState
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.core.mimetype.MimeTypes
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.libraries.matrix.api.room.JoinedRoom
 import io.element.android.libraries.matrix.api.room.powerlevels.permissionsAsState
 import io.element.android.libraries.matrix.ui.media.AvatarAction
@@ -74,21 +75,21 @@ class RoomDetailsEditPresenter(
             // Every time the rawName change (from sync), we can set the new name.
             roomRawNameEdited = roomRawNameTrimmed
         }
-        val roomTopicTrimmed = roomInfo.topic.orEmpty().trim()
+        val isSetkaChannelRoom = SetkaChannelConfig.isChannelTopic(roomInfo.topic)
+        val roomTopicForDisplay = SetkaChannelConfig.displayTopic(roomInfo.topic).orEmpty()
         var roomTopicEdited by rememberSaveable { mutableStateOf("") }
-        LaunchedEffect(roomTopicTrimmed) {
-            // Every time the topic change (from sync), we can set the new topic.
-            roomTopicEdited = roomTopicTrimmed
+        LaunchedEffect(roomTopicForDisplay) {
+            roomTopicEdited = roomTopicForDisplay
         }
 
         val saveButtonEnabled by remember(
             roomRawNameTrimmed,
-            roomTopicTrimmed,
+            roomTopicForDisplay,
             roomAvatarUri,
         ) {
             derivedStateOf {
                 roomRawNameTrimmed != roomRawNameEdited.trim() ||
-                    roomTopicTrimmed != roomTopicEdited.trim() ||
+                    roomTopicForDisplay != roomTopicEdited.trim() ||
                     roomAvatarUri != roomAvatarUriEdited
             }
         }
@@ -138,8 +139,9 @@ class RoomDetailsEditPresenter(
                 is RoomDetailsEditEvent.Save -> localCoroutineScope.saveChanges(
                     currentNameTrimmed = roomRawNameTrimmed,
                     newNameTrimmed = roomRawNameEdited.trim(),
-                    currentTopicTrimmed = roomTopicTrimmed,
+                    currentTopicTrimmed = roomTopicForDisplay,
                     newTopicTrimmed = roomTopicEdited.trim(),
+                    isSetkaChannelRoom = isSetkaChannelRoom,
                     currentAvatar = roomAvatarUri?.toUri(),
                     newAvatarUri = roomAvatarUriEdited?.toUri(),
                     action = saveAction,
@@ -194,6 +196,7 @@ class RoomDetailsEditPresenter(
         newNameTrimmed: String,
         currentTopicTrimmed: String,
         newTopicTrimmed: String,
+        isSetkaChannelRoom: Boolean,
         currentAvatar: Uri?,
         newAvatarUri: Uri?,
         action: MutableState<AsyncAction<Unit>>,
@@ -201,7 +204,12 @@ class RoomDetailsEditPresenter(
         val results = mutableListOf<Result<Unit>>()
         suspend {
             if (newTopicTrimmed != currentTopicTrimmed) {
-                results.add(room.setTopic(newTopicTrimmed).onFailure {
+                val topicToSave = if (isSetkaChannelRoom) {
+                    SetkaChannelConfig.formatChannelTopic(newTopicTrimmed)
+                } else {
+                    newTopicTrimmed
+                }
+                results.add(room.setTopic(topicToSave).onFailure {
                     Timber.e(it, "Failed to set room topic")
                 })
             }

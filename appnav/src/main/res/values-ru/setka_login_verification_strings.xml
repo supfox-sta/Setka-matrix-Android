@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+
+
+<resources>
+
+
+
+    <string name="screen_setka_login_verification_title">Подтвердите вход</string>
+
+
+
+    <string name="screen_setka_login_verification_subtitle">Подтверждаем вход. Если ключ сохранён на сервере, вход выполнится автоматически.</string>
+
+
+
+    <string name="screen_setka_login_verification_ip">IP-адрес: %1$s</string>
+
+
+
+    <string name="screen_setka_login_verification_region">Регион: %1$s</string>
+
+
+
+    <string name="screen_setka_login_verification_status_error">Не удалось проверить вход. Попробуйте позже.</string>
+
+
+
+    <string name="screen_setka_login_verification_fallback_emoji">Сверить эмодзи на другом устройстве</string>
+
+
+
+    <string name="screen_setka_login_verification_fallback_recovery">Ввести резервный ключ</string>
+
+
+
+    <string name="screen_setka_login_verification_loading">Проверяем вход…</string>
+
+
+
+</resources>
+
+

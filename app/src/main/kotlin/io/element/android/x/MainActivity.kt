@@ -8,13 +8,10 @@
 
 package io.element.android.x
 
-import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,9 +26,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.Density
-import androidx.core.content.FileProvider
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import io.element.android.libraries.androidutils.R as AndroidUtilsR
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -45,10 +40,8 @@ import io.element.android.features.lockscreen.api.LockScreenEntryPoint
 import io.element.android.features.lockscreen.api.LockScreenLockState
 import io.element.android.features.lockscreen.api.LockScreenService
 import io.element.android.features.lockscreen.api.handleSecureFlag
-import io.element.android.libraries.androidutils.system.startInstallFromSourceIntent
 import io.element.android.libraries.architecture.bindings
 import io.element.android.libraries.core.log.logger.LoggerTag
-import io.element.android.libraries.core.mimetype.MimeTypes
 import io.element.android.libraries.designsystem.theme.ElementThemeApp
 import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.designsystem.theme.SetkaCustomization
@@ -57,32 +50,19 @@ import io.element.android.libraries.designsystem.utils.snackbar.LocalSnackbarDis
 import io.element.android.services.analytics.compose.LocalAnalyticsService
 import io.element.android.x.di.AppBindings
 import io.element.android.x.intent.SafeUriHandler
-import io.element.android.x.update.AppUpdateInfo
 import io.element.android.x.update.AppUpdatePrompt
 import io.element.android.x.update.AppUpdatePromptState
 import io.element.android.x.update.isMandatoryUpdate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
 import timber.log.Timber
-import java.io.File
 
 private val loggerTag = LoggerTag("MainActivity")
 
 class MainActivity : NodeActivity() {
     private lateinit var mainNode: MainNode
     private lateinit var appBindings: AppBindings
-    private var pendingUpdateApk: File? = null
     private val appUpdatePromptState = MutableStateFlow<AppUpdatePromptState?>(null)
-
-    private val installFromUnknownSourcesLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        val apkFile = pendingUpdateApk ?: return@registerForActivityResult
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
-            launchUpdateInstaller(apkFile)
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Timber.tag(loggerTag.value).w("onCreate, with savedInstanceState: ${savedInstanceState != null}")
@@ -235,7 +215,7 @@ class MainActivity : NodeActivity() {
                     updatePromptState?.let { state ->
                         AppUpdatePrompt(
                             state = state,
-                            onUpdateClick = { handleAppUpdatePrimaryAction(state) },
+                            onUpdateClick = { openAppUpdateDownloadUrl(state.updateInfo.downloadUrl) },
                             onDismissClick = ::dismissOptionalAppUpdate,
                         )
                     }
@@ -280,22 +260,13 @@ class MainActivity : NodeActivity() {
     }
 
     private fun checkForAppUpdatesOnStartup() {
-        if (appUpdatePromptState.value?.isDownloading == true) return
         lifecycleScope.launch {
             appBindings.appUpdateService().checkForUpdate()
                 .onSuccess { updateInfo ->
                     appUpdatePromptState.value = updateInfo?.let {
-                        val cachedApk = appBindings.appUpdateService().getDownloadedUpdateApk(it)
-                            .getOrElse { failure ->
-                                Timber.tag(loggerTag.value).w(failure, "Failed to resolve cached update APK")
-                                null
-                            }
                         AppUpdatePromptState(
                             updateInfo = it,
                             installedVersionName = appBindings.buildMeta().versionName,
-                            downloadedApkFile = cachedApk,
-                            downloadedBytes = cachedApk?.length() ?: 0L,
-                            totalBytes = cachedApk?.length(),
                         )
                     }
                 }
@@ -311,92 +282,11 @@ class MainActivity : NodeActivity() {
         appUpdatePromptState.value = null
     }
 
-    private fun handleAppUpdatePrimaryAction(state: AppUpdatePromptState) {
-        val downloadedApkFile = state.downloadedApkFile?.takeIf { it.exists() }
-        if (downloadedApkFile != null) {
-            requestInstallUpdate(downloadedApkFile)
-            return
-        }
-        downloadAndInstallUpdate(state.updateInfo)
-    }
-
-    private fun downloadAndInstallUpdate(updateInfo: AppUpdateInfo) {
-        appUpdatePromptState.update { currentState ->
-            currentState?.copy(
-                isDownloading = currentState.updateInfo == updateInfo,
-                downloadedApkFile = null,
-                downloadedBytes = 0L,
-                totalBytes = null,
-                downloadError = null,
-            )
-        }
-        lifecycleScope.launch {
-            appBindings.appUpdateService().downloadUpdateApk(updateInfo) { downloadedBytes, totalBytes ->
-                appUpdatePromptState.update { currentState ->
-                    currentState?.takeIf { it.updateInfo == updateInfo }?.copy(
-                        isDownloading = true,
-                        downloadedBytes = downloadedBytes,
-                        totalBytes = totalBytes,
-                        downloadError = null,
-                    ) ?: currentState
-                }
-            }
-                .onSuccess { apkFile ->
-                    requestInstallUpdate(apkFile)
-                }
-                .onFailure { failure ->
-                    Timber.tag(loggerTag.value).w(failure, "Failed to download update APK")
-                    appUpdatePromptState.update { currentState ->
-                        currentState?.takeIf { it.updateInfo == updateInfo }?.copy(
-                            isDownloading = false,
-                            downloadedApkFile = null,
-                            downloadedBytes = 0L,
-                            totalBytes = null,
-                            downloadError = failure.message ?: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043a\u0430\u0447\u0430\u0442\u044c \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435. \u041f\u043e\u043f\u0440\u043e\u0431\u0443\u0439\u0442\u0435 \u0435\u0449\u0435 \u0440\u0430\u0437.",
-                        ) ?: currentState
-                    }
-                }
-        }
-    }
-
-    private fun requestInstallUpdate(apkFile: File) {
-        pendingUpdateApk = apkFile
-        appUpdatePromptState.update { currentState ->
-            currentState?.copy(
-                isDownloading = false,
-                downloadedApkFile = apkFile,
-                downloadedBytes = apkFile.length(),
-                totalBytes = apkFile.length(),
-                downloadError = null,
-            )
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            startInstallFromSourceIntent(installFromUnknownSourcesLauncher)
-            return
-        }
-        launchUpdateInstaller(apkFile)
-    }
-
-    private fun launchUpdateInstaller(apkFile: File) {
-        val authority = "${appBindings.buildMeta().applicationId}.fileprovider"
-        val apkUri = FileProvider.getUriForFile(this, authority, apkFile)
-        val installIntent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(apkUri, MimeTypes.Apk)
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        try {
-            startActivity(installIntent)
-            pendingUpdateApk = null
-        } catch (failure: ActivityNotFoundException) {
-            Timber.tag(loggerTag.value).w(failure, "No compatible installer found for APK update")
-            appUpdatePromptState.update { currentState ->
-                currentState?.copy(
-                    isDownloading = false,
-                    downloadedApkFile = apkFile,
-                    downloadedBytes = apkFile.length(),
-                    totalBytes = apkFile.length(),
-                    downloadError = getString(AndroidUtilsR.string.error_no_compatible_app_found),
-                )
-            }
+    private fun openAppUpdateDownloadUrl(downloadUrl: String) {
+        runCatching {
+            startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(downloadUrl)))
+        }.onFailure { failure ->
+            Timber.tag(loggerTag.value).w(failure, "Failed to open update download URL")
         }
     }
 

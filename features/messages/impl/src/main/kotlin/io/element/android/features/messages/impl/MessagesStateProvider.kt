@@ -23,6 +23,8 @@ import io.element.android.features.messages.impl.link.LinkState
 import io.element.android.features.messages.impl.link.aLinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
 import io.element.android.features.messages.impl.messagecomposer.aMessageComposerState
+import io.element.android.features.messages.impl.mediaplayback.NoOpVideoNotePlayback
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.pinned.banner.aLoadedPinnedMessagesBannerState
 import io.element.android.features.messages.impl.timeline.TimelineState
@@ -122,8 +124,11 @@ fun aMessagesState(
     roomCallState: RoomCallState = aStandByCallState(),
     roomWallpaperStyle: String? = null,
     pinnedMessagesBannerState: PinnedMessagesBannerState = aLoadedPinnedMessagesBannerState(),
+    roomMediaPlaybackCoordinator: RoomMediaPlaybackCoordinator = aPreviewRoomMediaPlaybackCoordinator(),
     dmUserVerificationState: IdentityState? = null,
     dmUserPresenceText: String? = null,
+    roomHeaderSubtitle: String? = dmUserPresenceText,
+    dmUserStatusEmojiMxc: String? = null,
     roomMemberModerationState: RoomMemberModerationState = aRoomMemberModerationState(),
     topBarSharedHistoryIcon: SharedHistoryIcon = SharedHistoryIcon.NONE,
     successorRoom: SuccessorRoom? = null,
@@ -153,8 +158,10 @@ fun aMessagesState(
     appName = "Element",
     roomWallpaperStyle = roomWallpaperStyle,
     pinnedMessagesBannerState = pinnedMessagesBannerState,
+    roomMediaPlaybackCoordinator = roomMediaPlaybackCoordinator,
     dmUserVerificationState = dmUserVerificationState,
-    dmUserPresenceText = dmUserPresenceText,
+    roomHeaderSubtitle = roomHeaderSubtitle,
+    dmUserStatusEmojiMxc = dmUserStatusEmojiMxc,
     roomMemberModerationState = roomMemberModerationState,
     topBarSharedHistoryIcon = topBarSharedHistoryIcon,
     successorRoom = successorRoom,
@@ -207,4 +214,8 @@ fun aReadReceiptBottomSheetState(
 ) = ReadReceiptBottomSheetState(
     selectedEvent = selectedEvent,
     eventSink = eventSink,
+)
+
+internal fun aPreviewRoomMediaPlaybackCoordinator() = RoomMediaPlaybackCoordinator(
+    videoNotePlayback = NoOpVideoNotePlayback,
 )

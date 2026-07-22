@@ -11,10 +11,14 @@ package io.element.android.appnav
 import android.content.Intent
 import android.os.Parcelable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import com.bumble.appyx.core.composable.PermanentChild
@@ -33,6 +37,7 @@ import com.bumble.appyx.navmodel.backstack.BackStackElement
 import com.bumble.appyx.navmodel.backstack.BackStackElements
 import com.bumble.appyx.navmodel.backstack.operation.BackStackOperation
 import com.bumble.appyx.navmodel.backstack.operation.Push
+import com.bumble.appyx.navmodel.backstack.operation.NewRoot
 import com.bumble.appyx.navmodel.backstack.operation.pop
 import com.bumble.appyx.navmodel.backstack.operation.push
 import com.bumble.appyx.navmodel.backstack.operation.replace
@@ -40,6 +45,11 @@ import com.bumble.appyx.navmodel.backstack.operation.singleTop
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedInject
 import io.element.android.annotations.ContributesNode
+import io.element.android.appconfig.SetkaMatrixConfig
+import io.element.android.appnav.setka.SetkaLoginRecoverySync
+import io.element.android.appnav.setka.SetkaLoginVerificationFlowNode
+import io.element.android.appnav.setka.SetkaRecoveryKeyBackupUploader
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
 import io.element.android.appnav.loggedin.LoggedInNode
 import io.element.android.appnav.loggedin.MediaPreviewConfigMigration
 import io.element.android.appnav.loggedin.SendQueues
@@ -66,7 +76,11 @@ import io.element.android.features.share.api.ShareEntryPoint
 import io.element.android.features.startchat.api.StartChatEntryPoint
 import io.element.android.features.userprofile.api.UserProfileEntryPoint
 import io.element.android.features.verifysession.api.IncomingVerificationEntryPoint
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackBarState
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
+import io.element.android.features.messages.impl.mediaplayback.SessionMediaPlaybackOverlay
 import io.element.android.libraries.architecture.BackstackView
+import io.element.android.libraries.architecture.Presenter
 import io.element.android.libraries.architecture.BaseFlowNode
 import io.element.android.libraries.architecture.callback
 import io.element.android.libraries.architecture.createNode
@@ -97,6 +111,7 @@ import io.element.android.services.analytics.api.AnalyticsService
 import io.element.android.services.analytics.api.watchers.AnalyticsRoomListStateWatcher
 import io.element.android.services.appnavstate.api.AppNavigationStateService
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -146,6 +161,12 @@ class LoggedInFlowNode(
     private val analyticsService: AnalyticsService,
     private val analyticsRoomListStateWatcher: AnalyticsRoomListStateWatcher,
     private val createRoomEntryPoint: CreateRoomEntryPoint,
+    @Suppress("unused")
+    private val setkaRecoveryKeyBackupUploader: SetkaRecoveryKeyBackupUploader,
+    private val setkaLoginRecoverySync: SetkaLoginRecoverySync,
+    private val setkaServerRecoveryService: SetkaServerRecoveryService,
+    private val roomMediaPlaybackCoordinator: RoomMediaPlaybackCoordinator,
+    private val roomMediaPlaybackBarPresenter: Presenter<RoomMediaPlaybackBarState>,
 ) : BaseFlowNode<LoggedInFlowNode.NavTarget>(
     backstack = BackStack(
         initialElement = NavTarget.Placeholder,
@@ -164,6 +185,8 @@ class LoggedInFlowNode(
     }
 
     private val callback: Callback = callback()
+    @Volatile
+    private var setkaLoginVerificationResolved: Boolean = false
     private val loggedInFlowProcessor = LoggedInEventProcessor(
         snackbarDispatcher = snackbarDispatcher,
         roomMembershipObserver = matrixClient.roomMembershipObserver,
@@ -223,13 +246,25 @@ class LoggedInFlowNode(
 
                 analyticsService.startLongRunningTransaction(AnalyticsLongRunningTransaction.FirstRoomsDisplayed)
 
+                val serverName = matrixClient.sessionId.value.substringAfter(':', "")
+                if (SetkaMatrixConfig.isSetkaHomeserver(serverName)) {
+                    sessionCoroutineScope.launch {
+                        networkMonitor.connectivity.first { networkStatus -> networkStatus == NetworkStatus.Connected }
+                        if (setkaLoginRecoverySync.trySilentLogin()) {
+                            finishSetkaLoginVerification()
+                        } else {
+                            backstack.safeRoot(NavTarget.SetkaLoginVerification)
+                        }
+                    }
+                } else {
+                    setkaLoginVerificationResolved = true
+                    navigateFromFtueState(ftueService.state.value)
+                }
+
                 ftueService.state
                     .onEach { ftueState ->
-                        when (ftueState) {
-                            is FtueState.Unknown -> Unit // Nothing to do
-                            is FtueState.Incomplete -> backstack.safeRoot(NavTarget.Ftue)
-                            is FtueState.Complete -> backstack.safeRoot(NavTarget.Home)
-                        }
+                        if (!setkaLoginVerificationResolved) return@onEach
+                        navigateFromFtueState(ftueState)
                     }
                     .launchIn(lifecycleScope)
             },
@@ -251,6 +286,52 @@ class LoggedInFlowNode(
 
     private fun setupSendingQueue() {
         sendingQueue.launchIn(lifecycleScope)
+    }
+
+    private fun navigateFromFtueState(ftueState: FtueState) {
+        val leavingSetkaLoginVerification = backstack.elements.value.lastOrNull()?.key?.navTarget is NavTarget.SetkaLoginVerification
+        fun setLoggedInRoot(target: NavTarget) {
+            if (leavingSetkaLoginVerification) {
+                backstack.accept(NewRoot(target))
+            } else {
+                backstack.safeRoot(target)
+            }
+        }
+        when (ftueState) {
+            is FtueState.Unknown -> {
+                lifecycleScope.launch {
+                    val nextState = ftueService.state.filter { it !is FtueState.Unknown }.first()
+                    if (setkaLoginVerificationResolved) {
+                        navigateFromFtueState(nextState)
+                    }
+                }
+            }
+            is FtueState.Incomplete -> setLoggedInRoot(NavTarget.Ftue)
+            is FtueState.Complete -> setLoggedInRoot(NavTarget.Home)
+        }
+    }
+
+    private fun finishSetkaLoginVerification() {
+        if (setkaLoginVerificationResolved) return
+        lifecycleScope.launch {
+            // Setka login verification already confirmed the user; skip Matrix E2E onboarding step.
+            ftueService.skipSessionVerificationForOnboarding()
+            setkaLoginVerificationResolved = true
+            navigateFromFtueState(ftueService.state.value)
+            launch {
+                if (setkaLoginRecoverySync.shouldPublishFreshKeyAfterLogin()) {
+                    setkaServerRecoveryService.publishFreshRecoveryKeyAfterLogin()
+                        .onFailure { error ->
+                            Timber.w(error, "Failed to publish fresh Setka recovery key after login")
+                        }
+                    setkaLoginRecoverySync.markFreshKeyPublished()
+                }
+                setkaServerRecoveryService.refreshAndSync()
+                    .onFailure { error ->
+                        Timber.w(error, "Failed to sync Setka recovery after login")
+                    }
+            }
+        }
     }
 
     sealed interface NavTarget : Parcelable {
@@ -287,6 +368,9 @@ class LoggedInFlowNode(
         data object CreateRoom : NavTarget
 
         @Parcelize
+        data object CreateChannel : NavTarget
+
+        @Parcelize
         data object CreateSpace : NavTarget
 
         @Parcelize
@@ -296,6 +380,9 @@ class LoggedInFlowNode(
 
         @Parcelize
         data object Ftue : NavTarget
+
+        @Parcelize
+        data object SetkaLoginVerification : NavTarget
 
         @Parcelize
         data object LinkNewDevice : NavTarget
@@ -342,6 +429,10 @@ class LoggedInFlowNode(
 
                     override fun navigateToCreateRoom() {
                         backstack.push(NavTarget.CreateRoom)
+                    }
+
+                    override fun navigateToCreateChannel() {
+                        backstack.push(NavTarget.CreateChannel)
                     }
 
                     override fun navigateToCreateSpace() {
@@ -487,6 +578,18 @@ class LoggedInFlowNode(
                     callback = callback,
                 )
             }
+            NavTarget.CreateChannel -> {
+                val callback = object : CreateRoomEntryPoint.Callback {
+                    override fun onRoomCreated(roomId: RoomId) {
+                        backstack.replace(NavTarget.Room(roomIdOrAlias = RoomIdOrAlias.Id(roomId), serverNames = emptyList()))
+                    }
+                }
+                createRoomEntryPoint
+                    .builder(parentNode = this, buildContext = buildContext, callback = callback)
+                    .setIsSpace(false)
+                    .setIsChannel(true)
+                    .build()
+            }
             is NavTarget.CreateSpace -> {
                 val callback = object : CreateRoomEntryPoint.Callback {
                     override fun onRoomCreated(roomId: RoomId) {
@@ -512,6 +615,14 @@ class LoggedInFlowNode(
             }
             NavTarget.Ftue -> {
                 ftueEntryPoint.createNode(this, buildContext)
+            }
+            NavTarget.SetkaLoginVerification -> {
+                val verificationCallback = object : SetkaLoginVerificationFlowNode.Callback {
+                    override fun onDone() {
+                        finishSetkaLoginVerification()
+                    }
+                }
+                createNode<SetkaLoginVerificationFlowNode>(buildContext, plugins = listOf(verificationCallback))
             }
             NavTarget.LinkNewDevice -> {
                 val callback = object : LinkNewDeviceEntryPoint.Callback {
@@ -647,12 +758,29 @@ class LoggedInFlowNode(
                 isOnline = isOnline,
                 modifier = modifier,
             ) { contentModifier ->
-                Box(modifier = contentModifier) {
+                val scope = rememberCoroutineScope()
+                Box(modifier = contentModifier.fillMaxSize()) {
                     val ftueState by ftueService.state.collectAsState()
                     BackstackView()
                     if (ftueState is FtueState.Complete) {
                         PermanentChild(permanentNavModel = permanentNavModel, navTarget = NavTarget.LoggedInPermanent)
                     }
+                    SessionMediaPlaybackOverlay(
+                        barPresenter = roomMediaPlaybackBarPresenter,
+                        coordinator = roomMediaPlaybackCoordinator,
+                        onOpenPlayingMessage = { roomId, eventId ->
+                            scope.launch {
+                                attachRoom(
+                                    roomIdOrAlias = roomId.toRoomIdOrAlias(),
+                                    eventId = eventId,
+                                    clearBackstack = false,
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth(),
+                    )
                 }
             }
         }

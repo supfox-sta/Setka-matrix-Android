@@ -27,7 +27,10 @@ data class SetkaComposerState(
     val packEditorState: SetkaPackEditorState? = null,
     val sharedPackPreview: SetkaSharedPackPreviewState? = null,
     val deleteConfirmation: SetkaDeleteConfirmation? = null,
+    val sendingStickerId: String? = null,
     val errorMessage: String? = null,
+    val paymentFlowState: io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState =
+        io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState.Idle,
 ) {
     val stickerPacksOnly: List<SetkaStickerPack>
         get() = stickerPacks.filter { it.kind == SetkaPackKind.STICKER }

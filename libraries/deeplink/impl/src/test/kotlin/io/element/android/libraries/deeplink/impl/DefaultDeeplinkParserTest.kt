@@ -16,6 +16,7 @@ import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.ThreadId
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturnOutcome
 import io.element.android.libraries.matrix.test.AN_EVENT_ID
 import io.element.android.libraries.matrix.test.A_ROOM_ID
 import io.element.android.libraries.matrix.test.A_SESSION_ID
@@ -40,6 +41,12 @@ class DefaultDeeplinkParserTest {
             "elementx://open/@alice:server.org/!aRoomId:domain//\$anEventId"
         const val A_URI_WITH_ROOM_WITH_THREAD_AND_EVENT_AND_INVALID_CHARACTERS =
             "elementx://open/@a%2Flice:server.org/!a%2FRoomId:domain/\$a%2FThreadId/\$an%2FEventId"
+        const val A_URI_SETKA_PLUS_PAYMENT_SUCCESS =
+            "elementx://open/@alice:server.org/setka-plus/payment/success?payment_id=pay-123"
+        const val A_URI_SETKA_PLUS_PAYMENT_FAIL =
+            "elementx://open/@alice:server.org/setka-plus/payment/fail?payment_id=pay-456"
+        const val A_HTTPS_SETKA_PAYMENT_SUCCESS =
+            "https://matrix.setka-matrix.ru/setka/robokassa/return/success?user_id=%40alice%3Aserver.org&payment_id=pay-789"
     }
 
     @Test
@@ -62,6 +69,30 @@ class DefaultDeeplinkParserTest {
                     roomId = RoomId("!a/RoomId:domain"),
                     threadId = ThreadId("\$a/ThreadId"),
                     eventId = EventId("\$an/EventId"),
+                )
+            )
+        assertThat(sut.getFromIntent(createIntent(A_URI_SETKA_PLUS_PAYMENT_SUCCESS)))
+            .isEqualTo(
+                DeeplinkData.SetkaPlusPaymentReturn(
+                    sessionId = A_SESSION_ID,
+                    paymentId = "pay-123",
+                    outcome = SetkaPlusPaymentReturnOutcome.SUCCESS,
+                )
+            )
+        assertThat(sut.getFromIntent(createIntent(A_URI_SETKA_PLUS_PAYMENT_FAIL)))
+            .isEqualTo(
+                DeeplinkData.SetkaPlusPaymentReturn(
+                    sessionId = A_SESSION_ID,
+                    paymentId = "pay-456",
+                    outcome = SetkaPlusPaymentReturnOutcome.FAIL,
+                )
+            )
+        assertThat(sut.getFromIntent(createIntent(A_HTTPS_SETKA_PAYMENT_SUCCESS)))
+            .isEqualTo(
+                DeeplinkData.SetkaPlusPaymentReturn(
+                    sessionId = A_SESSION_ID,
+                    paymentId = "pay-789",
+                    outcome = SetkaPlusPaymentReturnOutcome.SUCCESS,
                 )
             )
     }

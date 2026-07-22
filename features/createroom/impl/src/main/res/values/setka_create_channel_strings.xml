@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_create_channel_title">New channel</string>
+    <string name="screen_create_channel_creating">Creating channel…</string>
+    <string name="screen_create_channel_error_creating">The channel could not be created because of an unknown error. Try again later.</string>
+    <string name="screen_create_channel_add_people_title">Invite subscribers</string>
+</resources>

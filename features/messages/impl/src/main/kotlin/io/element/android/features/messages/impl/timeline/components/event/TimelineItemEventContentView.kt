@@ -32,6 +32,8 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVoiceContent
 import io.element.android.features.messages.impl.videonotes.timeline.VideoNoteInlinePlaybackState
 import io.element.android.libraries.architecture.Presenter
+import io.element.android.libraries.matrix.api.core.EventId
+import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.voiceplayer.api.VoiceMessageState
 import io.element.android.wysiwyg.link.Link
 
@@ -45,6 +47,8 @@ fun TimelineItemEventContentView(
     onLinkClick: (Link) -> Unit,
     onLinkLongClick: (Link) -> Unit,
     eventSink: (TimelineEvent.TimelineItemEvent) -> Unit,
+    eventId: EventId? = null,
+    localSendState: LocalEventSendState? = null,
     modifier: Modifier = Modifier,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
 ) {
@@ -85,6 +89,7 @@ fun TimelineItemEventContentView(
             onLinkClick = onLinkClick,
             onLinkLongClick = onLinkLongClick,
             onContentLayoutChange = onContentLayoutChange,
+            localSendState = localSendState,
             modifier = modifier,
         )
         is TimelineItemStickerContent -> TimelineItemStickerView(
@@ -104,6 +109,7 @@ fun TimelineItemEventContentView(
             }
             TimelineItemVideoView(
                 content = content,
+                eventId = eventId,
                 hideMediaContent = hideMediaContent,
                 onContentClick = onContentClick,
                 onLongClick = onLongClick,
@@ -113,6 +119,7 @@ fun TimelineItemEventContentView(
                 onContentLayoutChange = onContentLayoutChange,
                 modifier = modifier,
                 videoNoteInlinePlaybackState = inlinePlaybackState,
+                localSendState = localSendState,
             )
         }
         is TimelineItemFileContent -> TimelineItemFileView(
@@ -141,6 +148,7 @@ fun TimelineItemEventContentView(
                 state = presenter.present(),
                 content = content,
                 onContentLayoutChange = onContentLayoutChange,
+                localSendState = localSendState,
                 modifier = modifier
             )
         }

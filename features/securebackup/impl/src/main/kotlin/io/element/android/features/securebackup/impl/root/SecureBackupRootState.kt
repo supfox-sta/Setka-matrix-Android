@@ -13,14 +13,20 @@ import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarMessage
 import io.element.android.libraries.matrix.api.encryption.BackupState
 import io.element.android.libraries.matrix.api.encryption.RecoveryState
+import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
 
 data class SecureBackupRootState(
     val enableAction: AsyncAction<Unit>,
+    val setkaToggleAction: AsyncAction<Unit>,
     val backupState: BackupState,
     val doesBackupExistOnServer: AsyncData<Boolean>,
     val recoveryState: RecoveryState,
     val appName: String,
     val displayKeyStorageDisabledError: Boolean,
+    val isSetkaSession: Boolean,
+    val setkaServerBackupEnabled: Boolean,
+    val setkaSyncState: SetkaServerRecoverySyncState,
+    val setkaRecoveryKeyToCopy: String?,
     val snackbarMessage: SnackbarMessage?,
     val eventSink: (SecureBackupRootEvents) -> Unit,
 ) {

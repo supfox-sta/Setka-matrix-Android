@@ -14,8 +14,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class FakeFtueService : FtueService {
     override val state: MutableStateFlow<FtueState> = MutableStateFlow(FtueState.Unknown)
+    var skipSessionVerificationForOnboardingCallCount: Int = 0
+        private set
 
     suspend fun emitState(newState: FtueState) {
         state.emit(newState)
+    }
+
+    override suspend fun skipSessionVerificationForOnboarding() {
+        skipSessionVerificationForOnboardingCallCount++
     }
 }

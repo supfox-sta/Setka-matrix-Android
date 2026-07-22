@@ -84,6 +84,15 @@
                     android:host="open"
                     android:scheme="elementx" />
             </intent-filter>
+            <!-- Setka Plus Robokassa payment return -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="matrix.setka-matrix.ru" />
+                <data android:pathPrefix="/setka/robokassa/return/" />
+            </intent-filter>
             <!--
               Oidc redirection
             -->

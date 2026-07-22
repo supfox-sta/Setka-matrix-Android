@@ -27,6 +27,12 @@ import io.element.android.libraries.mediaupload.api.MediaSender
 import io.element.android.libraries.mediaupload.api.MediaSenderFactory
 import io.element.android.libraries.mediaupload.api.MediaSenderRoomFactory
 import io.element.android.libraries.mediaupload.api.MediaUploadInfo
+import io.element.android.libraries.mediaupload.api.allFiles
+import io.element.android.libraries.setkalite.api.SetkaLiteMediaGate
+import io.element.android.libraries.setkalite.api.SetkaLiteMediaTransferIds
+import io.element.android.libraries.setkalite.api.SetkaTransferQueue
+import io.element.android.libraries.setkalite.api.NoOpSetkaLiteMediaGate
+import io.element.android.libraries.setkalite.api.NoOpSetkaTransferQueue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import timber.log.Timber
@@ -38,6 +44,8 @@ class DefaultMediaSenderFactory(
     private val preProcessor: MediaPreProcessor,
     private val room: JoinedRoom,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
+    private val setkaLiteMediaGate: SetkaLiteMediaGate,
+    private val setkaTransferQueue: SetkaTransferQueue,
 ) : MediaSenderFactory {
     override fun create(
         timelineMode: Timeline.Mode,
@@ -47,6 +55,8 @@ class DefaultMediaSenderFactory(
             room = room,
             timelineMode = timelineMode,
             mediaOptimizationConfigProvider = mediaOptimizationConfigProvider,
+            setkaLiteMediaGate = setkaLiteMediaGate,
+            setkaTransferQueue = setkaTransferQueue,
         )
     }
 }
@@ -55,6 +65,8 @@ class DefaultMediaSenderFactory(
 class DefaultMediaSenderRoomFactory(
     private val preProcessor: MediaPreProcessor,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
+    private val setkaLiteMediaGate: SetkaLiteMediaGate,
+    private val setkaTransferQueue: SetkaTransferQueue,
 ) : MediaSenderRoomFactory {
     override fun create(
         room: JoinedRoom,
@@ -64,6 +76,8 @@ class DefaultMediaSenderRoomFactory(
             room = room,
             timelineMode = Timeline.Mode.Live,
             mediaOptimizationConfigProvider = mediaOptimizationConfigProvider,
+            setkaLiteMediaGate = setkaLiteMediaGate,
+            setkaTransferQueue = setkaTransferQueue,
         )
     }
 }
@@ -73,6 +87,8 @@ class DefaultMediaSender(
     private val room: JoinedRoom,
     private val timelineMode: Timeline.Mode,
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
+    private val setkaLiteMediaGate: SetkaLiteMediaGate = NoOpSetkaLiteMediaGate,
+    private val setkaTransferQueue: SetkaTransferQueue = NoOpSetkaTransferQueue,
 ) : MediaSender {
     private val ongoingUploadJobs = ConcurrentHashMap<Job.Key, MediaUploadHandler>()
     val hasOngoingMediaUploads get() = ongoingUploadJobs.isNotEmpty()
@@ -241,8 +257,33 @@ class DefaultMediaSender(
             .mapCatching { uploadHandler ->
                 Timber.d("Added ongoing upload job, total: ${ongoingUploadJobs.size + 1}")
                 ongoingUploadJobs[Job] = uploadHandler
+                beginLiteUpload(uploadInfo)
                 uploadHandler.await()
+                    .completeLiteUpload(uploadInfo)
+                    .getOrThrow()
             }
+    }
+
+    private suspend fun beginLiteUpload(uploadInfo: MediaUploadInfo) {
+        if (!setkaLiteMediaGate.isLiteEnabled.value) return
+        val label = uploadInfo.file.name
+        val bytesTotal = uploadInfo.allFiles().sumOf { it.length() }.takeIf { it > 0L }
+        setkaLiteMediaGate.beforeMediaUpload(label, bytesTotal)
+    }
+
+    private fun Result<Unit>.completeLiteUpload(uploadInfo: MediaUploadInfo): Result<Unit> {
+        if (!setkaLiteMediaGate.isLiteEnabled.value) return this
+        val label = uploadInfo.file.name
+        val itemId = SetkaLiteMediaTransferIds.mediaItemId(label)
+        val bytesTotal = uploadInfo.allFiles().sumOf { it.length() }.coerceAtLeast(1L)
+        return onSuccess {
+            setkaTransferQueue.updateProgress(itemId, bytesTotal, bytesTotal)
+            setkaTransferQueue.markDone(itemId)
+        }.onFailure { error ->
+            if (error !is CancellationException) {
+                setkaTransferQueue.markFailed(itemId)
+            }
+        }
     }
 
     private suspend fun getTimeline(): Result<Timeline> {

@@ -18,15 +18,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,29 +33,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import java.io.File
 
 data class AppUpdatePromptState(
     val updateInfo: AppUpdateInfo,
     val installedVersionName: String,
-    val isDownloading: Boolean = false,
-    val downloadedApkFile: File? = null,
-    val downloadedBytes: Long = 0L,
-    val totalBytes: Long? = null,
-    val downloadError: String? = null,
-) {
-    val isReadyToInstall: Boolean
-        get() = downloadedApkFile?.exists() == true
-
-    val downloadProgressFraction: Float?
-        get() {
-            val safeTotalBytes = totalBytes?.takeIf { it > 0L } ?: return null
-            return (downloadedBytes.toFloat() / safeTotalBytes.toFloat()).coerceIn(0f, 1f)
-        }
-
-    val downloadProgressPercent: Int?
-        get() = downloadProgressFraction?.let { (it * 100).toInt() }
-}
+)
 
 @Composable
 fun AppUpdatePrompt(
@@ -150,40 +129,6 @@ fun AppUpdatePrompt(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                    state.downloadError
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { error ->
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    if (state.isDownloading) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            state.downloadProgressFraction?.let { progress ->
-                                LinearProgressIndicator(
-                                    progress = { progress },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } ?: LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Text(
-                                text = state.downloadProgressPercent
-                                    ?.let { "\u0421\u043a\u0430\u0447\u0438\u0432\u0430\u043d\u0438\u0435... $it%" }
-                                    ?: "\u0421\u043a\u0430\u0447\u0438\u0432\u0430\u043d\u0438\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    } else if (state.isReadyToInstall) {
-                        Text(
-                            text = "\u0424\u0430\u0439\u043b \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f \u0433\u043e\u0442\u043e\u0432 \u043a \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0435.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
 
                 Row(
@@ -192,32 +137,12 @@ fun AppUpdatePrompt(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (!isMandatory) {
-                        TextButton(
-                            onClick = onDismissClick,
-                            enabled = !state.isDownloading,
-                        ) {
+                        TextButton(onClick = onDismissClick) {
                             Text("\u041f\u043e\u0437\u0436\u0435")
                         }
                     }
-                    Button(
-                        onClick = onUpdateClick,
-                        enabled = !state.isDownloading,
-                    ) {
-                        if (state.isDownloading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                            Text(
-                                text = "\u0421\u043a\u0430\u0447\u0438\u0432\u0430\u043d\u0438\u0435...",
-                                modifier = Modifier.padding(start = 10.dp),
-                            )
-                        } else if (state.isReadyToInstall) {
-                            Text("\u0423\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u0442\u044c")
-                        } else {
-                            Text("\u0421\u043a\u0430\u0447\u0430\u0442\u044c")
-                        }
+                    Button(onClick = onUpdateClick) {
+                        Text("\u0421\u043a\u0430\u0447\u0430\u0442\u044c")
                     }
                 }
             }

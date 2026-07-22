@@ -12,7 +12,6 @@ import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.ui.media.AvatarAction
 import io.element.android.libraries.permissions.api.PermissionsState
-import kotlinx.collections.immutable.ImmutableList
 
 data class EditUserProfileState(
     val userId: UserId,
@@ -20,14 +19,14 @@ data class EditUserProfileState(
     val userAvatarUrl: String?,
     val bio: String,
     val profileColorHex: String,
-    val badgeEmojiMxcUrl: String?,
-    val statusEmojiMxcUrl: String?,
     val profileBackgroundUrl: String?,
     val isSetkaPlusActive: Boolean,
-    val badgeEmojiPacks: ImmutableList<SetkaEmojiPack>,
-    val avatarActions: ImmutableList<AvatarAction>,
+    val emailAddress: String?,
+    val hasVerifiedEmail: Boolean,
+    val phoneNumber: String?,
+    val avatarActions: kotlinx.collections.immutable.ImmutableList<AvatarAction>,
     val saveButtonEnabled: Boolean,
     val saveAction: AsyncAction<Unit>,
     val cameraPermissionState: PermissionsState,
-    val eventSink: (EditUserProfileEvent) -> Unit
+    val eventSink: (EditUserProfileEvent) -> Unit,
 )

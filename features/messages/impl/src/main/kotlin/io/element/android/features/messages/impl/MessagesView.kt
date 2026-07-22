@@ -68,7 +68,9 @@ import io.element.android.features.messages.impl.crypto.identity.IdentityChangeS
 import io.element.android.features.messages.impl.link.LinkEvent
 import io.element.android.features.messages.impl.link.LinkView
 import io.element.android.features.messages.impl.messagecomposer.AttachmentsBottomSheet
+import io.element.android.features.messages.impl.channel.ChannelSubscriberBottomBar
 import io.element.android.features.messages.impl.messagecomposer.DisabledComposerView
+import io.element.android.libraries.matrix.api.timeline.Timeline
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerView
 import io.element.android.features.messages.impl.messagecomposer.legacygallery.LegacyGalleryPickerView
@@ -78,6 +80,10 @@ import io.element.android.features.messages.impl.messagecomposer.setka.SetkaPlus
 import io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewSheet
 import io.element.android.features.messages.impl.setka.LocalSetkaSharedPackImporter
 import io.element.android.features.messages.impl.messagecomposer.suggestions.SuggestionsPickerView
+import io.element.android.features.messages.impl.mediaplayback.RoomMediaPlaybackCoordinator
+import io.element.android.features.messages.impl.mediaplayback.LocalRoomMediaPlaybackCoordinator
+import io.element.android.features.messages.impl.mediaplayback.LocalRoomId
+import io.element.android.features.messages.impl.setka.LocalSetkaEmojiPackPreviewHandler
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerView
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerViewDefaults
@@ -96,6 +102,7 @@ import io.element.android.features.messages.impl.timeline.components.receipt.bot
 import io.element.android.features.messages.impl.timeline.components.receipt.bottomsheet.ReadReceiptBottomSheetEvent
 import io.element.android.features.messages.impl.timeline.model.TimelineItem
 import io.element.android.features.messages.impl.timeline.model.TimelineItemGroupPosition
+import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStickerContent
 import io.element.android.features.messages.impl.timeline.model.event.aTimelineItemStateEventContent
 import io.element.android.features.messages.impl.timeline.model.event.aTimelineItemTextContent
 import io.element.android.features.messages.impl.topbars.MessagesViewTopBar
@@ -129,7 +136,6 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.encryption.identity.IdentityState
 import io.element.android.libraries.matrix.api.room.tombstone.SuccessorRoom
-import io.element.android.libraries.matrix.api.timeline.Timeline
 import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.textcomposer.model.TextEditorState
@@ -184,6 +190,16 @@ fun MessagesView(
 
     fun onContentClick(event: TimelineItem.Event) {
         Timber.v("onMessageClick= ${event.id}")
+        val stickerContent = event.content as? TimelineItemStickerContent
+        if (stickerContent != null) {
+            val mxcUrl = (stickerContent.preferredMediaSource?.url ?: stickerContent.mediaSource.url)
+                .takeIf { !it.isNullOrBlank() }
+            if (mxcUrl != null) {
+                state.composerState.eventSink(MessageComposerEvent.PreviewSetkaStickerPack(mxcUrl))
+                localView.hideKeyboard()
+                return
+            }
+        }
         val hideKeyboard = onEventContentClick(state.timelineState.isLive, event)
         if (hideKeyboard) {
             localView.hideKeyboard()
@@ -328,7 +344,8 @@ fun MessagesView(
                             heroes = state.heroes,
                             roomCallState = state.roomCallState,
                             dmUserIdentityState = state.dmUserVerificationState,
-                            dmUserPresenceText = state.dmUserPresenceText,
+                            headerSubtitle = state.roomHeaderSubtitle,
+                            dmUserStatusEmojiMxc = state.dmUserStatusEmojiMxc,
                             sharedHistoryIcon = state.topBarSharedHistoryIcon,
                             onBackClick = { hidingKeyboard { onBackClick() } },
                             onRoomDetailsClick = { hidingKeyboard { onRoomDetailsClick() } },
@@ -497,6 +514,7 @@ fun MessagesView(
             state = state.composerState.setkaState,
             onDismiss = { state.composerState.eventSink(MessageComposerEvent.HideSetkaPlusDialog) },
             onBuyPlan = { plan -> state.composerState.eventSink(MessageComposerEvent.BuySetkaPlan(plan)) },
+            onDismissPaymentResult = { state.composerState.eventSink(MessageComposerEvent.DismissSetkaPlusPaymentResult) },
         )
     }
 
@@ -642,11 +660,23 @@ private fun MessagesViewContent(
                 onDismiss = { state.voiceMessageComposerState.eventSink(VoiceMessageComposerEvent.DismissSendFailureDialog) },
             )
         }
+        if (state.videoNoteComposerState.showSendFailureDialog) {
+            VoiceMessageSendingFailedDialog(
+                onDismiss = { state.videoNoteComposerState.eventSink(VideoNoteComposerEvent.DismissSendFailureDialog) },
+            )
+        }
 
         Box {
             val scrollBehavior = PinnedMessagesBannerViewDefaults.rememberScrollBehavior(
                 pinnedMessagesCount = (state.pinnedMessagesBannerState as? PinnedMessagesBannerState.Visible)?.pinnedMessagesCount() ?: 0,
             )
+            CompositionLocalProvider(
+                LocalRoomMediaPlaybackCoordinator provides state.roomMediaPlaybackCoordinator,
+                LocalRoomId provides state.roomId,
+                LocalSetkaEmojiPackPreviewHandler provides { mxcUrl ->
+                    state.composerState.eventSink(MessageComposerEvent.PreviewSetkaEmojiPack(mxcUrl))
+                },
+            ) {
             TimelineView(
                 state = state.timelineState,
                 timelineProtectionState = state.timelineProtectionState,
@@ -683,8 +713,19 @@ private fun MessagesViewContent(
                 }
                 knockRequestsBannerView()
             }
+            }
         }
     }
+}
+
+private fun composerVisibleForRoom(state: MessagesState): Boolean {
+    if (state.isSetkaChannel) {
+        return when (state.timelineState.timelineMode) {
+            is Timeline.Mode.Thread -> true
+            else -> state.canPostToSetkaChannelFeed
+        }
+    }
+    return state.userEventPermissions.canSendMessage
 }
 
 @Composable
@@ -699,7 +740,7 @@ private fun MessagesViewComposerBottomSheetContents(
                 SuccessorRoomBanner(roomSuccessor = state.successorRoom, onRoomSuccessorClick = onRoomSuccessorClick)
             }
         }
-        state.userEventPermissions.canSendMessage -> {
+        composerVisibleForRoom(state) -> {
             Column(modifier = Modifier.fillMaxWidth()) {
                 // Do not show the identity change if user is composing a Rich message or is seeing suggestion(s).
                 if (state.composerState.suggestions.isEmpty() &&
@@ -730,8 +771,7 @@ private fun MessagesViewComposerBottomSheetContents(
                             SetkaInlinePickerPanel(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 292.dp, max = 340.dp)
-                                    .imePadding(),
+                                    .heightIn(min = 292.dp, max = 340.dp),
                                 state = state.composerState.setkaState,
                                 onDismiss = { state.composerState.eventSink(MessageComposerEvent.HideSetkaStickerPicker) },
                                 onSendSticker = { sticker ->
@@ -746,11 +786,23 @@ private fun MessagesViewComposerBottomSheetContents(
                                 onOpenSubscription = {
                                     state.composerState.eventSink(MessageComposerEvent.ShowSetkaPlusDialog)
                                 },
+                                onSharePack = { packId ->
+                                    state.composerState.eventSink(MessageComposerEvent.ShareSetkaPack(packId))
+                                },
                             )
                         }
                     }
                 }
             }
+        }
+        state.isSetkaChannel && state.timelineState.timelineMode !is Timeline.Mode.Thread -> {
+            ChannelSubscriberBottomBar(
+                isJoined = state.isSetkaChannelJoined,
+                notificationsMuted = state.channelNotificationsMuted,
+                enabled = !state.channelNotificationToggleInProgress && !state.channelJoinInProgress,
+                onJoin = { state.eventSink(MessagesEvent.JoinSetkaChannel) },
+                onToggleNotifications = { state.eventSink(MessagesEvent.ToggleChannelNotifications) },
+            )
         }
         else -> {
             Column(modifier = Modifier.fillMaxWidth()) {

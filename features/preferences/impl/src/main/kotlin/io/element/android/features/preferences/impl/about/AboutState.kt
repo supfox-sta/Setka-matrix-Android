@@ -8,8 +8,8 @@
 
 package io.element.android.features.preferences.impl.about
 
-import kotlinx.collections.immutable.ImmutableList
+internal const val SETKA_DOCUMENTS_URL = "https://setka-matrix.ru/?page_id=435"
 
 data class AboutState(
-    val elementLegals: ImmutableList<ElementLegal>,
+    val documentsUrl: String = SETKA_DOCUMENTS_URL,
 )

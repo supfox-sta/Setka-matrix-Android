@@ -12,6 +12,7 @@ import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.SessionId
 import io.element.android.libraries.matrix.api.core.ThreadId
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturnOutcome
 
 sealed interface DeeplinkData {
     /** Session id is common for all deep links. */
@@ -22,4 +23,11 @@ sealed interface DeeplinkData {
 
     /** The target is a room, with the given [sessionId], [roomId] and optionally a [threadId] and [eventId]. */
     data class Room(override val sessionId: SessionId, val roomId: RoomId, val threadId: ThreadId?, val eventId: EventId?) : DeeplinkData
+
+    /** Return from Robokassa Success/Fail URL after checkout. */
+    data class SetkaPlusPaymentReturn(
+        override val sessionId: SessionId,
+        val paymentId: String,
+        val outcome: SetkaPlusPaymentReturnOutcome,
+    ) : DeeplinkData
 }

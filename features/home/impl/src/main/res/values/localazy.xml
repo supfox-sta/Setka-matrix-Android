@@ -19,7 +19,7 @@
   <string name="screen_home_tab_contacts">"Contacts"</string>
   <string name="screen_home_contacts_empty">"No contacts yet"</string>
   <string name="screen_home_contacts_phonebook_header">"Контакты телефона"</string>
-  <string name="screen_home_menu_setka_plus">"Setka Plus"</string>
+  <string name="screen_home_menu_setka_plus">"Сетка Plus"</string>
   <string name="screen_home_menu_settings">"Настройки"</string>
   <string name="screen_home_menu_logout">"Выход"</string>
   <string name="screen_home_my_profile_title">"Мой профиль"</string>
@@ -37,7 +37,7 @@
   <string name="screen_home_contact_field_phone">"Телефон"</string>
   <string name="screen_home_edit_contact_title_full">"Редактировать контакт"</string>
 
-  <string name="screen_home_setka_plus_title">"Setka Plus"</string>
+  <string name="screen_home_setka_plus_title">"Сетка Plus"</string>
   <string name="screen_home_setka_plus_subscription_status">"Статус подписки"</string>
   <string name="screen_home_setka_plus_inactive">"Не активна"</string>
   <string name="screen_home_setka_plus_no_plans">"Нет доступных тарифов."</string>
@@ -47,7 +47,7 @@
   <string name="screen_home_setka_plus_processing">"Открываю..."</string>
   <string name="screen_home_setka_plus_refresh">"Обновить"</string>
 
-  <string name="screen_home_setka_plus_promo_title">"Setka Plus"</string>
+  <string name="screen_home_setka_plus_promo_title">"Сетка Plus"</string>
   <string name="screen_home_setka_plus_promo_subtitle">"Подписка помогает развивать проект: оплачивать сервер, улучшать клиент и быстрее добавлять новые функции."</string>
   <string name="screen_home_setka_plus_promo_feature_1">"Стикеры и кастомные эмодзи (пакеты, пикер, редактор)"</string>
   <string name="screen_home_setka_plus_promo_feature_2">"Удобный обмен паками по ссылке и быстрая установка"</string>
@@ -88,6 +88,7 @@ For now, you can deselect filters in order to see your other chats"</string>
 You don’t have any unread messages!"</string>
   <string name="screen_roomlist_knock_event_sent_description">"Request to join sent"</string>
   <string name="screen_roomlist_main_space_title">"Chats"</string>
+  <string name="screen_roomlist_recent_title">"Недавние"</string>
   <string name="screen_roomlist_mark_as_read">"Mark as read"</string>
   <string name="screen_roomlist_mark_as_unread">"Mark as unread"</string>
   <string name="screen_roomlist_tombstoned_room_description">"This room has been upgraded"</string>

@@ -19,10 +19,15 @@ import org.matrix.rustcomponents.sdk.messageEventContentFromMarkdown
  */
 object MessageEventContent {
     fun from(body: String, htmlBody: String?, intentionalMentions: List<IntentionalMention>): RoomMessageEventContentWithoutRelation {
-        return if (htmlBody != null) {
+        val base = if (htmlBody != null) {
             messageEventContentFromHtml(body, htmlBody)
         } else {
             messageEventContentFromMarkdown(body)
-        }.withMentions(intentionalMentions.map())
+        }
+        return if (intentionalMentions.isEmpty()) {
+            base
+        } else {
+            base.withMentions(intentionalMentions.map())
+        }
     }
 }

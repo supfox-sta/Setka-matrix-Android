@@ -58,6 +58,7 @@ enum class SecurityBannerState {
     None,
     SetUpRecovery,
     RecoveryKeyConfirmation,
+    SetkaServerBackupUpload,
 }
 
 @Immutable
@@ -73,6 +74,7 @@ sealed interface RoomListContentState {
         val batteryOptimizationState: BatteryOptimizationState,
         val showNewNotificationSoundBanner: Boolean,
         val summaries: ImmutableList<RoomListRoomSummary>,
+        val displayItems: ImmutableList<RoomListDisplayItem>,
         val seenRoomInvites: ImmutableSet<RoomId>,
     ) : RoomListContentState
 }

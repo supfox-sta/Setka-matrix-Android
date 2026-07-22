@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_comments">Комментарии</string>
+    <string name="screen_setka_channel_join">Присоединиться</string>
+    <string name="screen_setka_channel_enable_notifications">Включить уведомления</string>
+    <string name="screen_setka_channel_disable_notifications">Выключить уведомления</string>
+    <plurals name="screen_setka_channel_subscribers">
+        <item quantity="one">%1$d подписчик</item>
+        <item quantity="few">%1$d подписчика</item>
+        <item quantity="many">%1$d подписчиков</item>
+        <item quantity="other">%1$d подписчиков</item>
+    </plurals>
+</resources>

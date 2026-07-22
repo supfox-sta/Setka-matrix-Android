@@ -36,6 +36,10 @@ class EditUserProfileNode(
 
     interface Callback : Plugin {
         fun onDone()
+        fun openProfileCustomization(matrixUser: MatrixUser)
+        fun openChangePhone()
+        fun openChangeEmail()
+        fun startSignOutFlow()
     }
 
     val matrixUser = inputs<Inputs>().matrixUser
@@ -56,4 +60,12 @@ class EditUserProfileNode(
     }
 
     override fun close() = callback.onDone()
+
+    override fun openProfileCustomization() = callback.openProfileCustomization(matrixUser)
+
+    override fun openChangePhone() = callback.openChangePhone()
+
+    override fun openChangeEmail() = callback.openChangeEmail()
+
+    override fun startSignOut() = callback.startSignOutFlow()
 }

@@ -87,7 +87,6 @@ fun SetkaStickerPickerBottomSheet(
     }
 
     val selectedPack = packs.firstOrNull { it.id == selectedPackId } ?: packs.firstOrNull()
-    val canManagePacks = state.isPlusActive
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -122,7 +121,7 @@ fun SetkaStickerPickerBottomSheet(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
 
-            if (!state.isPlusActive) {
+            if (!state.isPlusActive && selectedKind == SetkaPackKind.EMOJI) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -185,30 +184,30 @@ fun SetkaStickerPickerBottomSheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FilledTonalButton(
-                    onClick = { onOpenPackEditor(selectedKind, null) },
-                    enabled = canManagePacks,
-                ) {
-                    Text(stringResource(R.string.screen_room_setka_new_pack))
-                }
-                if (selectedPack != null) {
-                    OutlinedButton(
-                        onClick = { onOpenPackEditor(selectedKind, selectedPack.id) },
-                        enabled = canManagePacks,
-                    ) {
-                        Text(stringResource(R.string.screen_room_setka_edit_pack))
-                    }
+                if (selectedKind == SetkaPackKind.STICKER) {
                     FilledTonalButton(
-                        onClick = { onUploadToPack(selectedPack.id, selectedKind) },
-                        enabled = canManagePacks && state.uploadingPackId == null,
+                        onClick = { onOpenPackEditor(selectedKind, null) },
                     ) {
-                        Text(stringResource(R.string.screen_room_setka_upload_media))
+                        Text(stringResource(R.string.screen_room_setka_new_pack))
                     }
-                    OutlinedButton(
-                        onClick = { onDeletePack(selectedPack.id, selectedPack.name) },
-                        enabled = canManagePacks && state.deletingPackId == null,
-                    ) {
-                        Text(stringResource(R.string.screen_room_setka_delete_pack))
+                    if (selectedPack != null) {
+                        OutlinedButton(
+                            onClick = { onOpenPackEditor(selectedKind, selectedPack.id) },
+                        ) {
+                            Text(stringResource(R.string.screen_room_setka_edit_pack))
+                        }
+                        FilledTonalButton(
+                            onClick = { onUploadToPack(selectedPack.id, selectedKind) },
+                            enabled = state.uploadingPackId == null,
+                        ) {
+                            Text(stringResource(R.string.screen_room_setka_upload_media))
+                        }
+                        OutlinedButton(
+                            onClick = { onDeletePack(selectedPack.id, selectedPack.name) },
+                            enabled = state.deletingPackId == null,
+                        ) {
+                            Text(stringResource(R.string.screen_room_setka_delete_pack))
+                        }
                     }
                 }
             }
@@ -266,6 +265,7 @@ fun SetkaStickerPickerBottomSheet(
                         SetkaStickerCard(
                             sticker = sticker,
                             isBusy = state.deletingStickerKey == "${selectedPack.id}:${sticker.id}",
+                            showDelete = selectedKind == SetkaPackKind.STICKER,
                             onClick = {
                                 if (selectedKind == SetkaPackKind.STICKER) {
                                     onSendSticker(sticker)
@@ -284,6 +284,7 @@ fun SetkaStickerPickerBottomSheet(
 private fun SetkaStickerCard(
     sticker: SetkaSticker,
     isBusy: Boolean,
+    showDelete: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -302,21 +303,23 @@ private fun SetkaStickerCard(
                 .aspectRatio(1f),
             contentScale = ContentScale.Crop,
         )
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(28.dp)
-                .background(
-                    color = if (isBusy) ElementTheme.colors.bgSubtlePrimary else Color.Black.copy(alpha = 0.48f),
-                    shape = MaterialTheme.shapes.medium,
+        if (showDelete) {
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(28.dp)
+                    .background(
+                        color = if (isBusy) ElementTheme.colors.bgSubtlePrimary else Color.Black.copy(alpha = 0.48f),
+                        shape = MaterialTheme.shapes.medium,
+                    )
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.Close(),
+                    contentDescription = null,
+                    tint = Color.White,
                 )
-        ) {
-            Icon(
-                imageVector = CompoundIcons.Close(),
-                contentDescription = null,
-                tint = Color.White,
-            )
+            }
         }
     }
 }

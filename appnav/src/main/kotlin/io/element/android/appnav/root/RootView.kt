@@ -21,7 +21,7 @@ import io.element.android.features.rageshake.api.crash.CrashDetectionEvent
 import io.element.android.features.rageshake.api.crash.CrashDetectionView
 import io.element.android.features.rageshake.api.detection.RageshakeDetectionEvent
 import io.element.android.features.rageshake.api.detection.RageshakeDetectionView
-import io.element.android.libraries.designsystem.components.dialogs.ErrorDialog
+import io.element.android.libraries.designsystem.components.dialogs.ErrorDialogWithDoNotShowAgain
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.Text
@@ -61,11 +61,9 @@ fun RootView(
         )
 
         if (state.showLegacyAndroidCompatibilityWarning) {
-            ErrorDialog(
-                title = null,
+            ErrorDialogWithDoNotShowAgain(
                 content = stringResource(R.string.app_legacy_android_compatibility_warning),
                 submitText = stringResource(CommonStrings.action_continue),
-                onSubmit = state.dismissLegacyAndroidCompatibilityWarning,
                 onDismiss = state.dismissLegacyAndroidCompatibilityWarning,
             )
         }

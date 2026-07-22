@@ -19,6 +19,8 @@ import android.provider.ContactsContract
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -90,7 +92,12 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.channels.SetkaPublicChannelsContentView
+import io.element.android.features.home.impl.channels.SetkaChannelDiscoveryOverlay
 import io.element.android.features.home.impl.components.ContactsContentView
+import io.element.android.features.home.impl.components.SetkaLiteSuggestionBanner
+import io.element.android.features.home.impl.components.SetkaTransferQueueBottomSheet
+import io.element.android.features.home.impl.components.HomeCreateActionsBottomSheet
 import io.element.android.features.home.impl.components.HomeTopBar
 import io.element.android.features.home.impl.components.RoomListContentView
 import io.element.android.features.home.impl.components.RoomListMenuAction
@@ -129,6 +136,8 @@ import io.element.android.libraries.designsystem.utils.snackbar.SnackbarHost
 import io.element.android.libraries.designsystem.utils.snackbar.rememberSnackbarHostState
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.setka.formatSetkaPlusStatus
+import io.element.android.libraries.matrix.ui.setka.SetkaPlusPaymentFlowBanner
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.ui.model.getAvatarData
 import androidx.core.content.ContextCompat
@@ -149,10 +158,13 @@ fun HomeView(
     onSetUpRecoveryClick: () -> Unit,
     onConfirmRecoveryKeyClick: () -> Unit,
     onStartChatClick: () -> Unit,
+    onCreateChannelClick: () -> Unit,
+    onSearchUserClick: (UserId) -> Unit,
     onSearchUsers: suspend (String) -> List<MatrixUser>,
     onAddContact: suspend (MatrixUser, String, String?, String?) -> Boolean,
     onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
+    onJoinPublicChannelClick: (RoomId) -> Unit = {},
     onRoomSettingsClick: (roomId: RoomId) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     onReportRoomClick: (roomId: RoomId) -> Unit,
@@ -186,6 +198,11 @@ fun HomeView(
     val contactNameMap = remember(homeState.contacts) {
         homeState.contacts.associateBy({ it.roomId.value }, { it.displayName })
     }
+    val recentRoomSummaries = remember(homeState.recentRoomSummaries, contactNameMap) {
+        homeState.recentRoomSummaries.map { summary ->
+            summary.withContactName(contactNameMap[summary.roomId.value])
+        }.toImmutableList()
+    }
     Box(modifier) {
         if (state.contextMenu is RoomListState.ContextMenu.Shown) {
             RoomListContextMenu(
@@ -214,11 +231,23 @@ fun HomeView(
                 onRoomClick = { if (firstThrottler.canHandle()) onRoomClick(it) },
                 onUserProfileClick = { if (firstThrottler.canHandle()) onUserProfileClick(it) },
                 onOpenSettings = { if (firstThrottler.canHandle()) onSettingsClick() },
-                onStartChatClick = { if (firstThrottler.canHandle()) onStartChatClick() },
+                onStartChatClick = {
+                    if (homeState.roomListState.searchState.isSearchActive) {
+                        homeState.roomListState.eventSink(RoomListEvent.ToggleSearchResults)
+                    }
+                    if (firstThrottler.canHandle()) onStartChatClick()
+                },
+                onCreateChannelClick = {
+                    if (homeState.roomListState.searchState.isSearchActive) {
+                        homeState.roomListState.eventSink(RoomListEvent.ToggleSearchResults)
+                    }
+                    if (firstThrottler.canHandle()) onCreateChannelClick()
+                },
                 onSearchUsers = onSearchUsers,
                 onAddContact = onAddContact,
                 onUpdateContact = onUpdateContact,
                 onCreateSpaceClick = { if (firstThrottler.canHandle()) onCreateSpaceClick() },
+                onJoinPublicChannelClick = { if (firstThrottler.canHandle()) onJoinPublicChannelClick(it) },
                 onMenuActionClick = onMenuActionClick,
                 homeBackgroundColor = homeBackgroundColor,
                 homeBackgroundBitmap = homeBackgroundBitmap,
@@ -230,6 +259,8 @@ fun HomeView(
                 eventSink = state.eventSink,
                 hideInvitesAvatars = state.hideInvitesAvatars,
                 onRoomClick = { if (firstThrottler.canHandle()) onRoomClick(it) },
+                onUserClick = { if (firstThrottler.canHandle()) onSearchUserClick(it) },
+                recentRoomSummaries = recentRoomSummaries,
                 backgroundColor = homeBackgroundColor.copy(alpha = if (homeBackgroundBitmap != null) 0.90f else 1f),
                 transparentBackground = false,
                 modifier = Modifier
@@ -251,10 +282,12 @@ private fun HomeScaffold(
     onUserProfileClick: (UserId) -> Unit,
     onOpenSettings: () -> Unit,
     onStartChatClick: () -> Unit,
+    onCreateChannelClick: () -> Unit,
     onSearchUsers: suspend (String) -> List<MatrixUser>,
     onAddContact: suspend (MatrixUser, String, String?, String?) -> Boolean,
     onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
+    onJoinPublicChannelClick: (RoomId) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     homeBackgroundColor: Color,
     homeBackgroundBitmap: ImageBitmap?,
@@ -284,6 +317,7 @@ private fun HomeScaffold(
     val roomsLazyListState = rememberLazyListState()
     val spacesLazyListState = rememberLazyListState()
     val contactsLazyListState = rememberLazyListState()
+    val channelsLazyListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var suggestedUsers by remember { mutableStateOf<ImmutableList<MatrixUser>>(persistentListOf()) }
@@ -304,6 +338,9 @@ private fun HomeScaffold(
     var editingEmail by remember { mutableStateOf("") }
     var editingPhone by remember { mutableStateOf("") }
     var showSetkaPlusDialog by remember { mutableStateOf(false) }
+    var showContactsOverlay by remember { mutableStateOf(false) }
+    var showChannelDiscovery by remember { mutableStateOf(false) }
+    var showCreateActionsSheet by remember { mutableStateOf(false) }
     val customization = LocalSetkaCustomization.current
     val bottomBarColor = parseSetkaColorOrNull(customization.topBarBackgroundColorHex)
         ?: ElementTheme.colors.bgSubtlePrimary
@@ -323,6 +360,16 @@ private fun HomeScaffold(
     }
     val decoratedRoomListState = remember(state.roomListState, contactNameMap) {
         decorateRoomListStateWithContacts(state.roomListState, contactNameMap)
+    }
+    fun dismissSearchIfActive() {
+        if (roomListState.searchState.isSearchActive) {
+            roomListState.eventSink(RoomListEvent.ToggleSearchResults)
+        }
+    }
+    val recentRoomSummaries = remember(state.recentRoomSummaries, contactNameMap) {
+        state.recentRoomSummaries.map { summary ->
+            summary.withContactName(contactNameMap[summary.roomId.value])
+        }.toImmutableList()
     }
 
     LaunchedEffect(Unit) {
@@ -374,19 +421,34 @@ private fun HomeScaffold(
                     showSetkaPlusDialog = true
                     state.eventSink(HomeEvent.RefreshSetkaPlus)
                 },
+                onOpenContacts = { showContactsOverlay = true },
                 onOpenSettings = onOpenSettings,
                 onLogout = { state.directLogoutState.eventSink(DirectLogoutEvents.Logout(ignoreSdkError = false)) },
                 onAccountSwitch = {
                     state.eventSink(HomeEvent.SwitchToAccount(it))
                 },
                 onCreateSpace = onCreateSpaceClick,
-                onToggleTheme = { state.eventSink(HomeEvent.ToggleQuickTheme) },
+                statusEmojiState = state.statusEmojiState,
+                onOpenStatusEmojiPicker = {
+                    if (state.setkaPlusState.subscription?.isActive == true) {
+                        state.eventSink(HomeEvent.OpenStatusEmojiPicker)
+                    } else {
+                        showSetkaPlusDialog = true
+                        state.eventSink(HomeEvent.RefreshSetkaPlus)
+                    }
+                },
+                onCloseStatusEmojiPicker = { state.eventSink(HomeEvent.CloseStatusEmojiPicker) },
+                onSelectStatusEmoji = { mxcUrl -> state.eventSink(HomeEvent.SelectStatusEmoji(mxcUrl)) },
                 scrollBehavior = scrollBehavior,
                 displayFilters = state.displayRoomListFilters,
                 filtersState = roomListState.filtersState,
                 spaceFiltersState = roomListState.spaceFiltersState,
                 hasNetworkConnection = state.hasNetworkConnection,
                 isUpdating = roomListState.contentState is RoomListContentState.Skeleton,
+                setkaSyncState = state.setkaSyncState,
+                setkaLiteState = state.setkaLiteState,
+                onOpenTransferQueue = { state.eventSink(HomeEvent.OpenTransferQueue) },
+                onToggleSetkaLite = { state.eventSink(HomeEvent.ToggleSetkaLite) },
                 canCreateSpaces = state.homeSpacesState.canCreateSpaces,
                 canReportBug = state.canReportBug,
                 searchEntryBackgroundColor = homeBackgroundColor.copy(alpha = if (homeBackgroundBitmap != null) 0.40f else 0.90f),
@@ -401,6 +463,11 @@ private fun HomeScaffold(
                 val coroutineScope = rememberCoroutineScope()
                 HomeBottomBar(
                     currentHomeNavigationBarItem = state.currentHomeNavigationBarItem,
+                    visibleItems = HomeNavigationBarItem.entries
+                        .filter { it != HomeNavigationBarItem.Contacts }
+                        .let { items ->
+                            if (state.showSetkaChannelsTab) items else items.filter { it != HomeNavigationBarItem.Channels }
+                        },
                     containerColor = bottomBarColor.copy(alpha = 0.86f),
                     contentColor = bottomBarContentColor,
                     onItemClick = { item ->
@@ -410,6 +477,7 @@ private fun HomeScaffold(
                                 HomeNavigationBarItem.Chats -> roomsLazyListState
                                 HomeNavigationBarItem.Spaces -> spacesLazyListState
                                 HomeNavigationBarItem.Contacts -> contactsLazyListState
+                                HomeNavigationBarItem.Channels -> channelsLazyListState
                             }
                             coroutineScope.launch {
                                 if (lazyListStateTarget.firstVisibleItemIndex > 10) {
@@ -445,6 +513,7 @@ private fun HomeScaffold(
                             onConfirmRecoveryKeyClick = onConfirmRecoveryKeyClick,
                             onRoomClick = ::onRoomClick,
                             onCreateRoomClick = onStartChatClick,
+                            statusEmojiByUserId = state.statusEmojiByUserId,
                             contentPadding = PaddingValues(
                                 bottom = 80.dp,
                             ),
@@ -518,7 +587,37 @@ private fun HomeScaffold(
                                 .hazeSource(state = hazeState),
                         )
                     }
+                    HomeNavigationBarItem.Channels -> {
+                        val channelsState = state.setkaPublicChannelsState
+                        if (channelsState != null) {
+                            SetkaPublicChannelsContentView(
+                                state = channelsState,
+                                onChannelClick = onRoomClick,
+                                contentPadding = PaddingValues(
+                                    start = padding.calculateStartPadding(LocalLayoutDirection.current),
+                                    end = padding.calculateEndPadding(LocalLayoutDirection.current),
+                                    bottom = padding.calculateBottomPadding(),
+                                    top = padding.calculateTopPadding(),
+                                ),
+                                modifier = Modifier
+                                    .consumeWindowInsets(padding)
+                                    .hazeSource(state = hazeState),
+                            )
+                        }
+                    }
                 }
+            }
+
+            if (state.setkaLiteState.showLiteSuggestion) {
+                SetkaLiteSuggestionBanner(
+                    onEnable = { state.eventSink(HomeEvent.ToggleSetkaLite) },
+                    onDismiss = { state.eventSink(HomeEvent.DismissSetkaLiteSuggestion) },
+                    modifier = Modifier.padding(
+                        top = padding.calculateTopPadding(),
+                        start = padding.calculateStartPadding(LocalLayoutDirection.current),
+                        end = padding.calculateEndPadding(LocalLayoutDirection.current),
+                    ),
+                )
             }
 
             if (enableAnimations) {
@@ -530,12 +629,28 @@ private fun HomeScaffold(
             }
         },
         floatingActionButton = {
-            if (state.displayActions) {
-                val isContactsTab = state.currentHomeNavigationBarItem == HomeNavigationBarItem.Contacts
+            when (state.currentHomeNavigationBarItem) {
+                HomeNavigationBarItem.Channels -> {
+                    FloatingActionButton(
+                        onClick = { showChannelDiscovery = true },
+                        containerColor = fabContainerColor,
+                        contentColor = fabIconColor,
+                    ) {
+                        Icon(
+                            imageVector = CompoundIcons.Search(),
+                            contentDescription = stringResource(R.string.screen_home_channels_discover),
+                        )
+                    }
+                }
+                else -> if (state.displayActions) {
+                val isContactsTab = false
                 FloatingActionButton(
                     onClick = {
+                        dismissSearchIfActive()
                         if (isContactsTab) {
                             showCreateContactDialog = true
+                        } else if (state.canCreateSetkaChannel) {
+                            showCreateActionsSheet = true
                         } else {
                             onStartChatClick()
                         }
@@ -550,10 +665,104 @@ private fun HomeScaffold(
                         contentDescription = stringResource(id = R.string.screen_roomlist_a11y_create_message),
                     )
                 }
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     )
+    HomeCreateActionsBottomSheet(
+        visible = showCreateActionsSheet,
+        onDismiss = { showCreateActionsSheet = false },
+        onNewChatClick = onStartChatClick,
+        onCreateChannelClick = onCreateChannelClick,
+    )
+    }
+
+    SetkaChannelDiscoveryOverlay(
+        visible = showChannelDiscovery,
+        onDismiss = { showChannelDiscovery = false },
+        onChannelClick = onRoomClick,
+        loadChannels = state.loadPublicChannelsForDiscovery,
+    )
+
+    BackHandler(enabled = showContactsOverlay) {
+        showContactsOverlay = false
+    }
+    AnimatedVisibility(
+        visible = showContactsOverlay,
+        enter = if (enableAnimations) fadeIn() else EnterTransition.None,
+        exit = if (enableAnimations) fadeOut() else ExitTransition.None,
+        label = "homeContactsOverlay",
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(homeBackgroundColor)
+                .safeDrawingPadding(),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.screen_home_contacts_title),
+                        style = ElementTheme.typography.fontHeadingMdBold,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 8.dp),
+                    )
+                    IconButton(onClick = { showContactsOverlay = false }) {
+                        Icon(
+                            imageVector = CompoundIcons.Close(),
+                            contentDescription = stringResource(CommonStrings.action_close),
+                        )
+                    }
+                }
+                ContactsContentView(
+                    contacts = state.contacts,
+                    suggestedUsers = suggestedUsers,
+                    onSuggestedUserClick = { user -> onUserProfileClick(user.userId) },
+                    onSuggestedUserAdd = { user ->
+                        coroutineScope.launch {
+                            val name = user.displayName?.takeIf { it.isNotBlank() } ?: user.userId.value
+                            val success = onAddContact(user, name, null, null)
+                            if (success) {
+                                state.eventSink(HomeEvent.RefreshContacts)
+                            }
+                        }
+                    },
+                    onContactClick = { contact ->
+                        contact.userId?.let(onUserProfileClick) ?: onRoomClick(contact.roomId)
+                    },
+                    onContactLongClick = { contact ->
+                        editingContact = contact
+                        editingName = contact.displayName
+                        editingEmail = contact.email.orEmpty()
+                        editingPhone = contact.phone.orEmpty()
+                    },
+                    lazyListState = contactsLazyListState,
+                    contentPadding = PaddingValues(bottom = 88.dp),
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            FloatingActionButton(
+                onClick = { showCreateContactDialog = true },
+                shape = RoundedCornerShape(12.dp),
+                containerColor = fabContainerColor,
+                contentColor = fabIconColor,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    imageVector = CompoundIcons.Plus(),
+                    contentDescription = stringResource(R.string.screen_home_contacts_title),
+                )
+            }
+        }
     }
 
     BackHandler(enabled = showCreateContactDialog) {
@@ -590,6 +799,14 @@ private fun HomeScaffold(
 
     BackHandler(enabled = showSetkaPlusDialog) {
         showSetkaPlusDialog = false
+    }
+    if (state.showTransferQueueSheet) {
+        SetkaTransferQueueBottomSheet(
+            setkaLiteState = state.setkaLiteState,
+            onDismiss = { state.eventSink(HomeEvent.DismissTransferQueue) },
+            onClearCompleted = { state.eventSink(HomeEvent.ClearTransferQueueCompleted) },
+            onRefreshSync = { state.eventSink(HomeEvent.RefreshSetkaLiteSync) },
+        )
     }
     AnimatedVisibility(
         visible = showSetkaPlusDialog,
@@ -658,10 +875,19 @@ private fun HomeScaffold(
                             text = stringResource(R.string.screen_home_setka_plus_subscription_status),
                             style = ElementTheme.typography.fontBodyLgMedium,
                         )
-                        Text(state.setkaPlusState.subscription?.status ?: stringResource(R.string.screen_home_setka_plus_inactive))
+                        Text(formatSetkaPlusStatus(state.setkaPlusState.subscription?.status))
                         Text(
                             text = state.setkaPlusState.subscription?.planName ?: stringResource(R.string.screen_home_setka_plus_title),
                             color = ElementTheme.colors.textSecondary,
+                        )
+                    }
+                }
+
+                if (state.setkaPlusState.paymentFlowState !is io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState.Idle) {
+                    item(key = "setka-plus-payment-flow") {
+                        SetkaPlusPaymentFlowBanner(
+                            paymentFlowState = state.setkaPlusState.paymentFlowState,
+                            onDismiss = { state.eventSink(HomeEvent.DismissSetkaPlusPaymentResult) },
                         )
                     }
                 }
@@ -827,6 +1053,7 @@ private fun HomeSetkaPlusPromoCard(
 @Composable
 private fun HomeBottomBar(
     currentHomeNavigationBarItem: HomeNavigationBarItem,
+    visibleItems: List<HomeNavigationBarItem>,
     containerColor: Color,
     contentColor: Color,
     onItemClick: (HomeNavigationBarItem) -> Unit,
@@ -837,7 +1064,7 @@ private fun HomeBottomBar(
         contentColor = contentColor,
         modifier = modifier
     ) {
-        HomeNavigationBarItem.entries.forEach { item ->
+        visibleItems.forEach { item ->
             val isSelected = currentHomeNavigationBarItem == item
             NavigationBarItem(
                 selected = isSelected,
@@ -1244,6 +1471,8 @@ internal fun HomeViewPreview(@PreviewParameter(HomeStateProvider::class) state: 
         onSetUpRecoveryClick = {},
         onConfirmRecoveryKeyClick = {},
         onStartChatClick = {},
+        onCreateChannelClick = {},
+        onSearchUserClick = {},
         onSearchUsers = { emptyList() },
         onAddContact = { _, _, _, _ -> false },
         onUpdateContact = { _, _, _, _ -> false },
@@ -1268,6 +1497,8 @@ internal fun HomeViewA11yPreview() = ElementPreview {
         onSetUpRecoveryClick = {},
         onConfirmRecoveryKeyClick = {},
         onStartChatClick = {},
+        onCreateChannelClick = {},
+        onSearchUserClick = {},
         onSearchUsers = { emptyList() },
         onAddContact = { _, _, _, _ -> false },
         onUpdateContact = { _, _, _, _ -> false },

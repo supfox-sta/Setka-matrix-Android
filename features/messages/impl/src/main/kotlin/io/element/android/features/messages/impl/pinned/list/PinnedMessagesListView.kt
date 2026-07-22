@@ -228,6 +228,8 @@ private fun PinnedMessagesListLoaded(
                 onContentClick = onEventClick,
                 onLongClick = ::onMessageLongClick,
                 displayThreadSummaries = displayThreadSummaries,
+                isSetkaChannel = false,
+                setkaChannelCommentsEnabled = false,
                 inReplyToClick = {},
                 onReactionClick = { _, _ -> },
                 onReactionLongClick = { _, _ -> },

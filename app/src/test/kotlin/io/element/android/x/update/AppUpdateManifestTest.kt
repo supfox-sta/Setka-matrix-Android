@@ -96,7 +96,7 @@ class AppUpdateManifestTest {
     fun `relative apk name resolves against default base url`() {
         val manifest = AppUpdateManifest(apk = "app-gplay-universal-debug.apk")
 
-        assertThat(manifest.resolvedApkUrl())
+        assertThat(manifest.resolvedDownloadUrl())
             .isEqualTo("https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk")
     }
 
@@ -104,43 +104,16 @@ class AppUpdateManifestTest {
     fun `absolute apk url is preserved`() {
         val manifest = AppUpdateManifest(apk = "https://cdn.example.org/app.apk")
 
-        assertThat(manifest.resolvedApkUrl()).isEqualTo("https://cdn.example.org/app.apk")
+        assertThat(manifest.resolvedDownloadUrl()).isEqualTo("https://cdn.example.org/app.apk")
     }
 
     @Test
-    fun `cached apk file name keeps extension and version identity`() {
-        val updateInfo = AppUpdateInfo(
-            manifest = AppUpdateManifest(
-                apk = "app-gplay-universal-debug.apk",
-                versionName = "26.03.4",
-                versionCode = 202603031,
-            ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
+    fun `explicit download url takes precedence over apk field`() {
+        val manifest = AppUpdateManifest(
+            apk = "legacy.apk",
+            downloadUrl = "https://cdn.example.org/latest.apk",
         )
 
-        assertThat(updateInfo.cachedApkFileName())
-            .isEqualTo("app-gplay-universal-debug-26.03.4-202603031.apk")
-    }
-
-    @Test
-    fun `cached apk file names differ between releases that share the same remote file name`() {
-        val oldUpdate = AppUpdateInfo(
-            manifest = AppUpdateManifest(
-                apk = "app-gplay-universal-debug.apk",
-                versionName = "26.03.4",
-                versionCode = 202603031,
-            ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
-        )
-        val newUpdate = AppUpdateInfo(
-            manifest = AppUpdateManifest(
-                apk = "app-gplay-universal-debug.apk",
-                versionName = "26.03.5",
-                versionCode = 202603041,
-            ),
-            apkUrl = "https://web.setka-matrix.ru/themes/element/img/app-android/app-gplay-universal-debug.apk",
-        )
-
-        assertThat(newUpdate.cachedApkFileName()).isNotEqualTo(oldUpdate.cachedApkFileName())
+        assertThat(manifest.resolvedDownloadUrl()).isEqualTo("https://cdn.example.org/latest.apk")
     }
 }

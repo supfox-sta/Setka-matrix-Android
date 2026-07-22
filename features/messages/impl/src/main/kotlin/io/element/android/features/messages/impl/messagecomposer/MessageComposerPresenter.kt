@@ -64,6 +64,8 @@ import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
 import io.element.android.libraries.matrix.api.permalink.PermalinkParser
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentCoordinator
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState
 import io.element.android.libraries.matrix.api.room.IntentionalMention
 import io.element.android.libraries.matrix.api.room.JoinedRoom
 import io.element.android.libraries.matrix.api.room.draft.ComposerDraft
@@ -71,6 +73,7 @@ import io.element.android.libraries.matrix.api.room.draft.ComposerDraftType
 import io.element.android.libraries.matrix.api.room.getDirectRoomMember
 import io.element.android.libraries.matrix.api.room.isDm
 import io.element.android.libraries.matrix.api.room.powerlevels.use
+import io.element.android.libraries.matrix.api.timeline.Timeline
 import io.element.android.libraries.matrix.api.timeline.TimelineException
 import io.element.android.libraries.matrix.api.timeline.item.event.toEventOrTransactionId
 import io.element.android.libraries.matrix.ui.messages.reply.InReplyToDetails
@@ -151,6 +154,7 @@ class MessageComposerPresenter(
     private val mediaOptimizationConfigProvider: MediaOptimizationConfigProvider,
     private val notificationConversationService: NotificationConversationService,
     private val setkaService: SetkaService,
+    private val setkaPlusPaymentCoordinator: SetkaPlusPaymentCoordinator,
     private val externalIntentLauncher: ExternalIntentLauncher,
 ) : Presenter<MessageComposerState> {
     @AssistedFactory
@@ -217,6 +221,7 @@ class MessageComposerPresenter(
         var pendingSetkaUpload by remember { mutableStateOf<PendingSetkaUpload?>(null) }
         var suspendedSetkaPackEditor by remember { mutableStateOf<SetkaPackEditorState?>(null) }
         var setkaState by remember { mutableStateOf(SetkaComposerState()) }
+        val paymentFlowState by setkaPlusPaymentCoordinator.flowState.collectAsState()
 
         val sendTypingNotifications by remember {
             sessionPreferencesStore.isSendTypingNotificationsEnabled()
@@ -316,6 +321,13 @@ class MessageComposerPresenter(
 
         fun refreshSetka(showLoading: Boolean = false) {
             applySetkaBootstrap(showLoading = showLoading)
+        }
+
+        LaunchedEffect(paymentFlowState) {
+            setkaState = setkaState.copy(paymentFlowState = paymentFlowState)
+            if (paymentFlowState is SetkaPlusPaymentFlowState.Confirmed) {
+                refreshSetka(showLoading = false)
+            }
         }
 
         fun replaceSetkaPack(updatedPack: SetkaStickerPack) {
@@ -535,18 +547,28 @@ class MessageComposerPresenter(
                 MessageComposerEvent.HideSetkaPlusDialog -> {
                     setkaState = setkaState.copy(isSubscriptionDialogVisible = false)
                 }
+                MessageComposerEvent.DismissSetkaPlusPaymentResult -> {
+                    setkaPlusPaymentCoordinator.dismissResult()
+                }
                 is MessageComposerEvent.SendSetkaSticker -> {
+                    if (setkaState.sendingStickerId != null) {
+                        return
+                    }
+                    val stickerKey = "${event.sticker.id}:${event.sticker.mxcUrl}"
+                    setkaState = setkaState.copy(sendingStickerId = stickerKey, errorMessage = null)
                     localCoroutineScope.launch {
                         timelineController.invokeOnCurrentTimeline {
-                            setkaService.sendSticker(this, event.sticker)
+                            val threadRootId = (mode as? Timeline.Mode.Thread)?.threadRootId
+                            setkaService.sendSticker(this, event.sticker, threadRootId)
                                 .onSuccess {
                                     setkaState = setkaState.copy(
-                                        isStickerPickerVisible = false,
+                                        sendingStickerId = null,
                                         errorMessage = null,
                                     )
                                 }
                                 .onFailure { failure ->
                                     setkaState = setkaState.copy(
+                                        sendingStickerId = null,
                                         errorMessage = failure.message ?: "Не удалось отправить стикер",
                                     )
                                 }
@@ -563,7 +585,9 @@ class MessageComposerPresenter(
                         setkaService.createPlusPayment(event.plan)
                             .onSuccess { payment ->
                                 openSetkaPayment(payment.checkoutUrl)
-                                refreshSetka()
+                                if (payment.paymentId.isNotBlank()) {
+                                    setkaPlusPaymentCoordinator.beginPayment(payment.paymentId)
+                                }
                             }
                             .onFailure { failure ->
                                 setkaState = setkaState.copy(
@@ -574,8 +598,7 @@ class MessageComposerPresenter(
                     }
                 }
                 is MessageComposerEvent.OpenSetkaPackEditor -> {
-                    if (!setkaState.isPlusActive) {
-                        setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                    if (event.kind == SetkaPackKind.EMOJI) {
                         return
                     }
                     val existingPack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
@@ -593,8 +616,7 @@ class MessageComposerPresenter(
                 }
                 is MessageComposerEvent.SaveSetkaPack -> {
                     localCoroutineScope.launch {
-                        if (!setkaState.isPlusActive) {
-                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                        if (event.kind == SetkaPackKind.EMOJI) {
                             return@launch
                         }
                         val trimmedName = event.name.trim()
@@ -636,6 +658,10 @@ class MessageComposerPresenter(
                     }
                 }
                 is MessageComposerEvent.ConfirmDeleteSetkaPack -> {
+                    val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                    if (pack?.kind == SetkaPackKind.EMOJI) {
+                        return
+                    }
                     setkaState = setkaState.copy(
                         deleteConfirmation = SetkaDeleteConfirmation(
                             packId = event.packId,
@@ -649,8 +675,8 @@ class MessageComposerPresenter(
                 }
                 is MessageComposerEvent.DeleteSetkaPack -> {
                     localCoroutineScope.launch {
-                        if (!setkaState.isPlusActive) {
-                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                        val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                        if (pack?.kind == SetkaPackKind.EMOJI) {
                             return@launch
                         }
                         setkaState = setkaState.copy(
@@ -674,6 +700,9 @@ class MessageComposerPresenter(
                     val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
                     if (pack == null) {
                         setkaState = setkaState.copy(errorMessage = "Пак не найден")
+                        return
+                    }
+                    if (pack.kind == SetkaPackKind.EMOJI) {
                         return
                     }
                     localCoroutineScope.launch {
@@ -724,12 +753,57 @@ class MessageComposerPresenter(
                 MessageComposerEvent.DismissSetkaSharedPackPreview -> {
                     setkaState = setkaState.copy(sharedPackPreview = null)
                 }
+                is MessageComposerEvent.PreviewSetkaStickerPack -> {
+                    val pack = setkaState.stickerPacks.firstOrNull { candidate ->
+                        candidate.kind == SetkaPackKind.STICKER &&
+                            candidate.stickers.any { it.mxcUrl == event.mxcUrl }
+                    }
+                    if (pack == null) {
+                        setkaState = setkaState.copy(errorMessage = "Пак стикеров не найден")
+                        if (setkaState.stickerPacks.isEmpty()) {
+                            refreshSetka(showLoading = true)
+                        }
+                    } else {
+                        setkaState = setkaState.copy(
+                            sharedPackPreview = io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewState(
+                                token = "",
+                                pack = pack,
+                                installedPackId = pack.id,
+                                isLoading = false,
+                            ),
+                            errorMessage = null,
+                        )
+                    }
+                }
+                is MessageComposerEvent.PreviewSetkaEmojiPack -> {
+                    val pack = setkaState.stickerPacks.firstOrNull { candidate ->
+                        candidate.kind == SetkaPackKind.EMOJI &&
+                            candidate.stickers.any { it.mxcUrl == event.mxcUrl }
+                    }
+                    if (pack == null) {
+                        setkaState = setkaState.copy(errorMessage = "Emoji-пак не найден")
+                        if (setkaState.stickerPacks.isEmpty()) {
+                            refreshSetka(showLoading = true)
+                        }
+                    } else {
+                        setkaState = setkaState.copy(
+                            sharedPackPreview = io.element.android.features.messages.impl.messagecomposer.setka.SetkaSharedPackPreviewState(
+                                token = "",
+                                pack = pack,
+                                installedPackId = pack.id,
+                                isLoading = false,
+                            ),
+                            errorMessage = null,
+                        )
+                    }
+                }
                 MessageComposerEvent.ApplySetkaSharedPackPreview -> {
                     localCoroutineScope.launch {
                         val preview = setkaState.sharedPackPreview ?: return@launch
-                        if (!setkaState.isPlusActive) {
+                        val requiresPlus = preview.pack?.kind == SetkaPackKind.EMOJI
+                        if (requiresPlus && !setkaState.isPlusActive) {
                             setkaState = setkaState.copy(
-                                errorMessage = "Р§С‚РѕР±С‹ РґРѕР±Р°РІР»СЏС‚СЊ РїР°РєРё, РЅСѓР¶РµРЅ Setka Plus",
+                                errorMessage = "Чтобы добавлять emoji-паки, нужна Сетка Plus",
                                 isSubscriptionDialogVisible = true,
                             )
                             refreshSetka(showLoading = setkaState.plans.isEmpty())
@@ -770,9 +844,15 @@ class MessageComposerPresenter(
                 }
                 is MessageComposerEvent.ImportSetkaSharedPack -> {
                     localCoroutineScope.launch {
-                        if (!setkaState.isPlusActive) {
+                        val resolvedPack = setkaService.resolveSharedPack(event.token).getOrElse { failure ->
                             setkaState = setkaState.copy(
-                                errorMessage = "Чтобы добавлять паки, нужен Setka Plus",
+                                errorMessage = failure.message ?: "Не удалось загрузить пак",
+                            )
+                            return@launch
+                        }
+                        if (resolvedPack.kind == SetkaPackKind.EMOJI && !setkaState.isPlusActive) {
+                            setkaState = setkaState.copy(
+                                errorMessage = "Чтобы добавлять emoji-паки, нужна Сетка Plus",
                                 isSubscriptionDialogVisible = true,
                             )
                             refreshSetka(showLoading = setkaState.plans.isEmpty())
@@ -796,11 +876,10 @@ class MessageComposerPresenter(
                 }
                 is MessageComposerEvent.DeleteSetkaSticker -> {
                     localCoroutineScope.launch {
-                        if (!setkaState.isPlusActive) {
-                            setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                        val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
+                        if (pack?.kind == SetkaPackKind.EMOJI) {
                             return@launch
                         }
-                        val pack = setkaState.stickerPacks.firstOrNull { it.id == event.packId }
                         if (pack == null) {
                             setkaState = setkaState.copy(errorMessage = "Пак не найден")
                             return@launch
@@ -823,8 +902,7 @@ class MessageComposerPresenter(
                     }
                 }
                 is MessageComposerEvent.UploadSetkaMedia -> {
-                    if (!setkaState.isPlusActive) {
-                        setkaState = setkaState.copy(errorMessage = "Для управления паками нужен Setka Plus")
+                    if (event.kind == SetkaPackKind.EMOJI) {
                         return
                     }
                     openSetkaUploadPicker(packId = event.packId, kind = event.kind)
@@ -1052,8 +1130,8 @@ class MessageComposerPresenter(
                 sendMessage(
                     body = normalizedMessage.markdown,
                     htmlBody = normalizedMessage.html,
-                    intentionalMentions = normalizedMessage.intentionalMentions
-                )
+                    intentionalMentions = normalizedMessage.intentionalMentions,
+                ).onFailure { notifySendFailure(it) }
             }
             is MessageComposerMode.Edit -> {
                 timelineController.invokeOnCurrentTimeline {
@@ -1085,7 +1163,7 @@ class MessageComposerPresenter(
                             htmlBody = normalizedMessage.html,
                             intentionalMentions = normalizedMessage.intentionalMentions,
                             repliedToEventId = eventId,
-                        )
+                        ).onFailure { notifySendFailure(it) }
                     }
                 }
             }
@@ -1110,6 +1188,16 @@ class MessageComposerPresenter(
                 // Set proper type when we'll be sending other types of messages.
                 messageType = Composer.MessageType.Text,
             )
+        )
+    }
+
+    private fun notifySendFailure(cause: Throwable) {
+        if (cause is CancellationException) return
+        Timber.w(cause, "Failed to send room message")
+        snackbarDispatcher.post(
+            SnackbarMessage(
+                messageResId = io.element.android.features.messages.impl.R.string.screen_media_upload_preview_error_failed_sending,
+            ),
         )
     }
 
@@ -1141,20 +1229,31 @@ class MessageComposerPresenter(
         items: List<Pair<Uri, String?>>,
     ) {
         if (items.isEmpty()) return
-        val mediaAttachments = items.map { (uri, mimeType) ->
-            Attachment.Media(
-                localMediaFactory.createFromUri(
-                    uri = uri,
-                    mimeType = mimeType,
-                    name = null,
-                    formattedFileSize = null,
-                )
-            )
-        }.toImmutableList()
         val inReplyToEventId = (messageComposerContext.composerMode as? MessageComposerMode.Reply)?.eventId
-        navigator.navigateToPreviewAttachments(mediaAttachments, inReplyToEventId)
+        if (items.size == 1) {
+            val mediaAttachments = items.map { (uri, mimeType) ->
+                Attachment.Media(
+                    localMediaFactory.createFromUri(
+                        uri = uri,
+                        mimeType = mimeType,
+                        name = null,
+                        formattedFileSize = null,
+                    )
+                )
+            }.toImmutableList()
+            navigator.navigateToPreviewAttachments(mediaAttachments, inReplyToEventId)
+        } else {
+            sessionCoroutineScope.launch {
+                items.forEachIndexed { index, (uri, mimeType) ->
+                    sendMedia(
+                        uri = uri,
+                        mimeType = mimeType.orEmpty().ifBlank { "image/jpeg" },
+                        inReplyToEventId = if (index == 0) inReplyToEventId else null,
+                    )
+                }
+            }
+        }
 
-        // Reset composer since the attachment will be sent in a separate flow
         messageComposerContext.composerMode = MessageComposerMode.Normal
     }
 
@@ -1409,9 +1508,7 @@ class MessageComposerPresenter(
         }
     }
 
-    private fun shouldUseLegacyGalleryPicker(): Boolean {
-        return buildVersionSdkIntProvider.get() < Build.VERSION_CODES.Q
-    }
+    private fun shouldUseLegacyGalleryPicker(): Boolean = false
 }
 
 private fun Message.withCustomEmoji(

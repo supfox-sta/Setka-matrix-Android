@@ -36,8 +36,12 @@ import io.element.android.features.preferences.impl.labs.LabsNode
 import io.element.android.features.preferences.impl.notifications.NotificationSettingsNode
 import io.element.android.features.preferences.impl.notifications.edit.EditDefaultNotificationSettingNode
 import io.element.android.features.preferences.impl.root.PreferencesRootNode
+import io.element.android.features.preferences.impl.storage.StorageSettingsNode
 import io.element.android.features.preferences.impl.threepid.ThreePidSettingsNode
+import io.element.android.features.preferences.impl.user.addemail.AddEmailNode
+import io.element.android.features.preferences.impl.user.changephone.ChangePhoneNumberNode
 import io.element.android.features.preferences.impl.user.editprofile.EditUserProfileNode
+import io.element.android.features.preferences.impl.user.editprofile.ProfileCustomizationNode
 import io.element.android.libraries.architecture.BackstackView
 import io.element.android.libraries.architecture.BaseFlowNode
 import io.element.android.libraries.architecture.appyx.canPop
@@ -117,6 +121,15 @@ class PreferencesFlowNode(
         data class UserProfile(val matrixUser: MatrixUser) : NavTarget
 
         @Parcelize
+        data class ProfileCustomization(val matrixUser: MatrixUser) : NavTarget
+
+        @Parcelize
+        data object ChangePhoneNumber : NavTarget
+
+        @Parcelize
+        data object AddEmail : NavTarget
+
+        @Parcelize
         data object BlockedUsers : NavTarget
 
         @Parcelize
@@ -124,6 +137,9 @@ class PreferencesFlowNode(
 
         @Parcelize
         data object AccountDeactivation : NavTarget
+
+        @Parcelize
+        data object StorageSettings : NavTarget
 
         @Parcelize
         data object OssLicenses : NavTarget
@@ -177,6 +193,10 @@ class PreferencesFlowNode(
 
                     override fun navigateToAdvancedSettings() {
                         backstack.push(NavTarget.AdvancedSettings)
+                    }
+
+                    override fun navigateToStorageSettings() {
+                        backstack.push(NavTarget.StorageSettings)
                     }
 
                     override fun navigateToContactsAndPrivacy() {
@@ -308,6 +328,9 @@ class PreferencesFlowNode(
             NavTarget.AdvancedSettings -> {
                 createNode<AdvancedSettingsNode>(buildContext)
             }
+            NavTarget.StorageSettings -> {
+                createNode<StorageSettingsNode>(buildContext)
+            }
             NavTarget.ContactsAndPrivacy -> {
                 createNode<ThreePidSettingsNode>(buildContext)
             }
@@ -315,10 +338,67 @@ class PreferencesFlowNode(
                 val inputs = EditUserProfileNode.Inputs(navTarget.matrixUser)
                 val callback = object : EditUserProfileNode.Callback {
                     override fun onDone() {
-                        backstack.pop()
+                        if (backstack.canPop()) {
+                            backstack.pop()
+                        } else {
+                            navigateUp()
+                        }
+                    }
+
+                    override fun openProfileCustomization(matrixUser: MatrixUser) {
+                        backstack.push(NavTarget.ProfileCustomization(matrixUser))
+                    }
+
+                    override fun openChangePhone() {
+                        backstack.push(NavTarget.ChangePhoneNumber)
+                    }
+
+                    override fun openChangeEmail() {
+                        backstack.push(NavTarget.AddEmail)
+                    }
+
+                    override fun startSignOutFlow() {
+                        backstack.push(NavTarget.SignOut)
                     }
                 }
                 createNode<EditUserProfileNode>(buildContext, listOf(inputs, callback))
+            }
+            is NavTarget.ProfileCustomization -> {
+                val inputs = ProfileCustomizationNode.Inputs(navTarget.matrixUser)
+                val callback = object : ProfileCustomizationNode.Callback {
+                    override fun onDone() {
+                        if (backstack.canPop()) {
+                            backstack.pop()
+                        } else {
+                            navigateUp()
+                        }
+                    }
+                }
+                createNode<ProfileCustomizationNode>(buildContext, listOf(inputs, callback))
+            }
+            NavTarget.ChangePhoneNumber -> {
+                val callback = object : ChangePhoneNumberNode.Callback {
+                    override fun onDone(changed: Boolean) {
+                        if (backstack.canPop()) {
+                            backstack.pop()
+                        } else {
+                            navigateUp()
+                        }
+                    }
+                }
+                createNode<ChangePhoneNumberNode>(buildContext, listOf(callback))
+            }
+            NavTarget.AddEmail -> {
+                val callback = object : AddEmailNode.Callback {
+                    override fun onDone(changed: Boolean) {
+                        if (backstack.canPop()) {
+                            backstack.pop()
+                        } else {
+                            navigateUp()
+                        }
+                    }
+                }
+                createNode<AddEmailNode>(buildContext, listOf(callback))
             }
             NavTarget.LockScreenSettings -> {
                 lockScreenEntryPoint.createNode(

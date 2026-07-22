@@ -48,6 +48,7 @@ sealed interface MessageComposerEvent {
     data object HideSetkaPlusDialog : MessageComposerEvent
     data class SendSetkaSticker(val sticker: SetkaSticker) : MessageComposerEvent
     data class BuySetkaPlan(val plan: SetkaPlusPlan) : MessageComposerEvent
+    data object DismissSetkaPlusPaymentResult : MessageComposerEvent
     data class OpenSetkaPackEditor(val kind: SetkaPackKind, val packId: String? = null) : MessageComposerEvent
     data object CloseSetkaPackEditor : MessageComposerEvent
     data class SaveSetkaPack(val kind: SetkaPackKind, val packId: String?, val name: String) : MessageComposerEvent
@@ -62,5 +63,7 @@ sealed interface MessageComposerEvent {
     data class DeleteSetkaSticker(val packId: String, val stickerId: String) : MessageComposerEvent
     data class UploadSetkaMedia(val packId: String, val kind: SetkaPackKind) : MessageComposerEvent
     data object ClearSetkaError : MessageComposerEvent
+    data class PreviewSetkaStickerPack(val mxcUrl: String) : MessageComposerEvent
+    data class PreviewSetkaEmojiPack(val mxcUrl: String) : MessageComposerEvent
     data object SaveDraft : MessageComposerEvent
 }

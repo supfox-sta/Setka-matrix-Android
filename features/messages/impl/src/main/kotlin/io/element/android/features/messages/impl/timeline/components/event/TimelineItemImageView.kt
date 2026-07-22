@@ -12,6 +12,7 @@ import android.text.SpannedString
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,6 +55,7 @@ import io.element.android.libraries.designsystem.components.blurhash.blurHashBac
 import io.element.android.libraries.designsystem.modifiers.onKeyboardContextMenuAction
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.textcomposer.ElementRichTextEditorStyle
 import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.libraries.ui.utils.time.isTalkbackActive
@@ -70,6 +72,7 @@ fun TimelineItemImageView(
     onLinkLongClick: (Link) -> Unit,
     onShowContentClick: () -> Unit,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit,
+    localSendState: LocalEventSendState? = null,
     modifier: Modifier = Modifier,
 ) {
     val a11yLabel = stringResource(CommonStrings.common_image)
@@ -89,30 +92,36 @@ fun TimelineItemImageView(
                 hideContent = hideMediaContent,
                 onShowClick = onShowContentClick,
             ) {
-                var isLoaded by remember { mutableStateOf(false) }
-                AsyncImage(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(width = 3.dp, color = imageBorderColor, shape = RoundedCornerShape(10.dp))
-                        .then(if (isLoaded) Modifier.background(Color.White) else Modifier)
-                        .then(
-                            if (!isTalkbackActive() && onContentClick != null) {
-                                Modifier
-                                    .combinedClickable(
-                                        onClick = onContentClick,
-                                        onLongClick = onLongClick,
-                                    )
-                                    .onKeyboardContextMenuAction(onLongClick)
-                            } else {
-                                Modifier
-                            }
-                        ),
-                    model = content.thumbnailMediaRequestData,
-                    contentScale = ContentScale.Crop,
-                    alignment = Alignment.Center,
-                    contentDescription = description,
-                    onState = { isLoaded = it is AsyncImagePainter.State.Success },
-                )
+                Box {
+                    var isLoaded by remember { mutableStateOf(false) }
+                    AsyncImage(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(width = 3.dp, color = imageBorderColor, shape = RoundedCornerShape(10.dp))
+                            .then(if (isLoaded) Modifier.background(Color.White) else Modifier)
+                            .then(
+                                if (!isTalkbackActive() && onContentClick != null) {
+                                    Modifier
+                                        .combinedClickable(
+                                            onClick = onContentClick,
+                                            onLongClick = onLongClick,
+                                        )
+                                        .onKeyboardContextMenuAction(onLongClick)
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        model = content.thumbnailMediaRequestData,
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center,
+                        contentDescription = description,
+                        onState = { isLoaded = it is AsyncImagePainter.State.Success },
+                    )
+                    MediaUploadProgressOverlay(
+                        localSendState = localSendState,
+                        showProgressLabel = true,
+                    )
+                }
             }
         }
 

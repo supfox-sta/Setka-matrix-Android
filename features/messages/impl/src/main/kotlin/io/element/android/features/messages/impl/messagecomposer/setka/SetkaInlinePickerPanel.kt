@@ -56,7 +56,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -92,6 +96,7 @@ fun SetkaInlinePickerPanel(
     onInsertEmoji: (String) -> Unit,
     onOpenPackEditor: (SetkaPackKind, String?) -> Unit,
     onOpenSubscription: () -> Unit,
+    onSharePack: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selectedKind by rememberSaveable { mutableStateOf(SetkaPackKind.STICKER) }
@@ -116,6 +121,7 @@ fun SetkaInlinePickerPanel(
         SetkaPackKind.EMOJI -> listOf(stockEmojiPack) + packs
     }
     var selectedPackId by rememberSaveable(selectedKind) { mutableStateOf<String?>(null) }
+    var heldStickerPreview by remember { mutableStateOf<HeldStickerPreview?>(null) }
     val contentScrollState = rememberScrollState()
     val compactIcons = contentScrollState.value > 18
     val packIconSize by animateDpAsState(
@@ -138,12 +144,13 @@ fun SetkaInlinePickerPanel(
     val selectedPack = headerPacks.firstOrNull { it.id == selectedPackId } ?: headerPacks.firstOrNull()
     val isStockEmojiPackSelected = selectedPack?.id == STOCK_EMOJI_PACK_ID
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        color = ElementTheme.colors.bgCanvasDefault,
-        shadowElevation = 10.dp,
-    ) {
+    Box(modifier = modifier) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = ElementTheme.colors.bgCanvasDefault,
+            shadowElevation = 10.dp,
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -193,15 +200,9 @@ fun SetkaInlinePickerPanel(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (state.isPlusActive) {
-                                ElementTheme.colors.bgSubtlePrimary
-                            } else {
-                                ElementTheme.colors.bgSubtleSecondary
-                            }
-                        ),
+                        .background(ElementTheme.colors.bgSubtlePrimary),
                     onClick = { onOpenPackEditor(selectedKind, null) },
-                    enabled = state.isPlusActive,
+                    enabled = selectedKind == SetkaPackKind.STICKER,
                 ) {
                     Icon(
                         imageVector = CompoundIcons.Plus(),
@@ -243,7 +244,7 @@ fun SetkaInlinePickerPanel(
                         .verticalScroll(contentScrollState),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    if (selectedPack != null && !isStockEmojiPackSelected) {
+                    if (selectedPack != null && !isStockEmojiPackSelected && selectedKind == SetkaPackKind.STICKER) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -256,14 +257,18 @@ fun SetkaInlinePickerPanel(
                             )
                             OutlinedButton(
                                 onClick = { onOpenPackEditor(selectedKind, selectedPack.id) },
-                                enabled = state.isPlusActive,
                             ) {
                                 Text(stringResource(CommonStrings.action_edit))
                             }
                         }
+                    } else if (selectedPack != null && !isStockEmojiPackSelected && selectedKind == SetkaPackKind.EMOJI) {
+                        Text(
+                            text = selectedPack.name,
+                            style = ElementTheme.typography.fontBodyLgMedium,
+                        )
                     }
 
-                    if (!state.isPlusActive) {
+                    if (!state.isPlusActive && selectedKind == SetkaPackKind.EMOJI) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -325,11 +330,30 @@ fun SetkaInlinePickerPanel(
                         FlowStickerGrid(
                             modifier = Modifier.fillMaxWidth(),
                             stickers = selectedPack.stickers,
+                            enableStickerLongPress = selectedKind == SetkaPackKind.STICKER,
                             onStickerClick = { sticker ->
                                 if (selectedKind == SetkaPackKind.STICKER) {
-                                    onSendSticker(sticker)
+                                    if (state.sendingStickerId == null) {
+                                        onSendSticker(sticker)
+                                    }
                                 } else {
-                                    onInsertEmoji("${sticker.inlineEmojiToken()} ")
+                                    if (!state.isPlusActive) {
+                                        onOpenSubscription()
+                                    } else {
+                                        onInsertEmoji("${sticker.inlineEmojiToken()} ")
+                                    }
+                                }
+                            },
+                            onStickerLongPressChanged = { sticker, showPreview, showMenu ->
+                                heldStickerPreview = if (sticker == null) {
+                                    null
+                                } else {
+                                    HeldStickerPreview(
+                                        sticker = sticker,
+                                        packId = selectedPack.id,
+                                        showPreview = showPreview,
+                                        showMenu = showMenu,
+                                    )
                                 }
                             },
                         )
@@ -343,6 +367,96 @@ fun SetkaInlinePickerPanel(
                 selectedKind = selectedKind,
                 onSelect = { selectedKind = it },
             )
+        }
+        }
+
+        heldStickerPreview?.let { preview ->
+            if (preview.showPreview) {
+                StickerHoldOverlay(
+                    preview = preview,
+                    onDismiss = { heldStickerPreview = null },
+                    onSend = {
+                        if (state.sendingStickerId == null) {
+                            onSendSticker(preview.sticker)
+                        }
+                        heldStickerPreview = null
+                    },
+                    onSharePack = {
+                        onSharePack(preview.packId)
+                        heldStickerPreview = null
+                    },
+                )
+            }
+        }
+    }
+}
+
+private data class HeldStickerPreview(
+    val sticker: SetkaSticker,
+    val packId: String,
+    val showPreview: Boolean,
+    val showMenu: Boolean,
+)
+
+@Composable
+private fun StickerHoldOverlay(
+    preview: HeldStickerPreview,
+    onDismiss: () -> Unit,
+    onSend: () -> Unit,
+    onSharePack: () -> Unit,
+) {
+    Popup(
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.62f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                AsyncImage(
+                    model = MediaRequestData(MediaSource(preview.sticker.mxcUrl), MediaRequestData.Kind.Content),
+                    contentDescription = preview.sticker.name,
+                    modifier = Modifier
+                        .size(180.dp)
+                        .clip(RoundedCornerShape(24.dp)),
+                    contentScale = ContentScale.Fit,
+                )
+                if (preview.showMenu) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = ElementTheme.colors.bgCanvasDefault,
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            Text(
+                                text = stringResource(R.string.screen_room_setka_sticker_hold_send),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onSend)
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                style = ElementTheme.typography.fontBodyLgMedium,
+                                textAlign = TextAlign.Center,
+                            )
+                            HorizontalDivider()
+                            Text(
+                                text = stringResource(R.string.screen_room_setka_sticker_hold_share_pack),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(onClick = onSharePack)
+                                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                                style = ElementTheme.typography.fontBodyLgMedium,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -445,6 +559,12 @@ private fun EmojiUnicodeGrid(
 private fun FlowStickerGrid(
     stickers: List<SetkaSticker>,
     onStickerClick: (SetkaSticker) -> Unit,
+    enableStickerLongPress: Boolean = false,
+    onStickerLongPressChanged: (
+        sticker: SetkaSticker?,
+        showPreview: Boolean,
+        showMenu: Boolean,
+    ) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     FlowRow(
@@ -456,7 +576,15 @@ private fun FlowStickerGrid(
             StickerOrEmojiTile(
                 sticker = sticker,
                 modifier = Modifier.width(74.dp),
+                enableLongPress = enableStickerLongPress,
                 onClick = { onStickerClick(sticker) },
+                onLongPressChanged = { showPreview, showMenu ->
+                    if (!showPreview && !showMenu) {
+                        onStickerLongPressChanged(null, false, false)
+                    } else {
+                        onStickerLongPressChanged(sticker, showPreview, showMenu)
+                    }
+                },
             )
         }
     }
@@ -466,13 +594,52 @@ private fun FlowStickerGrid(
 private fun StickerOrEmojiTile(
     sticker: SetkaSticker,
     onClick: () -> Unit,
+    enableLongPress: Boolean = false,
+    onLongPressChanged: (showPreview: Boolean, showMenu: Boolean) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .clip(MaterialTheme.shapes.medium)
             .background(ElementTheme.colors.bgSubtleSecondary)
-            .clickable(onClick = onClick)
+            .then(
+                if (enableLongPress) {
+                    Modifier.pointerInput(sticker.id) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            down.consume()
+                            val start = System.currentTimeMillis()
+                            var previewShown = false
+                            var menuShown = false
+                            var isTap = true
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                if (event.changes.none { it.pressed }) {
+                                    if (isTap && System.currentTimeMillis() - start < 400L) {
+                                        onClick()
+                                    }
+                                    onLongPressChanged(false, false)
+                                    break
+                                }
+                                val elapsed = System.currentTimeMillis() - start
+                                if (elapsed >= 400L) {
+                                    isTap = false
+                                }
+                                if (!previewShown && elapsed >= 4_000L) {
+                                    previewShown = true
+                                    onLongPressChanged(true, false)
+                                }
+                                if (!menuShown && elapsed >= 6_000L) {
+                                    menuShown = true
+                                    onLongPressChanged(true, true)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Modifier.clickable(onClick = onClick)
+                }
+            )
             .padding(6.dp)
     ) {
         AsyncImage(

@@ -83,6 +83,8 @@ import io.element.android.libraries.matrix.api.core.ThreadId
 import io.element.android.libraries.matrix.api.core.asEventId
 import io.element.android.libraries.matrix.api.core.toRoomIdOrAlias
 import io.element.android.libraries.matrix.api.permalink.PermalinkData
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturn
+import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturnNotifier
 import io.element.android.libraries.oidc.api.OidcAction
 import io.element.android.libraries.oidc.api.OidcActionFlow
 import io.element.android.libraries.sessionstorage.api.LoggedInState
@@ -125,6 +127,7 @@ class RootFlowNode(
     private val accountSelectEntryPoint: AccountSelectEntryPoint,
     private val intentResolver: IntentResolver,
     private val oidcActionFlow: OidcActionFlow,
+    private val setkaPlusPaymentReturnNotifier: SetkaPlusPaymentReturnNotifier,
     private val featureFlagService: FeatureFlagService,
     private val announcementService: AnnouncementService,
     private val analyticsService: AnalyticsService,
@@ -593,6 +596,15 @@ class RootFlowNode(
         attachSession(deeplinkData.sessionId).let { loggedInFlowNode ->
             when (deeplinkData) {
                 is DeeplinkData.Root -> Unit // The room list will always be shown, observing FtueState
+                is DeeplinkData.SetkaPlusPaymentReturn -> {
+                    setkaPlusPaymentReturnNotifier.notify(
+                        SetkaPlusPaymentReturn(
+                            sessionId = deeplinkData.sessionId,
+                            paymentId = deeplinkData.paymentId,
+                            outcome = deeplinkData.outcome,
+                        )
+                    )
+                }
                 is DeeplinkData.Room -> {
                     loggedInFlowNode.attachRoom(
                         roomIdOrAlias = deeplinkData.roomId.toRoomIdOrAlias(),

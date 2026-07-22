@@ -8,6 +8,7 @@
 
 package io.element.android.libraries.matrix.impl.room
 
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.appconfig.TimelineConfig
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
 import io.element.android.libraries.featureflag.api.FeatureFlagService
@@ -123,7 +124,11 @@ class RustRoomFactory(
                     operation = "RustRoomFactory.getJoinedRoomOrPreview",
                     parentTransaction = parentTransaction,
                 ) { transaction ->
-                    val hideThreadedEvents = featureFlagService.isFeatureEnabled(FeatureFlags.Threads)
+                    val hideThreadedEvents = featureFlagService.isFeatureEnabled(FeatureFlags.Threads) ||
+                        SetkaChannelConfig.isSetkaChannelRoom(
+                            topic = roomInfo.topic,
+                            homeserver = sessionId.value.substringAfter(':', ""),
+                        )
                     // Init the live timeline in the SDK from the Room
                     val timeline = transaction.recordChildTransaction(
                         operation = "sdkRoom.timelineWithConfiguration",

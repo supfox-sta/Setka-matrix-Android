@@ -9,7 +9,7 @@
 package io.element.android.appconfig
 
 object AuthenticationConfig {
-    const val MATRIX_ORG_URL = "https://setka-matrix.ru"
+    const val MATRIX_ORG_URL = SetkaMatrixConfig.MATRIX_CLIENT_API_URL
 
     /**
      * URL with some docs that explain what's sliding sync and how to add it to your home server.

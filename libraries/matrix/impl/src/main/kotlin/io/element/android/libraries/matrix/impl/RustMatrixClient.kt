@@ -8,6 +8,7 @@
 
 package io.element.android.libraries.matrix.impl
 
+import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.libraries.androidutils.file.getSizeOfFiles
 import io.element.android.libraries.core.bool.orFalse
 import io.element.android.libraries.core.coroutine.CoroutineDispatchers
@@ -17,7 +18,9 @@ import io.element.android.libraries.core.data.tryOrNull
 import io.element.android.libraries.core.extensions.mapFailure
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.featureflag.api.FeatureFlagService
+import io.element.android.libraries.matrix.api.ImportedRoomEventsResult
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.MatrixClientImportEventsException
 import io.element.android.libraries.matrix.api.analytics.SdkStoreSizes
 import io.element.android.libraries.matrix.api.core.DeviceId
 import io.element.android.libraries.matrix.api.core.EventId
@@ -421,10 +424,12 @@ class RustMatrixClient(
         contentType: String = "application/json",
         accept: String = "application/json",
     ): ByteArray {
-        val homeserver = innerClient.homeserver().trimEnd('/')
+        val homeserver = resolveMatrixClientApiUrl(innerClient.homeserver())
         val token = innerClient.session().accessToken
         val connection = (URL("$homeserver$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
+            connectTimeout = 15_000
+            readTimeout = 15_000
             setRequestProperty("Accept", accept)
             setRequestProperty("Authorization", "Bearer $token")
             if (body != null) {
@@ -938,6 +943,21 @@ class RustMatrixClient(
         }
     }
 
+    override suspend fun importBackwardsRoomEvents(
+        roomId: RoomId,
+        eventsJson: String,
+        prevToken: String?,
+        fromToken: String?,
+    ): Result<ImportedRoomEventsResult> = withContext(sessionDispatcher) {
+        // TODO: call Room.importBackwardsPaginationEvents() when matrix-rust-sdk exposes UniFFI.
+        Result.failure(MatrixClientImportEventsException)
+    }
+
+    override suspend fun importToDeviceEvents(eventsJson: String): Result<Int> = withContext(sessionDispatcher) {
+        // TODO: call Client.importToDeviceEvents() when matrix-rust-sdk exposes UniFFI.
+        Result.failure(MatrixClientImportEventsException)
+    }
+
     private suspend fun getCacheSize(
         includeCryptoDb: Boolean = false,
     ): Long = withContext(sessionDispatcher) {
@@ -993,3 +1013,12 @@ private fun defaultRoomCreationPowerLevels(isPublic: Boolean, isSpace: Boolean) 
         mapOf()
     }
 )
+
+private fun resolveMatrixClientApiUrl(homeserver: String): String {
+    val trimmed = homeserver.trimEnd('/')
+    return when (trimmed) {
+        SetkaMatrixConfig.HOME_SERVER_URL,
+        "http://setka-matrix.ru" -> SetkaMatrixConfig.MATRIX_CLIENT_API_URL
+        else -> trimmed
+    }
+}

@@ -10,14 +10,11 @@ package io.element.android.features.preferences.impl.about
 
 import androidx.compose.runtime.Composable
 import dev.zacsweers.metro.Inject
-import io.element.android.libraries.architecture.Presenter
 
 @Inject
-class AboutPresenter : Presenter<AboutState> {
+class AboutPresenter {
     @Composable
-    override fun present(): AboutState {
-        return AboutState(
-            elementLegals = getAllLegals(),
-        )
+    fun present(): AboutState {
+        return AboutState()
     }
 }

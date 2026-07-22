@@ -55,7 +55,7 @@ fun TimelineItemStickerView(
     ) {
         TimelineItemAspectRatioBox(
             modifier = Modifier.blurHashBackground(content.blurhash, alpha = 0.9f),
-            aspectRatio = coerceRatioWhenHidingContent(content.aspectRatio, hideMediaContent),
+            aspectRatio = 1f,
             minHeight = STICKER_SIZE_IN_DP,
             maxHeight = STICKER_SIZE_IN_DP,
         ) {

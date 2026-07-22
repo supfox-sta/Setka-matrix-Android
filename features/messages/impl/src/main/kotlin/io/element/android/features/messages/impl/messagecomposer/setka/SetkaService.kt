@@ -9,12 +9,16 @@
 package io.element.android.features.messages.impl.messagecomposer.setka
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Base64
 import dev.zacsweers.metro.Inject
+import dev.zacsweers.metro.SingleIn
+import io.element.android.libraries.di.RoomScope
 import io.element.android.libraries.di.annotations.ApplicationContext
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.core.ThreadId
 import io.element.android.libraries.matrix.api.timeline.Timeline
 import io.element.android.libraries.mediaviewer.api.local.LocalMediaFactory
 import kotlinx.serialization.SerialName
@@ -26,9 +30,10 @@ import kotlinx.serialization.json.put
 import java.net.URLEncoder
 import kotlin.random.Random
 
-private const val SETKA_SHARE_LINK_PREFIX = "https://web.setka-matrix.ru/#/setka-pack/"
+import io.element.android.appconfig.SetkaMatrixConfig
 
 @Inject
+@SingleIn(RoomScope::class)
 class SetkaService(
     private val matrixClient: MatrixClient,
     @ApplicationContext private val context: Context,
@@ -149,16 +154,17 @@ class SetkaService(
             )
             val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: error("Unable to read media")
-            val uploadedUrl = matrixClient.uploadMedia(localMedia.info.mimeType, bytes).getOrThrow()
-            val dimensions = readImageDimensions(uri)
+            val squareBytes = cropImageToSquareBytes(bytes)
+            val uploadedUrl = matrixClient.uploadMedia(localMedia.info.mimeType, squareBytes).getOrThrow()
+            val squareSize = readImageDimensionsFromBytes(squareBytes)
             SetkaSticker(
                 id = "sticker-${System.currentTimeMillis()}-${Random.nextInt(1000, 9999)}",
                 name = localMedia.info.filename.substringBeforeLast(".").ifBlank { "Sticker" },
                 mxcUrl = uploadedUrl,
                 mimeType = localMedia.info.mimeType,
-                width = if (kind == SetkaPackKind.EMOJI) 50 else dimensions.first,
-                height = if (kind == SetkaPackKind.EMOJI) 50 else dimensions.second,
-                size = localMedia.info.fileSize,
+                width = if (kind == SetkaPackKind.EMOJI) 50 else squareSize,
+                height = if (kind == SetkaPackKind.EMOJI) 50 else squareSize,
+                size = squareBytes.size.toLong(),
             )
         }
     }
@@ -166,7 +172,7 @@ class SetkaService(
     suspend fun createPlusPayment(plan: SetkaPlusPlan): Result<SetkaPlusPaymentRequest> {
         return requestBody<CreatePaymentBody, PaymentResponse>(
             method = "POST",
-            path = setkaPath("/payments/yoomoney/create"),
+            path = setkaPath("/payments/robokassa/create"),
             body = CreatePaymentBody(
                 amount = plan.priceRub,
                 description = plan.name,
@@ -180,7 +186,9 @@ class SetkaService(
             method = "POST",
             path = setkaPath("/sticker_packs/${encodePathSegment(packId)}/share"),
         ).mapCatching { response ->
-            response.url.takeIf { it.isNotBlank() } ?: error("Share URL is empty")
+            val token = response.token.trim()
+            require(token.isNotBlank()) { "Share token is empty" }
+            SetkaMatrixConfig.buildStickerPackShareUrl(token)
         }
     }
 
@@ -205,6 +213,7 @@ class SetkaService(
     suspend fun sendSticker(
         timeline: Timeline,
         sticker: SetkaSticker,
+        threadRootId: ThreadId? = null,
     ): Result<Unit> {
         val width = sticker.width ?: 200
         val height = sticker.height ?: 200
@@ -220,6 +229,22 @@ class SetkaService(
                     sticker.size?.let { put("size", it) }
                 }
             )
+            threadRootId?.let { rootId ->
+                put(
+                    "m.relates_to",
+                    buildJsonObject {
+                        put("rel_type", "m.thread")
+                        put("event_id", rootId.value)
+                        put("is_falling_back", true)
+                        put(
+                            "m.in_reply_to",
+                            buildJsonObject {
+                                put("event_id", rootId.value)
+                            },
+                        )
+                    },
+                )
+            }
         }
         return timeline.sendRaw(
             eventType = "m.sticker",
@@ -228,6 +253,7 @@ class SetkaService(
     }
 
     fun buildPackShareLink(pack: SetkaStickerPack): String {
+        // Legacy client-side encoding fallback; server share API is preferred.
         val payload = SharePackPayload(
             v = 1,
             name = pack.name,
@@ -248,7 +274,7 @@ class SetkaService(
             json.encodeToString(payload).encodeToByteArray(),
             Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING,
         )
-        return "$SETKA_SHARE_LINK_PREFIX$encoded"
+        return SetkaMatrixConfig.buildStickerPackShareUrl("v1.$encoded.local")
     }
 
     fun applyCustomEmojiFormatting(
@@ -378,6 +404,40 @@ class SetkaService(
         val width = options.outWidth.takeIf { it > 0 }
         val height = options.outHeight.takeIf { it > 0 }
         return width to height
+    }
+
+    private fun readImageDimensionsFromBytes(bytes: ByteArray): Int {
+        val options = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        return options.outWidth.takeIf { it > 0 } ?: 512
+    }
+
+    private fun cropImageToSquareBytes(bytes: ByteArray): ByteArray {
+        val source = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+        val size = minOf(source.width, source.height)
+        if (size <= 0) {
+            source.recycle()
+            return bytes
+        }
+        val left = (source.width - size) / 2
+        val top = (source.height - size) / 2
+        val cropped = Bitmap.createBitmap(source, left, top, size, size)
+        source.recycle()
+        val targetSize = 512
+        val scaled = if (cropped.width != targetSize) {
+            Bitmap.createScaledBitmap(cropped, targetSize, targetSize, true).also {
+                if (it !== cropped) cropped.recycle()
+            }
+        } else {
+            cropped
+        }
+        return java.io.ByteArrayOutputStream().use { stream ->
+            scaled.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            scaled.recycle()
+            stream.toByteArray()
+        }
     }
 }
 

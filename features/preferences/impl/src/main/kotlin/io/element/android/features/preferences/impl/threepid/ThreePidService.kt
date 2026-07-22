@@ -77,6 +77,56 @@ class ThreePidService(
             json.optString("mxid").trim().takeIf { it.isNotBlank() }
         }
     }
+    suspend fun getSetkaProfileAccountData(): Result<JSONObject?> {
+        val encodedUserId = Uri.encode(matrixClient.sessionId.value)
+        val result = matrixClient.executeAuthenticatedRequest(
+            method = "GET",
+            path = "/_matrix/client/v3/user/$encodedUserId/account_data/io.setka.profile",
+        )
+        return result.fold(
+            onSuccess = { bytes -> Result.success(JSONObject(bytes.decodeToString())) },
+            onFailure = { error ->
+                val message = error.message.orEmpty()
+                if (message.contains("HTTP 404") || message.contains("404", ignoreCase = true)) {
+                    Result.success(null)
+                } else {
+                    Result.failure(error)
+                }
+            },
+        )
+    }
+
+    suspend fun resolveUserEmail(): Result<UserEmailStatus> = runCatching {
+        val threePids = getThreePids().getOrThrow()
+        val emailThreePid = threePids.firstOrNull { it.medium == ThreePidMedium.Email }
+        if (emailThreePid != null && emailThreePid.validatedAtMillis != null) {
+            return@runCatching UserEmailStatus(
+                address = emailThreePid.address,
+                isVerified = true,
+            )
+        }
+
+        val accountData = getSetkaProfileAccountData().getOrNull()
+        if (accountData != null) {
+            val storedEmail = accountData.optString("email").trim().takeIf { it.isNotBlank() }
+            val validatedAt = accountData.optLong("email_validated_at", 0L)
+            val confirmed = accountData.optBoolean("email_confirmed", false)
+            if (storedEmail != null && (validatedAt > 0L || confirmed)) {
+                return@runCatching UserEmailStatus(
+                    address = storedEmail,
+                    isVerified = true,
+                )
+            }
+        }
+
+        val displayEmail = emailThreePid?.address
+            ?: accountData?.optString("email")?.trim()?.takeIf { it.isNotBlank() }
+        UserEmailStatus(
+            address = displayEmail,
+            isVerified = false,
+        )
+    }
+
     suspend fun getThreePids(): Result<List<ThreePid>> {
         return matrixClient.executeAuthenticatedRequest(
             method = "GET",
@@ -108,16 +158,14 @@ class ThreePidService(
         email: String,
         sendAttempt: Int,
         clientSecret: String = randomClientSecret(),
-        nextLink: String? = null,
     ): Result<Pair<String /*clientSecret*/, ThreePidRequestTokenResult>> {
         val body = JSONObject()
             .put("client_secret", clientSecret)
             .put("email", email)
             .put("send_attempt", sendAttempt)
-        if (!nextLink.isNullOrBlank()) body.put("next_link", nextLink)
         return matrixClient.executeAuthenticatedRequest(
             method = "POST",
-            path = "/_matrix/client/v3/account/3pid/email/requestToken",
+            path = "/_matrix/client/v3/setka/3pid/email/requestToken",
             body = body.toString().encodeToByteArray(),
         ).mapCatching { bytes ->
             val json = JSONObject(bytes.decodeToString())
@@ -125,6 +173,22 @@ class ThreePidService(
             require(sid.isNotBlank()) { "Missing sid" }
             clientSecret to ThreePidRequestTokenResult(sid = sid)
         }
+    }
+
+    suspend fun submitEmailToken(
+        sid: String,
+        clientSecret: String,
+        token: String,
+    ): Result<Unit> {
+        val body = JSONObject()
+            .put("client_secret", clientSecret)
+            .put("sid", sid)
+            .put("token", token)
+        return matrixClient.executeAuthenticatedRequest(
+            method = "POST",
+            path = "/_matrix/client/v3/setka/3pid/email/submit_token",
+            body = body.toString().encodeToByteArray(),
+        ).map { Unit }
     }
 
     suspend fun requestMsisdnToken(
@@ -181,15 +245,15 @@ class ThreePidService(
         clientSecret: String,
         password: String,
     ): Result<Unit> {
-        // First, hit the endpoint without auth to get a UIA session.
-        val initial = matrixClient.executeAuthenticatedRequest(
-            method = "POST",
-            path = "/_matrix/client/v3/account/3pid/add",
-            body = JSONObject()
-                .put("sid", sid)
-                .put("client_secret", clientSecret)
-                .toString()
-                .encodeToByteArray(),
+        val initialBody = JSONObject()
+            .put("sid", sid)
+            .put("client_secret", clientSecret)
+            .toString()
+            .encodeToByteArray()
+        val initial = postWithSetkaFallback(
+            setkaPath = "/_matrix/client/v3/setka/3pid/email/add",
+            standardPath = "/_matrix/client/v3/account/3pid/add",
+            body = initialBody,
         )
         val uiaSession = initial.fold(
             onSuccess = { return Result.success(Unit) },
@@ -216,9 +280,9 @@ class ThreePidService(
             .toString()
             .encodeToByteArray()
 
-        return matrixClient.executeAuthenticatedRequest(
-            method = "POST",
-            path = "/_matrix/client/v3/account/3pid/add",
+        return postWithSetkaFallback(
+            setkaPath = "/_matrix/client/v3/setka/3pid/email/add",
+            standardPath = "/_matrix/client/v3/account/3pid/add",
             body = body,
         ).map { Unit }
     }
@@ -234,14 +298,12 @@ class ThreePidService(
             .encodeToByteArray()
         val setkaResult = matrixClient.executeAuthenticatedRequest(
             method = "POST",
-            // Setka extension: this endpoint is guaranteed to be available on our server
-            // even when upstream 3PID changes are disabled or proxied.
+            // Setka extension: available even when upstream 3PID changes are disabled.
             path = "/_matrix/client/v3/setka/3pid/delete",
             body = body,
         ).map { Unit }
 
-        // Some deployments may not have the Setka extension enabled yet (or may route client APIs
-        // differently). If we get a 404, fall back to the standard Matrix endpoint.
+        // Fall back to the standard Matrix endpoint on deployments without Setka extensions.
         if (setkaResult.isSuccess) return setkaResult
         val message = setkaResult.exceptionOrNull()?.message.orEmpty()
         return if (message.contains("HTTP 404") || message.contains("404", ignoreCase = true)) {
@@ -250,6 +312,29 @@ class ThreePidService(
                 path = "/_matrix/client/v3/account/3pid/delete",
                 body = body,
             ).map { Unit }
+        } else {
+            setkaResult
+        }
+    }
+
+    private suspend fun postWithSetkaFallback(
+        setkaPath: String,
+        standardPath: String,
+        body: ByteArray,
+    ): Result<ByteArray> {
+        val setkaResult = matrixClient.executeAuthenticatedRequest(
+            method = "POST",
+            path = setkaPath,
+            body = body,
+        )
+        if (setkaResult.isSuccess) return setkaResult
+        val message = setkaResult.exceptionOrNull()?.message.orEmpty()
+        return if (message.contains("HTTP 404") || message.contains("404", ignoreCase = true)) {
+            matrixClient.executeAuthenticatedRequest(
+                method = "POST",
+                path = standardPath,
+                body = body,
+            )
         } else {
             setkaResult
         }

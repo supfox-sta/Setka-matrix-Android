@@ -36,12 +36,8 @@ class AboutNode(
 
     private val callback: Callback = callback()
 
-    private fun onElementLegalClick(
-        activity: Activity,
-        darkTheme: Boolean,
-        elementLegal: ElementLegal,
-    ) {
-        activity.openUrlInChromeCustomTab(null, darkTheme, elementLegal.url)
+    private fun openDocuments(activity: Activity, darkTheme: Boolean, documentsUrl: String) {
+        activity.openUrlInChromeCustomTab(null, darkTheme, documentsUrl)
     }
 
     @Composable
@@ -52,8 +48,8 @@ class AboutNode(
         AboutView(
             state = state,
             onBackClick = ::navigateUp,
-            onElementLegalClick = { elementLegal ->
-                onElementLegalClick(activity, isDark, elementLegal)
+            onDocumentsClick = {
+                openDocuments(activity, isDark, state.documentsUrl)
             },
             onOpenSourceLicensesClick = callback::navigateToOssLicenses,
             modifier = modifier

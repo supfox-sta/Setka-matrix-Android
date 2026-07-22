@@ -26,12 +26,19 @@ import io.element.android.features.securebackup.impl.loggerTagSetup
 import io.element.android.features.securebackup.impl.setup.views.RecoveryKeyUserStory
 import io.element.android.features.securebackup.impl.setup.views.RecoveryKeyViewState
 import io.element.android.libraries.architecture.Presenter
+import io.element.android.libraries.matrix.api.encryption.BackupState
 import io.element.android.libraries.matrix.api.encryption.EnableRecoveryProgress
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
+import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import timber.log.Timber
+import kotlin.time.Duration.Companion.seconds
 
 @AssistedInject
 class SecureBackupSetupPresenter(
@@ -102,42 +109,62 @@ class SecureBackupSetupPresenter(
     ) = launch {
         stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.UserCreatesKey)
         if (isChangeRecoveryKeyUserStory) {
-            Timber.tag(loggerTagSetup.value).d("Calling encryptionService.resetRecoveryKey()")
-            encryptionService.resetRecoveryKey().fold(
-                onSuccess = {
-                    stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkHasCreatedKey(it))
-                },
-                onFailure = {
-                    if (it is Exception) {
-                        stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkError(it))
-                    }
-                }
-            )
+            try {
+                awaitEncryptionReady()
+                ensureKeyStorageEnabled()
+                Timber.tag(loggerTagSetup.value).d("Calling encryptionService.resetRecoveryKey()")
+                val recoveryKey = encryptionService.resetRecoveryKey().getOrThrow()
+                stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkHasCreatedKey(recoveryKey))
+            } catch (exception: Exception) {
+                Timber.tag(loggerTagSetup.value).e(exception, "Failed to reset recovery key")
+                stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkError(exception))
+            }
         } else {
-            observeEncryptionService(stateAndDispatch)
-            Timber.tag(loggerTagSetup.value).d("Calling encryptionService.enableRecovery()")
-            encryptionService.enableRecovery(waitForBackupsToUpload = false).onFailure {
-                Timber.tag(loggerTagSetup.value).e(it, "Failed to enable recovery")
-                if (it is Exception) {
-                    stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkError(it))
+            try {
+                awaitEncryptionReady()
+                ensureKeyStorageEnabled()
+                val recoveryKey = withTimeout(120.seconds) {
+                    val progressDeferred = async {
+                        encryptionService.enableRecoveryProgressStateFlow
+                            .filterIsInstance<EnableRecoveryProgress.Done>()
+                            .first()
+                            .recoveryKey
+                    }
+                    Timber.tag(loggerTagSetup.value).d("Calling encryptionService.enableRecovery()")
+                    encryptionService.enableRecovery(waitForBackupsToUpload = false).getOrThrow()
+                    progressDeferred.await()
                 }
+                stateAndDispatch.dispatchAction(
+                    SecureBackupSetupStateMachine.Event.SdkHasCreatedKey(recoveryKey)
+                )
+            } catch (exception: Exception) {
+                Timber.tag(loggerTagSetup.value).e(exception, "Failed to enable recovery")
+                stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkError(exception))
             }
         }
     }
 
-    private fun CoroutineScope.observeEncryptionService(
-        stateAndDispatch: StateAndDispatch<SecureBackupSetupStateMachine.State, SecureBackupSetupStateMachine.Event>
-    ) = launch {
-        encryptionService.enableRecoveryProgressStateFlow.collect { enableRecoveryProgress ->
-            Timber.tag(loggerTagSetup.value).d("New enableRecoveryProgress: ${enableRecoveryProgress.javaClass.simpleName}")
-            when (enableRecoveryProgress) {
-                is EnableRecoveryProgress.Starting,
-                is EnableRecoveryProgress.CreatingBackup,
-                is EnableRecoveryProgress.CreatingRecoveryKey,
-                is EnableRecoveryProgress.BackingUp,
-                is EnableRecoveryProgress.RoomKeyUploadError -> Unit
-                is EnableRecoveryProgress.Done ->
-                    stateAndDispatch.dispatchAction(SecureBackupSetupStateMachine.Event.SdkHasCreatedKey(enableRecoveryProgress.recoveryKey))
+    private suspend fun awaitEncryptionReady() {
+        withTimeout(30.seconds) {
+            encryptionService.backupStateStateFlow.first { it != BackupState.WAITING_FOR_SYNC }
+            encryptionService.recoveryStateStateFlow.first { it != RecoveryState.WAITING_FOR_SYNC }
+        }
+    }
+
+    private suspend fun ensureKeyStorageEnabled() {
+        when (encryptionService.backupStateStateFlow.value) {
+            BackupState.ENABLED,
+            BackupState.ENABLING,
+            BackupState.CREATING,
+            BackupState.RESUMING,
+            BackupState.DOWNLOADING -> return
+            else -> Unit
+        }
+        Timber.tag(loggerTagSetup.value).d("Calling encryptionService.enableBackups()")
+        encryptionService.enableBackups().getOrThrow()
+        withTimeout(30.seconds) {
+            encryptionService.backupStateStateFlow.first {
+                it == BackupState.ENABLED || it == BackupState.UNKNOWN
             }
         }
     }

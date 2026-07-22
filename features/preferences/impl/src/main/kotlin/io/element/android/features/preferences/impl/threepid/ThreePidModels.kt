@@ -31,6 +31,11 @@ data class ThreePidUiaSession(
     val session: String,
 )
 
+data class UserEmailStatus(
+    val address: String?,
+    val isVerified: Boolean,
+)
+
 data class SetkaPrivacy(
     val discoverableEmail: Boolean,
     val discoverableMsisdn: Boolean,
@@ -46,5 +51,27 @@ enum class SetkaVisibility(val raw: String) {
 
     companion object {
         fun fromRaw(value: String?): SetkaVisibility = entries.firstOrNull { it.raw == value } ?: Everyone
+    }
+}
+
+sealed interface ThreePidDialogState {
+    data class AddPhone(
+        val country: String = "RU",
+        val phone: String = "",
+        val clientSecret: String? = null,
+        val sid: String? = null,
+        val msisdn: String? = null,
+        val submitUrl: String? = null,
+        val smsCode: String = "",
+        val sendAttempt: Int = 1,
+        val step: Step = Step.Input,
+        val isBusy: Boolean = false,
+        val errorMessage: String? = null,
+    ) : ThreePidDialogState
+
+    enum class Step {
+        Input,
+        Requested,
+        TokenSubmitted,
     }
 }

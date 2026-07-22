@@ -31,14 +31,15 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.MutableStateFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,7 +48,6 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.stringResource
@@ -57,18 +57,21 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.geometry.Size
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
+import androidx.compose.ui.platform.LocalViewConfiguration
+import kotlin.math.sqrt
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.messages.impl.timeline.aTimelineItemEvent
@@ -83,11 +86,17 @@ import io.element.android.features.messages.impl.timeline.protection.ProtectedVi
 import io.element.android.features.messages.impl.timeline.protection.coerceRatioWhenHidingContent
 import io.element.android.features.messages.impl.videonotes.timeline.VideoNoteInlinePlaybackEvent
 import io.element.android.features.messages.impl.videonotes.timeline.VideoNoteInlinePlaybackState
+import io.element.android.features.messages.impl.mediaplayback.LocalRoomMediaPlaybackCoordinator
+import io.element.android.features.messages.impl.mediaplayback.LocalRoomId
+import io.element.android.features.messages.impl.videonotes.VideoNotePlayerViewFactory
+import io.element.android.features.messages.impl.videonotes.VideoNoteRingProgressCanvas
+import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.designsystem.components.blurhash.blurHashBackground
 import io.element.android.libraries.designsystem.modifiers.onKeyboardContextMenuAction
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.theme.components.CircularProgressIndicator
+import io.element.android.libraries.matrix.api.timeline.item.event.LocalEventSendState
 import io.element.android.libraries.matrix.ui.media.MAX_THUMBNAIL_HEIGHT
 import io.element.android.libraries.matrix.ui.media.MAX_THUMBNAIL_WIDTH
 import io.element.android.libraries.matrix.ui.media.MediaRequestData
@@ -96,8 +105,6 @@ import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.libraries.ui.utils.time.isTalkbackActive
 import io.element.android.wysiwyg.compose.EditorStyledText
 import io.element.android.wysiwyg.link.Link
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.hypot
@@ -108,6 +115,7 @@ import kotlin.time.Duration.Companion.milliseconds
 @Composable
 internal fun TimelineItemVideoView(
     content: TimelineItemVideoContent,
+    eventId: EventId? = null,
     hideMediaContent: Boolean,
     onContentClick: (() -> Unit)?,
     onLongClick: (() -> Unit)?,
@@ -116,6 +124,7 @@ internal fun TimelineItemVideoView(
     onLinkLongClick: (Link) -> Unit,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit,
     videoNoteInlinePlaybackState: VideoNoteInlinePlaybackState = VideoNoteInlinePlaybackState.empty(),
+    localSendState: LocalEventSendState? = null,
     modifier: Modifier = Modifier,
 ) {
     val isTalkbackActive = isTalkbackActive()
@@ -134,8 +143,20 @@ internal fun TimelineItemVideoView(
             val ringPadding = 10.dp
             val ringStrokeWidth = 6.dp
             var isExpanded by remember { mutableStateOf(false) }
-            var isPlaying by remember { mutableStateOf(false) }
-            val circleSize by animateDpAsState(if (isExpanded) expandedCircleSize else baseCircleSize, label = "VideoNoteCircleSize")
+            val playbackCoordinator = LocalRoomMediaPlaybackCoordinator.current
+            val roomId = LocalRoomId.current
+            val roomPlayback = playbackCoordinator?.videoNotePlayback
+            val isThisActive = eventId != null && roomPlayback?.isActive(eventId) == true
+            val enginePlaying by (roomPlayback?.isPlaying ?: remember { MutableStateFlow(false) }).collectAsState()
+            val engineProgress by (roomPlayback?.progress ?: remember { MutableStateFlow(0f) }).collectAsState()
+            val engineLoading by (roomPlayback?.isLoading ?: remember { MutableStateFlow(false) }).collectAsState()
+            val isPlaying = isThisActive && enginePlaying
+            val progress = if (isThisActive) engineProgress else 0f
+            val player = if (isThisActive) roomPlayback?.getPlayer() else null
+            val circleSize by animateDpAsState(
+                targetValue = if (isExpanded || isThisActive) expandedCircleSize else baseCircleSize,
+                label = "VideoNoteCircleSize",
+            )
             val ringSize = circleSize + ringPadding * 2
 
             val density = LocalDensity.current
@@ -154,86 +175,143 @@ internal fun TimelineItemVideoView(
             val inlineUri = directInlineUri ?: mxcInlineUri
             val canInlinePlay = !hideMediaContent && inlineUri != null
             val canRequestPrepare = !hideMediaContent && isMxc && inlineUri == null
-            val isPreparing = videoNoteInlinePlaybackState.isPreparing
+            val isPreparing = videoNoteInlinePlaybackState.isPreparing || (isThisActive && engineLoading)
 
-            var progress by remember { mutableFloatStateOf(0f) }
             val ringBgColor = ElementTheme.colors.iconQuaternary
             val ringProgressColor = ElementTheme.colors.iconAccentPrimary
-            val context = LocalContext.current
-            val player: ExoPlayer? = remember(inlineUri) {
-                inlineUri?.let { uri ->
-                    ExoPlayer.Builder(context.applicationContext).build().apply {
-                        repeatMode = ExoPlayer.REPEAT_MODE_OFF
-                        volume = 1f
-                        setMediaItem(MediaItem.fromUri(uri))
-                        prepare()
-                        playWhenReady = false
-                    }
-                }
-            }
-            DisposableEffect(player) {
-                onDispose { player?.release() }
-            }
 
             var pendingAutoPlay by remember { mutableStateOf(false) }
-            LaunchedEffect(inlineUri, pendingAutoPlay, player) {
-                val p = player
-                if (!pendingAutoPlay || inlineUri == null || p == null) return@LaunchedEffect
+
+            fun beginVideoNoteSession() {
+                playbackCoordinator?.pauseVoicePlayback()
+                playbackCoordinator?.pinVideoBar()
+            }
+
+            LaunchedEffect(inlineUri, pendingAutoPlay, eventId, roomPlayback) {
+                val id = eventId
+                val uri = inlineUri
+                val playback = roomPlayback
+                if (!pendingAutoPlay || uri == null || id == null || playback == null || roomId == null) return@LaunchedEffect
                 pendingAutoPlay = false
+                beginVideoNoteSession()
+                playback.attachSource(
+                    eventId = id,
+                    roomId = roomId,
+                    uri = uri,
+                    thumbnailSource = content.thumbnailSource ?: content.mediaSource,
+                    blurHash = content.blurHash,
+                )
+                playback.play()
                 isExpanded = true
-                isPlaying = true
-                p.volume = 1f
-                p.playWhenReady = true
-                p.play()
             }
 
-            LaunchedEffect(isPlaying) {
-                while (isPlaying) {
-                    val p = player ?: break
-                    val durationMs = p.duration.coerceAtLeast(1)
-                    val posMs = p.currentPosition.coerceAtLeast(0)
-                    progress = (posMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                    delay(50.milliseconds)
+            LaunchedEffect(isThisActive) {
+                if (!isThisActive) {
+                    isExpanded = false
                 }
             }
 
-            fun stopAndReset() {
-                isPlaying = false
-                isExpanded = false
-                player?.let {
-                    it.playWhenReady = false
-                    it.pause()
-                    it.seekTo(0)
-                }
-                progress = 0f
-            }
+            val windowInfo = LocalWindowInfo.current
+            val viewConfiguration = LocalViewConfiguration.current
+            var isRingScrubbing by remember { mutableStateOf(false) }
+            val blockScrollWhileScrubbing = remember {
+                object : NestedScrollConnection {
+                    override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                        return if (isRingScrubbing) available else Offset.Zero
+                    }
 
-            val stopAndResetLatest by rememberUpdatedState(::stopAndReset)
-            DisposableEffect(player) {
-                val p = player ?: return@DisposableEffect onDispose { }
-                val listener = object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_ENDED) {
-                            stopAndResetLatest()
-                        }
+                    override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                        return if (isRingScrubbing) available else Offset.Zero
                     }
                 }
-                p.addListener(listener)
-                onDispose { p.removeListener(listener) }
+            }
+
+            fun pausePlayback() {
+                roomPlayback?.pause()
+            }
+
+            fun resumePlayback() {
+                val id = eventId
+                val uri = inlineUri
+                val playback = roomPlayback
+                if (id == null || uri == null || playback == null || roomId == null) {
+                    return
+                }
+                if (!playback.isActive(id)) {
+                    beginVideoNoteSession()
+                    playback.attachSource(
+                        eventId = id,
+                        roomId = roomId,
+                        uri = uri,
+                        thumbnailSource = content.thumbnailSource ?: content.mediaSource,
+                        blurHash = content.blurHash,
+                    )
+                }
+                playback.play()
+                isExpanded = true
+            }
+
+            fun stopPlayback() {
+                val id = eventId
+                if (id != null) {
+                    playbackCoordinator?.stopVideoNote(id)
+                } else {
+                    roomPlayback?.stop()
+                }
+                isExpanded = false
+            }
+
+            DisposableEffect(eventId, roomPlayback) {
+                onDispose {
+                    val id = eventId
+                    if (id != null && roomPlayback?.isActive(id) == true) {
+                        roomPlayback.setSourceVisible(false)
+                    }
+                }
             }
 
             var scrubJustUntilMs by remember { mutableLongStateOf(0L) }
             fun scrubTo(fraction: Float) {
-                val p = player ?: return
-                val durationMs = p.duration
-                if (durationMs <= 0) return
-                p.seekTo((fraction.coerceIn(0f, 1f) * durationMs).toLong())
-                val newProgress = (p.currentPosition.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                progress = newProgress
+                roomPlayback?.seekToProgress(fraction)
+            }
+
+            fun handleCircleTap() {
+                if (!canInlinePlay) {
+                    if (canRequestPrepare) {
+                        if (!isPreparing) {
+                            pendingAutoPlay = true
+                            isExpanded = true
+                            videoNoteInlinePlaybackState.eventSink(VideoNoteInlinePlaybackEvent.Prepare)
+                        }
+                    }
+                    return
+                }
+                if (isPlaying) {
+                    pausePlayback()
+                } else {
+                    resumePlayback()
+                }
+            }
+
+            fun isOnRing(position: Offset, width: Float, height: Float): Boolean {
+                val center = Offset(width / 2f, height / 2f)
+                val dist = hypot(position.x - center.x, position.y - center.y)
+                val outer = min(width, height) / 2f
+                val inner = max(0f, outer - (ringPaddingPx + ringStrokePx * 3f))
+                return dist in inner..outer
             }
 
             Box(
-                modifier = containerModifier,
+                modifier = containerModifier.onGloballyPositioned { coordinates ->
+                    val id = eventId
+                    val playback = roomPlayback
+                    if (id == null || playback?.isActive(id) != true) return@onGloballyPositioned
+                    val bounds = coordinates.boundsInWindow()
+                    val viewportHeight = windowInfo.containerSize.height.toFloat()
+                    val marginPx = with(density) { 4.dp.toPx() }
+                    val isVisible = bounds.bottom > marginPx && bounds.top < viewportHeight - marginPx
+                    playback.setSourceVisible(isVisible)
+                },
                 contentAlignment = Alignment.Center,
             ) {
                 ProtectedView(
@@ -241,110 +319,9 @@ internal fun TimelineItemVideoView(
                     onShowClick = onShowContentClick,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(ringSize)
-                            .pointerInput(canInlinePlay, ringPaddingPx, ringStrokePx, player) {
-                                if (!canInlinePlay) return@pointerInput
-                                awaitEachGesture {
-                                    val down = awaitFirstDown()
-                                    val center = Offset(size.width / 2f, size.height / 2f)
-                                    val dx = down.position.x - center.x
-                                    val dy = down.position.y - center.y
-                                    val dist = hypot(dx, dy)
-                                    val outer = min(size.width, size.height) / 2f
-                                    val inner = max(0f, outer - (ringPaddingPx + ringStrokePx * 3f))
-                                    val onRing = dist in inner..outer
-                                    if (!onRing) {
-                                        waitForUpOrCancellation()
-                                        return@awaitEachGesture
-                                    }
-                                    scrubJustUntilMs = SystemClock.uptimeMillis() + 250L
-                                    fun fractionFrom(pos: Offset): Float {
-                                        val px = pos.x - center.x
-                                        val py = pos.y - center.y
-                                        val angle = atan2(py, px) + (PI / 2.0)
-                                        var fraction = (angle / (2.0 * PI)).toFloat()
-                                        if (fraction < 0f) fraction += 1f
-                                        return fraction.coerceIn(0f, 1f)
-                                    }
-                                    scrubTo(fractionFrom(down.position))
-                                    down.consume()
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        val change = event.changes.firstOrNull { it.id == down.id } ?: event.changes.firstOrNull() ?: break
-                                        if (!change.pressed) break
-                                        scrubTo(fractionFrom(change.position))
-                                        change.consume()
-                                    }
-                                }
-                            }
-                            .then(
-                                if (!isTalkbackActive) {
-                                    Modifier.combinedClickable(
-                                        onClick = {
-                                            if (SystemClock.uptimeMillis() < scrubJustUntilMs) return@combinedClickable
-                                            if (!canInlinePlay) {
-                                                if (canRequestPrepare) {
-                                                    if (!isPreparing) {
-                                                        pendingAutoPlay = true
-                                                        isExpanded = true
-                                                        videoNoteInlinePlaybackState.eventSink(VideoNoteInlinePlaybackEvent.Prepare)
-                                                    }
-                                                    return@combinedClickable
-                                                }
-                                                onContentClick?.invoke()
-                                                return@combinedClickable
-                                            }
-                                            if (isPlaying) {
-                                                stopAndReset()
-                                            } else {
-                                                val p = player ?: return@combinedClickable
-                                                isExpanded = true
-                                                isPlaying = true
-                                                p.volume = 1f
-                                                p.playWhenReady = true
-                                                p.play()
-                                            }
-                                        },
-                                        onLongClick = onLongClick,
-                                    ).onKeyboardContextMenuAction(onLongClick)
-                                } else {
-                                    Modifier
-                                }
-                            ),
+                        modifier = Modifier.size(ringSize),
                         contentAlignment = Alignment.Center,
                     ) {
-                        // Ring
-                        Canvas(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .semantics { hideFromAccessibility() },
-                        ) {
-                            val stroke = Stroke(width = ringStrokePx, cap = StrokeCap.Round)
-                            val inset = ringPaddingPx + ringStrokePx / 2f
-                            val arcSize = Size(size.width - inset * 2, size.height - inset * 2)
-                            // background ring
-                            drawArc(
-                                color = ringBgColor,
-                                startAngle = -90f,
-                                sweepAngle = 360f,
-                                useCenter = false,
-                                topLeft = Offset(inset, inset),
-                                size = arcSize,
-                                style = stroke,
-                            )
-                            // progress ring
-                            drawArc(
-                                color = ringProgressColor,
-                                startAngle = -90f,
-                                sweepAngle = 360f * if (canInlinePlay) progress else 0f,
-                                useCenter = false,
-                                topLeft = Offset(inset, inset),
-                                size = arcSize,
-                                style = stroke,
-                            )
-                        }
-
                         // Video circle
                         Box(
                             modifier = Modifier
@@ -353,18 +330,18 @@ internal fun TimelineItemVideoView(
                                 .blurHashBackground(content.blurHash, alpha = 0.9f),
                             contentAlignment = Alignment.Center,
                         ) {
-                            if (isPlaying && canInlinePlay && player != null) {
+                            if (isThisActive && canInlinePlay && player != null) {
                                 AndroidView(
-                                    modifier = Modifier.matchParentSize(),
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(CircleShape),
                                     factory = { context ->
-                                        PlayerView(context).apply {
-                                            useController = false
-                                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                        VideoNotePlayerViewFactory.create(context).apply {
                                             this.player = player
                                         }
                                     },
                                     update = { view ->
-                                        view.player = player
+                                        VideoNotePlayerViewFactory.bindPlayer(view, player)
                                     },
                                 )
                             } else {
@@ -385,29 +362,143 @@ internal fun TimelineItemVideoView(
                                     contentDescription = description,
                                     onState = { isLoaded = it is AsyncImagePainter.State.Success },
                                 )
-                                Box(
-                                    modifier = Modifier
-                                        .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.35f))
-                                        .padding(10.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    if (isPreparing) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .semantics { hideFromAccessibility() },
-                                        )
-                                    } else {
-                                        Image(
-                                            imageVector = CompoundIcons.PlaySolid(),
-                                            contentDescription = stringResource(id = CommonStrings.a11y_play),
-                                            colorFilter = ColorFilter.tint(Color.White),
-                                            modifier = Modifier.semantics { hideFromAccessibility() }
-                                        )
+                                if (!isPlaying) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.35f))
+                                            .padding(10.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (isPreparing) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier
+                                                    .size(24.dp)
+                                                    .semantics { hideFromAccessibility() },
+                                            )
+                                        } else {
+                                            Image(
+                                                imageVector = CompoundIcons.PlaySolid(),
+                                                contentDescription = stringResource(id = CommonStrings.a11y_play),
+                                                colorFilter = ColorFilter.tint(Color.White),
+                                                modifier = Modifier.semantics { hideFromAccessibility() }
+                                            )
+                                        }
                                     }
                                 }
                             }
+                            MediaUploadProgressOverlay(
+                                localSendState = localSendState,
+                                showProgressLabel = false,
+                            )
+                        }
+
+                        // Transparent gesture layer + ring on top (receives all touches)
+                        if (!isTalkbackActive) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .nestedScroll(blockScrollWhileScrubbing)
+                                    .pointerInput(
+                                        isThisActive,
+                                        canInlinePlay,
+                                        enginePlaying,
+                                        ringPaddingPx,
+                                        ringStrokePx,
+                                        viewConfiguration.touchSlop,
+                                    ) {
+                                        val width = size.width.toFloat()
+                                        val height = size.height.toFloat()
+                                        val dismissThresholdPx = with(density) { 72.dp.toPx() }
+                                        val tapSlopPx = viewConfiguration.touchSlop
+
+                                        fun fractionFrom(pos: Offset): Float {
+                                            val center = Offset(width / 2f, height / 2f)
+                                            val px = pos.x - center.x
+                                            val py = pos.y - center.y
+                                            val angle = atan2(py, px) + (PI / 2.0)
+                                            var fraction = (angle / (2.0 * PI)).toFloat()
+                                            if (fraction < 0f) fraction += 1f
+                                            return fraction.coerceIn(0f, 1f)
+                                        }
+
+                                        awaitEachGesture {
+                                            val down = awaitFirstDown(requireUnconsumed = false)
+                                            val downPosition = down.position
+
+                                            if (canInlinePlay && isOnRing(downPosition, width, height)) {
+                                                isRingScrubbing = true
+                                                try {
+                                                    scrubJustUntilMs = SystemClock.uptimeMillis() + 250L
+                                                    scrubTo(fractionFrom(downPosition))
+                                                    down.consume()
+                                                    while (true) {
+                                                        val event = awaitPointerEvent(PointerEventPass.Main)
+                                                        val change = event.changes.firstOrNull { it.id == down.id }
+                                                            ?: event.changes.firstOrNull()
+                                                            ?: break
+                                                        if (!change.pressed) break
+                                                        scrubTo(fractionFrom(change.position))
+                                                        change.consume()
+                                                    }
+                                                } finally {
+                                                    isRingScrubbing = false
+                                                }
+                                                return@awaitEachGesture
+                                            }
+
+                                            var accumulatedDismissDragX = 0f
+                                            var movedPastSlop = false
+                                            down.consume()
+                                            while (true) {
+                                                val event = awaitPointerEvent(PointerEventPass.Main)
+                                                val change = event.changes.firstOrNull { it.id == down.id }
+                                                    ?: event.changes.firstOrNull()
+                                                    ?: break
+                                                if (!change.pressed) {
+                                                    if (!movedPastSlop &&
+                                                        SystemClock.uptimeMillis() >= scrubJustUntilMs &&
+                                                        !isOnRing(downPosition, width, height)
+                                                    ) {
+                                                        handleCircleTap()
+                                                    } else if (isThisActive && accumulatedDismissDragX > dismissThresholdPx) {
+                                                        stopPlayback()
+                                                    }
+                                                    break
+                                                }
+                                                val drag = change.position - change.previousPosition
+                                                if (isThisActive && drag.x > 0f) {
+                                                    accumulatedDismissDragX += drag.x
+                                                }
+                                                val totalMove = change.position - downPosition
+                                                if (sqrt(totalMove.x * totalMove.x + totalMove.y * totalMove.y) > tapSlopPx) {
+                                                    movedPastSlop = true
+                                                }
+                                                change.consume()
+                                            }
+                                        }
+                                    },
+                            ) {
+                                VideoNoteRingProgressCanvas(
+                                    progress = if (canInlinePlay) progress else 0f,
+                                    ringPaddingPx = ringPaddingPx,
+                                    ringStrokePx = ringStrokePx,
+                                    backgroundColor = ringBgColor,
+                                    progressColor = ringProgressColor,
+                                    showScrubberDot = canInlinePlay && (isPlaying || progress > 0f),
+                                    modifier = Modifier.matchParentSize(),
+                                )
+                            }
+                        } else {
+                            VideoNoteRingProgressCanvas(
+                                progress = if (canInlinePlay) progress else 0f,
+                                ringPaddingPx = ringPaddingPx,
+                                ringStrokePx = ringStrokePx,
+                                backgroundColor = ringBgColor,
+                                progressColor = ringProgressColor,
+                                showScrubberDot = canInlinePlay && (isPlaying || progress > 0f),
+                                modifier = Modifier.matchParentSize(),
+                            )
                         }
                     }
                 }
@@ -474,6 +565,10 @@ internal fun TimelineItemVideoView(
                             modifier = Modifier.semantics { hideFromAccessibility() }
                         )
                     }
+                    MediaUploadProgressOverlay(
+                        localSendState = localSendState,
+                        showProgressLabel = false,
+                    )
                 }
             }
         }

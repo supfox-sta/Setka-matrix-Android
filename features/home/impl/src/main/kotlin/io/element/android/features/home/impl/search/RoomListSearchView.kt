@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -40,6 +41,7 @@ import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.features.home.impl.components.RecentRoomsSection
 import io.element.android.features.home.impl.components.RoomSummaryRow
 import io.element.android.features.home.impl.contentType
 import io.element.android.features.home.impl.model.RoomListRoomSummary
@@ -55,8 +57,26 @@ import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.designsystem.theme.components.Surface
 import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.designsystem.utils.OnVisibleRangeChangeEffect
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import io.element.android.libraries.designsystem.components.avatar.Avatar
+import io.element.android.libraries.designsystem.components.avatar.AvatarType
+import io.element.android.libraries.designsystem.theme.components.HorizontalDivider
+import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.matrix.ui.model.getAvatarData
+import io.element.android.libraries.matrix.ui.model.getBestName
 import io.element.android.libraries.matrix.api.core.RoomId
+import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.ui.strings.CommonStrings
+import kotlinx.collections.immutable.ImmutableList
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilterChip
+import io.element.android.features.home.impl.R
 
 @Composable
 internal fun RoomListSearchView(
@@ -64,6 +84,8 @@ internal fun RoomListSearchView(
     hideInvitesAvatars: Boolean,
     eventSink: (RoomListEvent) -> Unit,
     onRoomClick: (RoomId) -> Unit,
+    onUserClick: (UserId) -> Unit,
+    recentRoomSummaries: ImmutableList<RoomListRoomSummary> = kotlinx.collections.immutable.persistentListOf(),
     backgroundColor: Color = ElementTheme.colors.bgCanvasDefault,
     transparentBackground: Boolean = false,
     modifier: Modifier = Modifier,
@@ -84,7 +106,9 @@ internal fun RoomListSearchView(
                 state = state,
                 hideInvitesAvatars = hideInvitesAvatars,
                 onRoomClick = onRoomClick,
+                onUserClick = onUserClick,
                 eventSink = eventSink,
+                recentRoomSummaries = recentRoomSummaries,
                 backgroundColor = backgroundColor,
                 transparentBackground = transparentBackground,
             )
@@ -99,6 +123,8 @@ private fun RoomListSearchContent(
     hideInvitesAvatars: Boolean,
     eventSink: (RoomListEvent) -> Unit,
     onRoomClick: (RoomId) -> Unit,
+    onUserClick: (UserId) -> Unit,
+    recentRoomSummaries: ImmutableList<RoomListRoomSummary>,
     backgroundColor: Color,
     transparentBackground: Boolean,
 ) {
@@ -175,6 +201,10 @@ private fun RoomListSearchContent(
                 .padding(padding)
                 .consumeWindowInsets(padding)
         ) {
+            RoomListSearchFilterRow(
+                selected = state.filter,
+                onSelect = { state.eventSink(RoomListSearchEvent.SetFilter(it)) },
+            )
             val lazyListState = rememberLazyListState()
             OnVisibleRangeChangeEffect(lazyListState) { visibleRange ->
                 state.eventSink(RoomListSearchEvent.UpdateVisibleRange(visibleRange))
@@ -183,20 +213,109 @@ private fun RoomListSearchContent(
                 state = lazyListState,
                 modifier = Modifier.fillMaxSize(),
             ) {
+                if (state.query.text.isEmpty() && recentRoomSummaries.isNotEmpty()) {
+                    item(key = "recent-chats-section") {
+                        RecentRoomsSection(
+                            recentRoomSummaries = recentRoomSummaries,
+                            onRoomClick = { room -> onRoomClick(room.roomId) },
+                        )
+                    }
+                }
                 items(
                     items = state.results,
-                    contentType = { room -> room.contentType() },
-                ) { room ->
-                    RoomSummaryRow(
-                        room = room,
-                        hideInviteAvatars = hideInvitesAvatars,
-                        // TODO
-                        isInviteSeen = false,
-                        onClick = ::onRoomClick,
-                        eventSink = eventSink,
-                    )
+                    key = { item ->
+                        when (item) {
+                            is RoomListSearchResultItem.Room -> "room-${item.summary.id}"
+                            is RoomListSearchResultItem.User -> "user-${item.matrixUser.userId.value}"
+                        }
+                    },
+                ) { item ->
+                    when (item) {
+                        is RoomListSearchResultItem.Room -> {
+                            RoomSummaryRow(
+                                room = item.summary,
+                                hideInviteAvatars = hideInvitesAvatars,
+                                isInviteSeen = false,
+                                searchSubtitle = item.subtitle,
+                                onClick = ::onRoomClick,
+                                eventSink = eventSink,
+                            )
+                        }
+                        is RoomListSearchResultItem.User -> {
+                            SearchUserRow(
+                                item = item,
+                                onClick = { onUserClick(item.matrixUser.userId) },
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchUserRow(
+    item: RoomListSearchResultItem.User,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Avatar(
+            avatarData = item.matrixUser.getAvatarData(io.element.android.libraries.designsystem.components.avatar.AvatarSize.RoomListItem),
+            avatarType = AvatarType.User,
+        )
+        Column(modifier = Modifier.padding(start = 12.dp)) {
+            Text(
+                text = item.matrixUser.getBestName(),
+                style = ElementTheme.typography.fontBodyLgMedium,
+            )
+            item.presenceText?.let { presence ->
+                Text(
+                    text = presence,
+                    style = ElementTheme.typography.fontBodyMdRegular,
+                    color = ElementTheme.colors.textSecondary,
+                )
+            }
+        }
+    }
+    HorizontalDivider()
+}
+
+@Composable
+private fun RoomListSearchFilterRow(
+    selected: RoomListSearchFilter,
+    onSelect: (RoomListSearchFilter) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        RoomListSearchFilter.entries.forEach { filter ->
+            FilterChip(
+                selected = selected == filter,
+                onClick = { onSelect(filter) },
+                label = {
+                    Text(
+                        stringResource(
+                            when (filter) {
+                                RoomListSearchFilter.All -> R.string.screen_home_search_filter_all
+                                RoomListSearchFilter.People -> R.string.screen_home_search_filter_people
+                                RoomListSearchFilter.Channels -> R.string.screen_home_search_filter_channels
+                                RoomListSearchFilter.Spaces -> R.string.screen_home_search_filter_spaces
+                            }
+                        )
+                    )
+                },
+            )
         }
     }
 }
@@ -208,7 +327,9 @@ internal fun RoomListSearchContentPreview(@PreviewParameter(RoomListSearchStateP
         state = state,
         hideInvitesAvatars = false,
         onRoomClick = {},
+        onUserClick = {},
         eventSink = {},
+        recentRoomSummaries = kotlinx.collections.immutable.persistentListOf(),
         backgroundColor = ElementTheme.colors.bgCanvasDefault,
         transparentBackground = false,
     )

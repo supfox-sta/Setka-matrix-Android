@@ -11,6 +11,8 @@ package io.element.android.features.call.impl.utils
 import android.content.Context
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
 import android.os.PowerManager
@@ -206,6 +208,8 @@ class WebViewAudioManager(
 
     private var hasRegisteredCallbacks = false
 
+    private var audioFocusRequest: AudioFocusRequest? = null
+
     /**
      * Marks if the WebView audio is in call mode or not.
      */
@@ -230,15 +234,52 @@ class WebViewAudioManager(
 
         Timber.d("Audio: enabling webview in-call audio mode")
 
-        audioManager.mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Set 'voice call' mode so volume keys actually control the call volume
+        audioManager.mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // MODE_IN_COMMUNICATION routes voice to earpiece/speaker correctly on Android 9+.
             AudioManager.MODE_IN_COMMUNICATION
         } else {
-            // Workaround for Android 12 and lower, otherwise changing the audio device doesn't work
-            AudioManager.MODE_NORMAL
+            @Suppress("DEPRECATION")
+            AudioManager.MODE_IN_CALL
         }
 
+        requestCallAudioFocus()
+        if (preferEarpieceOnStart && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            forceLegacyEarpieceRouting()
+        }
         setWebViewAndroidNativeBridge()
+    }
+
+    private fun requestCallAudioFocus() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setOnAudioFocusChangeListener { /* no-op */ }
+                .build()
+            audioFocusRequest = focusRequest
+            audioManager.requestAudioFocus(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                null,
+                AudioManager.STREAM_VOICE_CALL,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+            )
+        }
+    }
+
+    private fun abandonCallAudioFocus() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+            audioFocusRequest = null
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(null)
+        }
     }
 
     /**
@@ -261,6 +302,7 @@ class WebViewAudioManager(
         }
 
         audioManager.mode = AudioManager.MODE_NORMAL
+        abandonCallAudioFocus()
 
         if (!hasRegisteredCallbacks) {
             Timber.d("Audio: stop requested before callbacks registration; skipping callback unregister")
@@ -438,6 +480,13 @@ class WebViewAudioManager(
         expectedNewCommunicationDeviceId = selectedDevice?.id
         audioManager.selectAudioDevice(selectedDevice)
 
+        if (preferEarpieceOnStart && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val hasEarpiece = availableDevices.any { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+            if (!hasEarpiece) {
+                forceLegacyEarpieceRouting()
+            }
+        }
+
         selectedDevice?.let {
             updateSelectedAudioDeviceInWebView(it.id.toString())
         } ?: run {
@@ -487,9 +536,14 @@ class WebViewAudioManager(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (device != null) {
                 Timber.d("Setting communication device: ${device.id} - ${deviceName(device.type, device.productName.toString())}")
-                setCommunicationDevice(device)
+                val success = setCommunicationDevice(device)
+                if (!success) {
+                    Timber.w("setCommunicationDevice failed, using speakerphone fallback")
+                    @Suppress("DEPRECATION")
+                    isSpeakerphoneOn = device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                }
             } else {
-                audioManager.clearCommunicationDevice()
+                clearCommunicationDevice()
             }
         } else {
             // On Android 11 and lower, we don't have the concept of communication devices
@@ -502,8 +556,26 @@ class WebViewAudioManager(
                     return
                 }
                 setAudioEnabled(true)
-                isSpeakerphoneOn = device.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
-                isBluetoothScoOn = device.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                @Suppress("DEPRECATION")
+                when (device.type) {
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> {
+                        isSpeakerphoneOn = true
+                        isBluetoothScoOn = false
+                    }
+                    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> {
+                        isSpeakerphoneOn = false
+                        isBluetoothScoOn = false
+                        forceLegacyEarpieceRouting()
+                    }
+                    AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
+                        isSpeakerphoneOn = false
+                        isBluetoothScoOn = true
+                    }
+                    else -> {
+                        isSpeakerphoneOn = false
+                        isBluetoothScoOn = false
+                    }
+                }
             } else {
                 isSpeakerphoneOn = false
                 isBluetoothScoOn = false
@@ -531,6 +603,13 @@ class WebViewAudioManager(
                 }
             }
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun forceLegacyEarpieceRouting() {
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = false
+        audioManager.isBluetoothScoOn = false
     }
 
     /**
@@ -561,13 +640,20 @@ class WebViewAudioManager(
             speaker ?: earpiece
         } ?: return currentType == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
 
+        previousSelectedDevice = devices.firstOrNull { it.id == currentDeviceId }
         expectedNewCommunicationDeviceId = target.id
         audioManager.selectAudioDevice(target)
         updateSelectedAudioDeviceInWebView(target.id.toString())
-        // Enforce output route immediately to reduce perceived lag on some devices.
         @Suppress("DEPRECATION")
         runCatching {
             audioManager.isSpeakerphoneOn = target.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+            if (target.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                audioManager.startBluetoothSco()
+                audioManager.isBluetoothScoOn = true
+            } else {
+                audioManager.stopBluetoothSco()
+                audioManager.isBluetoothScoOn = false
+            }
         }
         return target.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
     }
