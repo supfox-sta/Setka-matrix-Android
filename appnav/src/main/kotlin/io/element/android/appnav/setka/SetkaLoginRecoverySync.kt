@@ -7,6 +7,8 @@
 package io.element.android.appnav.setka
 
 import dev.zacsweers.metro.Inject
+import io.element.android.appconfig.SetkaAnalyticsEvents
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.libraries.matrix.api.setka.SetkaLoginRecoveryEvaluation
 import io.element.android.libraries.matrix.api.setka.SetkaLoginVerificationFallbackMethod
 import io.element.android.libraries.matrix.api.setka.SetkaLoginVerificationService
@@ -20,6 +22,7 @@ class SetkaLoginRecoverySync(
     private val setkaLoginVerificationService: SetkaLoginVerificationService,
     private val setkaServerRecoveryService: SetkaServerRecoveryService,
     private val pendingRecoveryKeyStore: SetkaPendingRecoveryKeyStore,
+    private val setkaAnalyticsService: SetkaAnalyticsService,
 ) {
     private var publishFreshKeyAfterLogin = false
 
@@ -35,6 +38,7 @@ class SetkaLoginRecoverySync(
             }
             SetkaLoginRecoveryEvaluation.ProceedWithFreshKey -> {
                 publishFreshKeyAfterLogin = true
+                setkaAnalyticsService.trackEvent(SetkaAnalyticsEvents.LOGIN_SKEY_SILENT_SUCCESS)
                 true
             }
             SetkaLoginRecoveryEvaluation.NeedsVerification -> {

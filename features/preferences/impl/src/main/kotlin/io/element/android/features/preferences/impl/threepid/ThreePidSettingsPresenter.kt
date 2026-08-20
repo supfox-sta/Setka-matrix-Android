@@ -80,6 +80,18 @@ class ThreePidSettingsPresenter(
                             }
                     }
                 }
+                is ThreePidSettingsEvents.SetCallVisibility -> {
+                    val prev = privacy.dataOrNull()
+                    privacy = AsyncData.Loading(prev)
+                    sessionCoroutineScope.launch {
+                        threePidService.setSetkaPrivacy(callVisibility = event.visibility)
+                            .onSuccess { p -> privacy = AsyncData.Success(p) }
+                            .onFailure { failure ->
+                                privacy = AsyncData.Failure(failure, prevData = prev)
+                                errorMessage = failure.message ?: "Не удалось сохранить настройки звонков"
+                            }
+                    }
+                }
             }
         }
 

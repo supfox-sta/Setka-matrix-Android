@@ -38,14 +38,16 @@ import io.element.android.libraries.sessionstorage.test.aSessionData
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.element.android.features.home.impl.datasource.aRoomListRoomSummaryFactory
+import io.element.android.features.home.impl.channels.SetkaPublicChannelsPresenter
+import io.element.android.features.home.impl.feed.SetkaFeedPresenter
+import io.element.android.features.home.impl.feed.SetkaFeedService
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.features.home.impl.recent.RecentRoomSummariesResolver
 import io.element.android.features.home.impl.recent.SetkaRecentRoomsStore
 import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
 import io.element.android.libraries.matrix.test.setka.FakeSetkaServerRecoveryService
 import io.element.android.libraries.setkalite.api.SetkaLiteCoordinator
 import io.element.android.libraries.setkalite.api.SetkaTransferQueue
-import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
-import io.element.android.services.toolbox.test.intent.FakeExternalIntentLauncher
 import io.element.android.tests.testutils.MutablePresenter
 import io.element.android.tests.testutils.WarmUpRule
 import io.element.android.tests.testutils.lambda.lambdaRecorder
@@ -215,10 +217,18 @@ internal fun createHomePresenter(
     sessionStore: SessionStore = InMemorySessionStore(),
     announcementService: AnnouncementService = FakeAnnouncementService(),
     appPreferencesStore: AppPreferencesStore = InMemoryAppPreferencesStore(),
-    externalIntentLauncher: ExternalIntentLauncher = FakeExternalIntentLauncher(),
     setkaLiteCoordinator: SetkaLiteCoordinator = FakeSetkaLiteCoordinator(),
     setkaTransferQueue: SetkaTransferQueue = FakeSetkaTransferQueue(),
     setkaServerRecoveryService: SetkaServerRecoveryService = FakeSetkaServerRecoveryService(),
+    setkaFeedPresenter: SetkaFeedPresenter = SetkaFeedPresenter(
+        matrixClient = client,
+        feedService = SetkaFeedService(client),
+        publicChannelsPresenter = SetkaPublicChannelsPresenter(client, FakeSetkaAnalyticsService()),
+    ),
+    setkaPublicChannelsPresenter: SetkaPublicChannelsPresenter = SetkaPublicChannelsPresenter(
+        client,
+        FakeSetkaAnalyticsService(),
+    ),
 ) = HomePresenter(
     client = client,
     syncService = syncService,
@@ -231,7 +241,6 @@ internal fun createHomePresenter(
     sessionStore = sessionStore,
     appPreferencesStore = appPreferencesStore,
     announcementService = announcementService,
-    externalIntentLauncher = externalIntentLauncher,
     setkaRecentRoomsStore = SetkaRecentRoomsStore(
         context = ApplicationProvider.getApplicationContext(),
         matrixClient = client,
@@ -245,4 +254,10 @@ internal fun createHomePresenter(
     setkaServerRecoveryService = setkaServerRecoveryService,
     setkaLiteCoordinator = setkaLiteCoordinator,
     setkaTransferQueue = setkaTransferQueue,
+    setkaFeedPresenter = setkaFeedPresenter,
+    setkaPublicChannelsPresenter = setkaPublicChannelsPresenter,
 )
+
+private class FakeSetkaAnalyticsService : SetkaAnalyticsService {
+    override fun trackEvent(eventName: String, properties: Map<String, String>) = Unit
+}

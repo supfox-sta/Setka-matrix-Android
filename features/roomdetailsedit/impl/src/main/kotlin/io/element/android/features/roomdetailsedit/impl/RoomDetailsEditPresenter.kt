@@ -25,6 +25,8 @@ import androidx.core.net.toUri
 import dev.zacsweers.metro.Inject
 import io.element.android.features.roomdetailsedit.api.RoomDetailsEditPermissions
 import io.element.android.features.roomdetailsedit.api.roomDetailsEditPermissions
+import io.element.android.features.securityandprivacy.api.SecurityAndPrivacyPermissions
+import io.element.android.features.securityandprivacy.api.securityAndPrivacyPermissions
 import io.element.android.libraries.androidutils.file.TemporaryUriDeleter
 import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.architecture.Presenter
@@ -32,7 +34,12 @@ import io.element.android.libraries.architecture.runCatchingUpdatingState
 import io.element.android.libraries.core.extensions.runCatchingExceptions
 import io.element.android.libraries.core.mimetype.MimeTypes
 import io.element.android.appconfig.SetkaChannelConfig
+import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.room.JoinedRoom
+import io.element.android.libraries.matrix.api.room.join.JoinRule
+import io.element.android.libraries.matrix.api.setka.SetkaFeedCategory
+import io.element.android.libraries.matrix.api.setka.loadSetkaFeedCategories
+import io.element.android.libraries.matrix.api.setka.publishSetkaChannelWhenReady
 import io.element.android.libraries.matrix.api.room.powerlevels.permissionsAsState
 import io.element.android.libraries.matrix.ui.media.AvatarAction
 import io.element.android.libraries.mediapickers.api.PickerProvider
@@ -40,6 +47,8 @@ import io.element.android.libraries.mediaupload.api.MediaOptimizationConfigProvi
 import io.element.android.libraries.mediaupload.api.MediaPreProcessor
 import io.element.android.libraries.permissions.api.PermissionsEvent
 import io.element.android.libraries.permissions.api.PermissionsPresenter
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -48,6 +57,7 @@ import timber.log.Timber
 @Inject
 class RoomDetailsEditPresenter(
     private val room: JoinedRoom,
+    private val matrixClient: MatrixClient,
     private val mediaPickerProvider: PickerProvider,
     private val mediaPreProcessor: MediaPreProcessor,
     private val temporaryUriDeleter: TemporaryUriDeleter,
@@ -77,26 +87,48 @@ class RoomDetailsEditPresenter(
         }
         val isSetkaChannelRoom = SetkaChannelConfig.isChannelTopic(roomInfo.topic)
         val roomTopicForDisplay = SetkaChannelConfig.displayTopic(roomInfo.topic).orEmpty()
+        val channelTagForDisplay = SetkaChannelConfig.parseChannelTag(roomInfo.topic).orEmpty()
         var roomTopicEdited by rememberSaveable { mutableStateOf("") }
         LaunchedEffect(roomTopicForDisplay) {
             roomTopicEdited = roomTopicForDisplay
+        }
+        var channelTagEdited by rememberSaveable { mutableStateOf("") }
+        LaunchedEffect(channelTagForDisplay) {
+            channelTagEdited = channelTagForDisplay
+        }
+        var channelCategoryIdEdited by rememberSaveable { mutableStateOf<String?>(null) }
+        var feedCategories by remember { mutableStateOf<ImmutableList<SetkaFeedCategory>>(persistentListOf()) }
+        val isPublicChannel = roomInfo.joinRule == JoinRule.Public
+        LaunchedEffect(isSetkaChannelRoom) {
+            if (!isSetkaChannelRoom) return@LaunchedEffect
+            feedCategories = matrixClient.loadSetkaFeedCategories().toImmutableList()
         }
 
         val saveButtonEnabled by remember(
             roomRawNameTrimmed,
             roomTopicForDisplay,
+            channelTagForDisplay,
             roomAvatarUri,
+            channelCategoryIdEdited,
+            isPublicChannel,
         ) {
             derivedStateOf {
                 roomRawNameTrimmed != roomRawNameEdited.trim() ||
                     roomTopicForDisplay != roomTopicEdited.trim() ||
-                    roomAvatarUri != roomAvatarUriEdited
+                    channelTagForDisplay != channelTagEdited.trim() ||
+                    roomAvatarUri != roomAvatarUriEdited ||
+                    (isPublicChannel && !channelCategoryIdEdited.isNullOrBlank())
             }
         }
 
         val permissions by room.permissionsAsState(RoomDetailsEditPermissions.DEFAULT) { perms ->
             perms.roomDetailsEditPermissions()
         }
+        val securityAndPrivacyPermissions by room.permissionsAsState(SecurityAndPrivacyPermissions.DEFAULT) { perms ->
+            perms.securityAndPrivacyPermissions()
+        }
+        val canShowPrivacySettings = isSetkaChannelRoom &&
+            securityAndPrivacyPermissions.hasAny(isSpace = roomInfo.isSpace, joinRule = roomInfo.joinRule)
 
         val cameraPhotoPicker = mediaPickerProvider.registerCameraPhotoPicker(
             onResult = { uri ->
@@ -141,7 +173,11 @@ class RoomDetailsEditPresenter(
                     newNameTrimmed = roomRawNameEdited.trim(),
                     currentTopicTrimmed = roomTopicForDisplay,
                     newTopicTrimmed = roomTopicEdited.trim(),
+                    currentChannelTag = channelTagForDisplay,
+                    newChannelTag = channelTagEdited.trim(),
                     isSetkaChannelRoom = isSetkaChannelRoom,
+                    isPublicChannel = isPublicChannel,
+                    channelCategoryId = channelCategoryIdEdited,
                     currentAvatar = roomAvatarUri?.toUri(),
                     newAvatarUri = roomAvatarUriEdited?.toUri(),
                     action = saveAction,
@@ -164,6 +200,10 @@ class RoomDetailsEditPresenter(
 
                 is RoomDetailsEditEvent.UpdateRoomName -> roomRawNameEdited = event.name
                 is RoomDetailsEditEvent.UpdateRoomTopic -> roomTopicEdited = event.topic
+                is RoomDetailsEditEvent.UpdateChannelTag -> channelTagEdited = event.tag
+                is RoomDetailsEditEvent.ChannelCategoryChanged -> {
+                    channelCategoryIdEdited = event.categoryId.takeIf { it.isNotBlank() }
+                }
                 RoomDetailsEditEvent.CloseDialog -> saveAction.value = AsyncAction.Uninitialized
                 RoomDetailsEditEvent.OnBackPress -> if (saveButtonEnabled.not() || saveAction.value == AsyncAction.ConfirmingCancellation) {
                     // No changes to save or already confirming exit without saving
@@ -174,16 +214,32 @@ class RoomDetailsEditPresenter(
             }
         }
 
+        val channelTagError = isSetkaChannelRoom &&
+            channelTagEdited.isNotBlank() &&
+            SetkaChannelConfig.normalizeChannelTag(channelTagEdited) == null
+
+        val channelCategoryMissing = isSetkaChannelRoom &&
+            isPublicChannel &&
+            channelCategoryIdEdited.isNullOrBlank()
+
         return RoomDetailsEditState(
             roomId = room.roomId,
             roomRawName = roomRawNameEdited,
             canChangeName = permissions.canEditName,
             roomTopic = roomTopicEdited,
             canChangeTopic = permissions.canEditTopic,
+            isSetkaChannel = isSetkaChannelRoom,
+            isPublicChannel = isPublicChannel,
+            channelTag = channelTagEdited,
+            channelTagError = channelTagError,
+            feedCategories = feedCategories,
+            channelCategoryId = channelCategoryIdEdited,
+            channelCategoryMissing = channelCategoryMissing,
+            canShowPrivacySettings = canShowPrivacySettings,
             roomAvatarUrl = roomAvatarUriEdited,
             canChangeAvatar = permissions.canEditAvatar,
             avatarActions = avatarActions,
-            saveButtonEnabled = saveButtonEnabled,
+            saveButtonEnabled = saveButtonEnabled && !channelTagError,
             saveAction = saveAction.value,
             cameraPermissionState = cameraPermissionState,
             isSpace = roomInfo.isSpace,
@@ -196,20 +252,31 @@ class RoomDetailsEditPresenter(
         newNameTrimmed: String,
         currentTopicTrimmed: String,
         newTopicTrimmed: String,
+        currentChannelTag: String,
+        newChannelTag: String,
         isSetkaChannelRoom: Boolean,
+        isPublicChannel: Boolean,
+        channelCategoryId: String?,
         currentAvatar: Uri?,
         newAvatarUri: Uri?,
         action: MutableState<AsyncAction<Unit>>,
     ) = launch {
         val results = mutableListOf<Result<Unit>>()
         suspend {
-            if (newTopicTrimmed != currentTopicTrimmed) {
-                val topicToSave = if (isSetkaChannelRoom) {
-                    SetkaChannelConfig.formatChannelTopic(newTopicTrimmed)
-                } else {
-                    newTopicTrimmed
+            if (isSetkaChannelRoom && (newTopicTrimmed != currentTopicTrimmed || newChannelTag != currentChannelTag)) {
+                val normalizedTag = SetkaChannelConfig.normalizeChannelTag(newChannelTag)
+                if (newChannelTag.isNotBlank() && normalizedTag == null) {
+                    error("Invalid channel tag")
                 }
+                val topicToSave = SetkaChannelConfig.formatChannelTopic(
+                    userDescription = newTopicTrimmed,
+                    tag = normalizedTag ?: currentChannelTag.takeIf { it.isNotBlank() },
+                )
                 results.add(room.setTopic(topicToSave).onFailure {
+                    Timber.e(it, "Failed to set room topic")
+                })
+            } else if (newTopicTrimmed != currentTopicTrimmed) {
+                results.add(room.setTopic(newTopicTrimmed).onFailure {
                     Timber.e(it, "Failed to set room topic")
                 })
             }
@@ -223,7 +290,17 @@ class RoomDetailsEditPresenter(
                     Timber.e(it, "Failed to update avatar")
                 })
             }
-            if (results.all { it.isSuccess }) Unit else results.first { it.isFailure }.getOrThrow()
+            if (results.all { it.isSuccess }) {
+                if (isSetkaChannelRoom && isPublicChannel && !channelCategoryId.isNullOrBlank()) {
+                    matrixClient.publishSetkaChannelWhenReady(
+                        roomId = room.roomId,
+                        categoryId = channelCategoryId,
+                    ).getOrThrow()
+                }
+                Unit
+            } else {
+                results.first { it.isFailure }.getOrThrow()
+            }
         }.runCatchingUpdatingState(action)
     }
 

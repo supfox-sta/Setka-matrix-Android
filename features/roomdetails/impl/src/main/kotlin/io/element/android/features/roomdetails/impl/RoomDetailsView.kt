@@ -119,6 +119,7 @@ fun RoomDetailsView(
     onPinnedMessagesClick: () -> Unit,
     onKnockRequestsClick: () -> Unit,
     onSecurityAndPrivacyClick: () -> Unit,
+    onEditChannelClick: () -> Unit,
     onProfileClick: (UserId) -> Unit,
     onReportRoomClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -146,7 +147,7 @@ fun RoomDetailsView(
         topBar = {
             RoomDetailsTopBar(
                 goBack = goBack,
-                showEdit = state.canEdit,
+                showEdit = state.canEdit && !state.isSetkaChannel,
                 onActionClick = onActionClick
             )
         },
@@ -292,6 +293,12 @@ fun RoomDetailsView(
                             },
                         )
                     }
+                }
+
+                if (state.canEdit && state.isSetkaChannel) {
+                    EditChannelItem(
+                        onClick = onEditChannelClick,
+                    )
                 }
 
                 if (state.canShowSecurityAndPrivacy) {
@@ -827,6 +834,19 @@ private fun NotificationItem(
 }
 
 @Composable
+private fun EditChannelItem(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ListItem(
+        headlineContent = { Text(stringResource(R.string.screen_setka_channel_edit_action)) },
+        leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Edit())),
+        onClick = onClick,
+        modifier = modifier,
+    )
+}
+
+@Composable
 private fun SecurityAndPrivacyItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1100,6 +1120,7 @@ private fun ContentToPreview(state: RoomDetailsState) {
         onPinnedMessagesClick = {},
         onKnockRequestsClick = {},
         onSecurityAndPrivacyClick = {},
+        onEditChannelClick = {},
         onProfileClick = {},
         onReportRoomClick = {},
         leaveRoomView = {},

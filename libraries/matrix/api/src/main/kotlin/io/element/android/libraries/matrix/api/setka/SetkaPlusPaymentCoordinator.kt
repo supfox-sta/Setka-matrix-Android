@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.StateFlow
 interface SetkaPlusPaymentCoordinator {
     val flowState: StateFlow<SetkaPlusPaymentFlowState>
 
+    /** Opens checkout in browser (Custom Tab) and starts status polling. */
+    fun openCheckout(paymentId: String, checkoutUrl: String?)
+
     /** Called after checkout URL was opened; polls server until ResultURL confirms payment. */
     fun beginPayment(paymentId: String)
 

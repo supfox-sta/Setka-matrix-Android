@@ -25,6 +25,7 @@ sealed interface SecurityAndPrivacyEvent {
     data object CancelEnableEncryption : SecurityAndPrivacyEvent
     data object ConfirmEnableEncryption : SecurityAndPrivacyEvent
     data class ChangeHistoryVisibility(val historyVisibility: SecurityAndPrivacyHistoryVisibility) : SecurityAndPrivacyEvent
+    data class ChannelCategoryChanged(val categoryId: String) : SecurityAndPrivacyEvent
     data object ToggleRoomVisibility : SecurityAndPrivacyEvent
     data object DismissSaveError : SecurityAndPrivacyEvent
 }

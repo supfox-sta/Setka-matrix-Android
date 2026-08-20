@@ -39,6 +39,7 @@ import io.element.android.features.home.impl.roomlist.RoomListEvent
 import io.element.android.features.invite.api.InviteData
 import io.element.android.features.invite.api.acceptdecline.AcceptDeclineInviteView
 import io.element.android.features.invite.api.declineandblock.DeclineInviteAndBlockEntryPoint
+import io.element.android.features.forward.api.ForwardEntryPoint
 import io.element.android.features.leaveroom.api.LeaveRoomRenderer
 import io.element.android.features.logout.api.direct.DirectLogoutView
 import io.element.android.features.reportroom.api.ReportRoomEntryPoint
@@ -56,9 +57,12 @@ import io.element.android.libraries.designsystem.utils.DelayedVisibility
 import io.element.android.libraries.di.SessionScope
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.timeline.TimelineProvider
 import io.element.android.services.analytics.api.AnalyticsService
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -90,6 +94,7 @@ class HomeFlowNode(
     private val reportRoomEntryPoint: ReportRoomEntryPoint,
     private val declineInviteAndBlockUserEntryPoint: DeclineInviteAndBlockEntryPoint,
     private val changeRoomMemberRolesEntryPoint: ChangeRoomMemberRolesEntryPoint,
+    private val forwardEntryPoint: ForwardEntryPoint,
     private val leaveRoomRenderer: LeaveRoomRenderer,
     private val setkaRecentRoomsStore: SetkaRecentRoomsStore,
     @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
@@ -139,6 +144,9 @@ class HomeFlowNode(
 
         @Parcelize
         data class SelectNewOwnersWhenLeavingRoom(val roomId: RoomId) : NavTarget
+
+        @Parcelize
+        data class ForwardFeedPost(val roomId: RoomId, val eventId: EventId) : NavTarget
     }
 
     private fun navigateToReportRoom(roomId: RoomId) {
@@ -168,6 +176,20 @@ class HomeFlowNode(
         stateFlow.value.roomListState.eventSink(RoomListEvent.LeaveRoom(roomId, needsConfirmation = false))
     }
 
+    private fun navigateToForwardFeedPost(roomId: RoomId, eventId: EventId) {
+        sessionCoroutineScope.launch {
+            runCatchingExceptions {
+                matrixClient.getJoinedRoom(roomId) ?: matrixClient.joinRoom(roomId).getOrThrow()
+            }.onSuccess {
+                backstack.push(NavTarget.ForwardFeedPost(roomId, eventId))
+            }.onFailure { error ->
+                if (error !is CancellationException) {
+                    Timber.w(error, "Failed to join channel $roomId for forward")
+                }
+            }
+        }
+    }
+
     private fun rootNode(buildContext: BuildContext): Node {
         return node(buildContext) { modifier ->
             val state by stateFlow.collectAsState()
@@ -187,6 +209,8 @@ class HomeFlowNode(
 
             fun navigateToRoom(
                 roomId: RoomId,
+                focusedEventId: EventId? = null,
+                threadRootId: EventId? = null,
             ) {
                 if (!loadingJoinedRoomJob.value.isUninitialized()) {
                     Timber.w("Already loading a room, ignoring navigateToRoom for $roomId")
@@ -203,7 +227,7 @@ class HomeFlowNode(
                     }.fold(
                         onSuccess = { joinedRoom ->
                             if (isActive) {
-                                callback.navigateToRoom(roomId, joinedRoom)
+                                callback.navigateToRoom(roomId, joinedRoom, focusedEventId, threadRootId)
                                 loadingJoinedRoomJob.value = AsyncData.Success(coroutineContext.job)
                                 // Wait a bit before resetting the state to avoid allowing to open several rooms
                                 delay(200.milliseconds)
@@ -255,7 +279,21 @@ class HomeFlowNode(
                 onSettingsClick = callback::navigateToSettings,
                 onStartChatClick = callback::navigateToCreateRoom,
                 onCreateChannelClick = callback::navigateToCreateChannel,
-                onJoinPublicChannelClick = ::navigateToRoom,
+                onJoinPublicChannelClick = ::navigateToPublicChannel,
+                onOpenRoomEvent = { roomId, eventId ->
+                    sessionCoroutineScope.launch {
+                        runCatchingExceptions {
+                            matrixClient.getJoinedRoom(roomId) ?: matrixClient.joinRoom(roomId).getOrThrow()
+                        }.onSuccess {
+                            navigateToRoom(roomId, focusedEventId = eventId, threadRootId = eventId)
+                        }.onFailure { error ->
+                            if (error !is CancellationException) {
+                                Timber.w(error, "Failed to open feed post $eventId in $roomId")
+                            }
+                        }
+                    }
+                },
+                onSharePost = ::navigateToForwardFeedPost,
                 onSearchUserClick = ::navigateToUserFromSearch,
                 onSearchUsers = { query ->
                     val trimmed = query.trim()
@@ -371,6 +409,39 @@ class HomeFlowNode(
                 )
             }
             NavTarget.Root -> rootNode(buildContext)
+            is NavTarget.ForwardFeedPost -> {
+                val room = runBlocking { matrixClient.getJoinedRoom(navTarget.roomId) }
+                    ?: error("Room ${navTarget.roomId} not found")
+                val timelineProvider = TimelineProvider { MutableStateFlow(room.liveTimeline) }
+                val params = ForwardEntryPoint.Params(navTarget.eventId, timelineProvider)
+                val forwardCallback = object : ForwardEntryPoint.Callback {
+                    override fun onDone(roomIds: List<RoomId>) {
+                        backstack.pop()
+                        roomIds.singleOrNull()?.let { targetRoomId ->
+                            sessionCoroutineScope.launch {
+                                runCatchingExceptions {
+                                    matrixClient.getJoinedRoom(targetRoomId)
+                                }.fold(
+                                    onSuccess = { joinedRoom ->
+                                        this@HomeFlowNode.callback.navigateToRoom(targetRoomId, joinedRoom)
+                                    },
+                                    onFailure = {
+                                        if (it !is CancellationException) {
+                                            this@HomeFlowNode.callback.navigateToRoom(targetRoomId, null)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                forwardEntryPoint.createNode(
+                    parentNode = this,
+                    buildContext = buildContext,
+                    params = params,
+                    callback = forwardCallback,
+                )
+            }
         }
     }
 }

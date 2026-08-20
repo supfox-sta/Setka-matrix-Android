@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="screen_home_tab_channels">Feed</string>
+    <string name="screen_home_feed_tab_recommended">Recommended</string>
+    <string name="screen_home_feed_tab_subscriptions">Subscriptions</string>
+    <string name="screen_home_feed_tab_channels">Channels</string>
+    <string name="screen_home_feed_search">Search posts</string>
+    <string name="screen_home_feed_search_hint">Search in feed…</string>
+    <string name="screen_home_feed_empty">No posts yet. Subscribe to channels or explore recommendations.</string>
+    <string name="screen_home_feed_subscriptions_empty">No posts from your channels yet. Join channels to see them here.</string>
+    <string name="screen_home_feed_search_empty">No posts found for this query.</string>
+    <string name="screen_home_feed_load_error">Could not load feed (%1$s). Check your connection and try again.</string>
+    <string name="screen_home_feed_load_more">Load more</string>
+    <string name="screen_home_feed_subscribe">Subscribe</string>
+    <string name="screen_home_feed_unsubscribe">Subscribed</string>
+    <string name="screen_home_feed_in_channel">In channel</string>
+    <string name="screen_home_feed_join">Join</string>
+    <string name="screen_home_feed_empty_body">No text</string>
+    <string name="screen_home_feed_like">Like</string>
+    <string name="screen_home_feed_comment">Comment</string>
+    <string name="screen_home_feed_share">Share</string>
+    <string name="screen_home_feed_views">Views</string>
+</resources>

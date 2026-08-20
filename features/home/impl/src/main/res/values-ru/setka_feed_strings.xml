@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="screen_home_tab_channels">Лента</string>
+    <string name="screen_home_feed_tab_recommended">Рекомендации</string>
+    <string name="screen_home_feed_tab_subscriptions">Подписки</string>
+    <string name="screen_home_feed_tab_channels">Каналы</string>
+    <string name="screen_home_feed_search">Поиск постов</string>
+    <string name="screen_home_feed_search_hint">Поиск в ленте…</string>
+    <string name="screen_home_feed_empty">Постов пока нет. Подпишитесь на каналы или смотрите рекомендации.</string>
+    <string name="screen_home_feed_subscriptions_empty">Постов из ваших каналов пока нет. Вступите в каналы, чтобы видеть их здесь.</string>
+    <string name="screen_home_feed_search_empty">По этому запросу ничего не найдено.</string>
+    <string name="screen_home_feed_load_error">Не удалось загрузить ленту (%1$s). Проверьте соединение и попробуйте снова.</string>
+    <string name="screen_home_feed_load_more">Загрузить ещё</string>
+    <string name="screen_home_feed_subscribe">Подписаться</string>
+    <string name="screen_home_feed_unsubscribe">Подписан</string>
+    <string name="screen_home_feed_in_channel">В канале</string>
+    <string name="screen_home_feed_join">Вступить</string>
+    <string name="screen_home_feed_empty_body">Без текста</string>
+    <string name="screen_home_feed_like">Нравится</string>
+    <string name="screen_home_feed_comment">Комментарий</string>
+    <string name="screen_home_feed_share">Поделиться</string>
+    <string name="screen_home_feed_views">Просмотры</string>
+</resources>

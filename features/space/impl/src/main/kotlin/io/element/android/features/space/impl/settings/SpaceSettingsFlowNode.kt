@@ -129,6 +129,9 @@ class SpaceSettingsFlowNode(
                 roomDetailsEditEntryPoint.createNode(
                     parentNode = this,
                     buildContext = buildContext,
+                    callback = object : RoomDetailsEditEntryPoint.Callback {
+                        override fun navigateToSecurityAndPrivacy() = Unit
+                    },
                 )
             }
         }

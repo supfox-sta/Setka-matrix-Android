@@ -347,6 +347,7 @@ private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomD
     onPinnedMessagesClick: () -> Unit = EnsureNeverCalled(),
     onKnockRequestsClick: () -> Unit = EnsureNeverCalled(),
     onSecurityAndPrivacyClick: () -> Unit = EnsureNeverCalled(),
+    onEditChannelClick: () -> Unit = EnsureNeverCalled(),
     onProfileClick: (UserId) -> Unit = EnsureNeverCalledWithParam(),
     onReportRoomClick: () -> Unit = EnsureNeverCalled(),
 ) {
@@ -367,6 +368,7 @@ private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomD
             onPinnedMessagesClick = onPinnedMessagesClick,
             onKnockRequestsClick = onKnockRequestsClick,
             onSecurityAndPrivacyClick = onSecurityAndPrivacyClick,
+            onEditChannelClick = onEditChannelClick,
             onProfileClick = onProfileClick,
             onReportRoomClick = onReportRoomClick,
             leaveRoomView = {},

@@ -24,7 +24,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ExperimentalMaterial3Api
+import io.element.android.libraries.matrix.ui.setka.SetkaFeedCategoryChips
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +60,9 @@ import io.element.android.libraries.designsystem.theme.components.ListSectionHea
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TextButton
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.libraries.designsystem.theme.components.TextField
+import io.element.android.libraries.designsystem.theme.components.TextFieldValidity
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.spaces.SpaceRoom
@@ -71,6 +75,7 @@ import io.element.android.libraries.ui.strings.CommonStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlin.jvm.optionals.getOrNull
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigureRoomView(
     state: ConfigureRoomState,
@@ -120,6 +125,37 @@ fun ConfigureRoomView(
                 onChangeRoomName = { state.eventSink(ConfigureRoomEvents.RoomNameChanged(it)) },
             )
             Spacer(modifier = Modifier.height(16.dp))
+            if (isChannel) {
+                val isPublicChannel = state.config.visibilityState is RoomVisibilityState.Public
+                val normalizedTag = SetkaChannelConfig.normalizeChannelTag(state.config.channelTag)
+                val showTagError = isPublicChannel && normalizedTag == null
+                RoomTopic(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    topic = state.config.channelTag.orEmpty(),
+                    onTopicChange = { state.eventSink(ConfigureRoomEvents.ChannelTagChanged(it)) },
+                    label = stringResource(R.string.screen_setka_channel_tag_label),
+                    placeholder = stringResource(R.string.screen_setka_channel_tag_placeholder),
+                    leadingPrefix = "#",
+                    validity = if (showTagError) TextFieldValidity.Invalid else TextFieldValidity.None,
+                    supportingText = when {
+                        showTagError -> stringResource(R.string.screen_setka_channel_tag_required_error)
+                        isPublicChannel -> stringResource(R.string.screen_setka_channel_tag_required_hint)
+                        else -> stringResource(R.string.screen_setka_channel_tag_optional_hint)
+                    },
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                if (isPublicChannel) {
+                    SetkaFeedCategoryChips(
+                        label = stringResource(R.string.screen_setka_channel_category_label),
+                        categories = state.feedCategories,
+                        selectedCategoryId = state.config.channelCategoryId,
+                        onCategorySelected = { state.eventSink(ConfigureRoomEvents.ChannelCategoryChanged(it)) },
+                        requiredError = stringResource(R.string.screen_setka_channel_category_required_error),
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
             RoomTopic(
                 modifier = Modifier.padding(horizontal = 16.dp),
                 topic = state.config.topic.orEmpty(),
@@ -152,7 +188,7 @@ fun ConfigureRoomView(
                     state.eventSink(ConfigureRoomEvents.JoinRuleChanged(it))
                 },
             )
-            if (state.config.visibilityState !is RoomVisibilityState.Private) {
+            if (!isChannel && state.config.visibilityState !is RoomVisibilityState.Private) {
                 ListSectionHeader(title = stringResource(R.string.screen_create_room_room_address_section_title))
                 RoomAddressField(
                     modifier = Modifier.padding(horizontal = 16.dp),
@@ -295,6 +331,9 @@ private fun RoomTopic(
     label: String,
     placeholder: String,
     modifier: Modifier = Modifier,
+    leadingPrefix: String? = null,
+    supportingText: String? = null,
+    validity: TextFieldValidity = TextFieldValidity.None,
 ) {
     TextField(
         modifier = modifier,
@@ -303,6 +342,9 @@ private fun RoomTopic(
         onValueChange = onTopicChange,
         maxLines = 3,
         placeholder = placeholder,
+        leadingIcon = leadingPrefix?.let { prefix -> { Text(prefix) } },
+        supportingText = supportingText,
+        validity = validity,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.Sentences,
         ),

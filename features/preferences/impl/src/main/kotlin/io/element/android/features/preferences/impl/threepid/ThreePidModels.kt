@@ -42,6 +42,7 @@ data class SetkaPrivacy(
     val emailVisibility: SetkaVisibility,
     val phoneVisibility: SetkaVisibility,
     val lastSeenVisibility: SetkaVisibility,
+    val callVisibility: SetkaVisibility,
 )
 
 enum class SetkaVisibility(val raw: String) {

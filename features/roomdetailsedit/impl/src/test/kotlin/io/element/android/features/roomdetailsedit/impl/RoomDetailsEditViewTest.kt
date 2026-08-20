@@ -240,11 +240,13 @@ class RoomDetailsEditViewTest {
 private fun <R : TestRule> AndroidComposeTestRule<R, ComponentActivity>.setRoomDetailsEditView(
     state: RoomDetailsEditState,
     onDone: () -> Unit = EnsureNeverCalled(),
+    onConfigurePrivacyClick: () -> Unit = EnsureNeverCalled(),
 ) {
     setContent {
         RoomDetailsEditView(
             state = state,
             onDone = onDone,
+            onConfigurePrivacyClick = onConfigurePrivacyClick,
         )
     }
 }

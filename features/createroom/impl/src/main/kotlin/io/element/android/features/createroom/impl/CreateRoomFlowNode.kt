@@ -63,7 +63,11 @@ class CreateRoomFlowNode(
                 )
                 val callback = object : ConfigureRoomNode.Callback {
                     override fun onCreateRoomSuccess(roomId: RoomId) {
-                        backstack.replace(NavTarget.AddPeople(roomId, navTarget.isChannel))
+                        if (navTarget.isChannel) {
+                            callback.onRoomCreated(roomId)
+                        } else {
+                            backstack.replace(NavTarget.AddPeople(roomId, navTarget.isChannel))
+                        }
                     }
                 }
                 createNode<ConfigureRoomNode>(buildContext, plugins = listOf(inputs, callback))

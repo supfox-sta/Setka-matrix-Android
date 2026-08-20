@@ -11,12 +11,15 @@ import dev.zacsweers.metro.SingleIn
 import io.element.android.libraries.di.SessionScope
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.appconfig.SetkaAnalyticsEvents
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentCoordinator
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturnNotifier
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentReturnOutcome
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentStatus
 import io.element.android.libraries.matrix.api.setka.SetkaPlusService
+import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -33,6 +36,8 @@ class DefaultSetkaPlusPaymentCoordinator(
     private val setkaPlusService: SetkaPlusService,
     private val returnNotifier: SetkaPlusPaymentReturnNotifier,
     private val matrixClient: MatrixClient,
+    private val externalIntentLauncher: ExternalIntentLauncher,
+    private val setkaAnalyticsService: SetkaAnalyticsService,
     @SessionCoroutineScope private val sessionCoroutineScope: CoroutineScope,
 ) : SetkaPlusPaymentCoordinator {
     private val _flowState = MutableStateFlow<SetkaPlusPaymentFlowState>(SetkaPlusPaymentFlowState.Idle)
@@ -48,6 +53,23 @@ class DefaultSetkaPlusPaymentCoordinator(
                 onBrowserReturn(returnData.paymentId, returnData.outcome)
             }
         }
+    }
+
+    override fun openCheckout(paymentId: String, checkoutUrl: String?) {
+        val trimmedId = paymentId.trim()
+        if (trimmedId.isBlank()) return
+        val url = normalizeSetkaPlusCheckoutUrl(checkoutUrl)
+        if (url == null) {
+            _flowState.value = SetkaPlusPaymentFlowState.Failed(
+                paymentId = trimmedId,
+                message = "Неверная ссылка оплаты. Обновите приложение или обратитесь в поддержку.",
+            )
+            Timber.w("Setka Plus openCheckout rejected paymentId=%s rawUrl=%s", trimmedId, checkoutUrl)
+            return
+        }
+        Timber.d("Setka Plus openCheckout paymentId=%s url=%s", trimmedId, url)
+        externalIntentLauncher.launch(buildSetkaPlusCheckoutIntent(url))
+        beginPayment(trimmedId)
     }
 
     override fun beginPayment(paymentId: String) {
@@ -122,6 +144,10 @@ class DefaultSetkaPlusPaymentCoordinator(
             SetkaPlusPaymentStatus.PAID -> {
                 if (payment.subscriptionActive) {
                     _flowState.value = SetkaPlusPaymentFlowState.Confirmed(paymentId)
+                    setkaAnalyticsService.trackEvent(
+                        SetkaAnalyticsEvents.PLUS_SUBSCRIPTION_ACTIVATED,
+                        mapOf("payment_id" to paymentId),
+                    )
                     stopPolling()
                     true
                 } else {

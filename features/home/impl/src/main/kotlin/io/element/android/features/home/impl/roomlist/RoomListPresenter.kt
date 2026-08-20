@@ -292,7 +292,7 @@ class RoomListPresenter(
                 val displayItems = if (useSpaceGrouping) {
                     SetkaRoomListSpaceGrouper.group(summaries, spaceFilters)
                 } else {
-                    summaries.map { RoomListDisplayItem.Room(it) }.toImmutableList()
+                    summaries.sortFavoritesFirst().map { RoomListDisplayItem.Room(it) }.toImmutableList()
                 }
 
                 RoomListContentState.Rooms(

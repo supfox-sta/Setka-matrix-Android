@@ -24,6 +24,7 @@ class ThreePidService(
                 emailVisibility = SetkaVisibility.fromRaw(json.optString("email_visibility")),
                 phoneVisibility = SetkaVisibility.fromRaw(json.optString("phone_visibility")),
                 lastSeenVisibility = SetkaVisibility.fromRaw(json.optString("last_seen_visibility")),
+                callVisibility = SetkaVisibility.fromRaw(json.optString("call_visibility")),
             )
         }
     }
@@ -34,6 +35,7 @@ class ThreePidService(
         emailVisibility: SetkaVisibility? = null,
         phoneVisibility: SetkaVisibility? = null,
         lastSeenVisibility: SetkaVisibility? = null,
+        callVisibility: SetkaVisibility? = null,
     ): Result<SetkaPrivacy> {
         val encodedUserId = Uri.encode(matrixClient.sessionId.value)
         val body = JSONObject().apply {
@@ -42,6 +44,7 @@ class ThreePidService(
             emailVisibility?.let { put("email_visibility", it.raw) }
             phoneVisibility?.let { put("phone_visibility", it.raw) }
             lastSeenVisibility?.let { put("last_seen_visibility", it.raw) }
+            callVisibility?.let { put("call_visibility", it.raw) }
         }.toString().encodeToByteArray()
         return matrixClient.executeAuthenticatedRequest(
             method = "PUT",
@@ -55,6 +58,7 @@ class ThreePidService(
                 emailVisibility = SetkaVisibility.fromRaw(json.optString("email_visibility")),
                 phoneVisibility = SetkaVisibility.fromRaw(json.optString("phone_visibility")),
                 lastSeenVisibility = SetkaVisibility.fromRaw(json.optString("last_seen_visibility")),
+                callVisibility = SetkaVisibility.fromRaw(json.optString("call_visibility")),
             )
         }
     }

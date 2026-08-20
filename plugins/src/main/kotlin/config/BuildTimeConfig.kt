@@ -28,6 +28,9 @@ object BuildTimeConfig {
     val SERVICES_MAPTILER_DARK_MAPID: String? = null
     val SERVICES_POSTHOG_HOST: String? = null
     val SERVICES_POSTHOG_APIKEY: String? = null
+    /** Setka-owned PostHog (investor analytics). Used when APPLICATION_ID is com.setkamatrix.android */
+    const val SETKA_POSTHOG_HOST = "https://analytics.setka-matrix.ru"
+    const val SETKA_POSTHOG_APIKEY = "phc_REPLACE_AFTER_POSTHOG_DEPLOY"
     val SERVICES_SENTRY_DSN: String? = null
     val SERVICES_SENTRY_DSN_RUST: String? = null
     val BUG_REPORT_URL: String? = null

@@ -12,6 +12,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.height
@@ -23,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import io.element.android.libraries.matrix.ui.setka.SetkaFeedCategoryChips
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -70,6 +73,7 @@ fun SecurityAndPrivacyView(
         modifier = modifier,
         topBar = {
             SecurityAndPrivacyToolbar(
+                isSetkaChannel = state.isSetkaChannel,
                 isSaveActionEnabled = state.canBeSaved,
                 onBackClick = {
                     state.eventSink(SecurityAndPrivacyEvent.Exit)
@@ -93,12 +97,28 @@ fun SecurityAndPrivacyView(
                     state = state,
                     modifier = Modifier.padding(top = 24.dp),
                 )
+                if (state.isSetkaChannel) {
+                    ChannelPrivacyFooter(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+                if (state.showChannelCategorySection) {
+                    SetkaFeedCategoryChips(
+                        label = stringResource(R.string.screen_security_and_privacy_channel_category_label),
+                        categories = state.feedCategories,
+                        selectedCategoryId = state.editedSettings.channelCategoryId,
+                        onCategorySelected = { state.eventSink(SecurityAndPrivacyEvent.ChannelCategoryChanged(it)) },
+                        requiredError = stringResource(R.string.screen_security_and_privacy_channel_category_required_error),
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
             }
             if (state.showRoomVisibilitySections) {
                 RoomVisibilitySection(state.homeserverName)
                 RoomAddressSection(
                     roomAddress = state.editedSettings.address,
                     homeserverName = state.homeserverName,
+                    isSetkaChannel = state.isSetkaChannel,
                     onRoomAddressClick = { state.eventSink(SecurityAndPrivacyEvent.EditRoomAddress) },
                     isVisibleInRoomDirectory = state.editedSettings.isVisibleInRoomDirectory,
                     onVisibilityChange = {
@@ -142,7 +162,15 @@ fun SecurityAndPrivacyView(
                     )
             }
         },
-        errorMessage = { stringResource(CommonStrings.error_unknown) },
+        errorMessage = { error ->
+            when (error) {
+                is SecurityAndPrivacyFailures.ChannelPublishNotAllowed ->
+                    stringResource(R.string.screen_security_and_privacy_channel_publish_not_allowed)
+                is SecurityAndPrivacyFailures.ChannelCategoryRequired ->
+                    stringResource(R.string.screen_security_and_privacy_channel_category_required_error)
+                else -> stringResource(CommonStrings.error_unknown)
+            }
+        },
         progressDialog = {
             AsyncActionViewDefaults.ProgressDialog(
                 progressText = stringResource(CommonStrings.common_saving),
@@ -155,6 +183,7 @@ fun SecurityAndPrivacyView(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SecurityAndPrivacyToolbar(
+    isSetkaChannel: Boolean,
     isSaveActionEnabled: Boolean,
     onBackClick: () -> Unit,
     onSaveClick: () -> Unit,
@@ -162,7 +191,13 @@ private fun SecurityAndPrivacyToolbar(
 ) {
     TopAppBar(
         modifier = modifier,
-        titleStr = stringResource(R.string.screen_security_and_privacy_title),
+        titleStr = stringResource(
+            if (isSetkaChannel) {
+                R.string.screen_security_and_privacy_channel_title
+            } else {
+                R.string.screen_security_and_privacy_title
+            }
+        ),
         navigationIcon = { BackButton(onClick = onBackClick) },
         actions = {
             TextButton(
@@ -171,6 +206,18 @@ private fun SecurityAndPrivacyToolbar(
                 onClick = onSaveClick,
             )
         }
+    )
+}
+
+@Composable
+private fun ChannelPrivacyFooter(
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = stringResource(R.string.screen_security_and_privacy_channel_footer),
+        style = ElementTheme.typography.fontBodyMdRegular,
+        color = ElementTheme.colors.textSecondary,
+        modifier = modifier,
     )
 }
 
@@ -316,6 +363,7 @@ private fun RoomVisibilitySection(
 private fun RoomAddressSection(
     roomAddress: String?,
     homeserverName: String,
+    isSetkaChannel: Boolean,
     isVisibleInRoomDirectory: AsyncData<Boolean>,
     onRoomAddressClick: () -> Unit,
     onVisibilityChange: () -> Unit,
@@ -325,20 +373,28 @@ private fun RoomAddressSection(
         title = stringResource(R.string.screen_security_and_privacy_room_address_section_header),
         modifier = modifier,
     ) {
-        ListItem(
-            headlineContent = {
-                Text(text = roomAddress ?: stringResource(R.string.screen_security_and_privacy_add_room_address_action))
-            },
-            trailingContent = if (roomAddress.isNullOrEmpty()) ListItemContent.Icon(IconSource.Vector(CompoundIcons.Plus())) else null,
-            supportingContent = { Text(text = stringResource(R.string.screen_security_and_privacy_room_address_section_footer)) },
-            onClick = onRoomAddressClick,
-            colors = ListItemDefaults.colors(trailingIconColor = ElementTheme.colors.iconAccentPrimary),
-        )
+        if (!isSetkaChannel) {
+            ListItem(
+                headlineContent = {
+                    Text(text = roomAddress ?: stringResource(R.string.screen_security_and_privacy_add_room_address_action))
+                },
+                trailingContent = if (roomAddress.isNullOrEmpty()) ListItemContent.Icon(IconSource.Vector(CompoundIcons.Plus())) else null,
+                supportingContent = { Text(text = stringResource(R.string.screen_security_and_privacy_room_address_section_footer)) },
+                onClick = onRoomAddressClick,
+                colors = ListItemDefaults.colors(trailingIconColor = ElementTheme.colors.iconAccentPrimary),
+            )
+        }
 
         ListItem(
             headlineContent = { Text(text = stringResource(R.string.screen_security_and_privacy_room_directory_visibility_toggle_title)) },
             supportingContent = {
-                Text(text = stringResource(R.string.screen_security_and_privacy_room_directory_visibility_toggle_description, homeserverName))
+                Text(
+                    text = if (isSetkaChannel) {
+                        stringResource(R.string.screen_security_and_privacy_channel_directory_hint)
+                    } else {
+                        stringResource(R.string.screen_security_and_privacy_room_directory_visibility_toggle_description, homeserverName)
+                    }
+                )
             },
             onClick = if (isVisibleInRoomDirectory.isSuccess()) onVisibilityChange else null,
             trailingContent = when (isVisibleInRoomDirectory) {

@@ -8,7 +8,7 @@
 
 package io.element.android.features.home.impl
 
-import io.element.android.features.home.impl.channels.SetkaPublicChannelsState
+import io.element.android.features.home.impl.feed.SetkaFeedState
 import io.element.android.features.home.impl.roomlist.RoomListState
 import io.element.android.features.home.impl.spacefilters.SpaceFiltersState
 import io.element.android.features.home.impl.spaces.HomeSpacesState
@@ -19,7 +19,8 @@ import io.element.android.libraries.designsystem.utils.snackbar.SnackbarMessage
 import io.element.android.libraries.matrix.api.setka.SetkaServerRecoverySyncState
 import io.element.android.libraries.setkalite.api.SetkaLiteState
 import io.element.android.libraries.matrix.api.user.MatrixUser
-import io.element.android.features.roomdirectory.api.RoomDescription
+import io.element.android.features.home.impl.channels.SetkaChannelDiscoveryLoader
+import io.element.android.features.home.impl.channels.SetkaChannelDiscoveryPage
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 
@@ -47,8 +48,10 @@ data class HomeState(
     val showTransferQueueSheet: Boolean = false,
     val canCreateSetkaChannel: Boolean = false,
     val showSetkaChannelsTab: Boolean = false,
-    val setkaPublicChannelsState: SetkaPublicChannelsState? = null,
-    val loadPublicChannelsForDiscovery: suspend () -> Result<ImmutableList<RoomDescription>> = { Result.success(persistentListOf()) },
+    val setkaFeedState: SetkaFeedState? = null,
+    val loadPublicChannelsForDiscovery: SetkaChannelDiscoveryLoader = SetkaChannelDiscoveryLoader { _, _ ->
+        Result.success(SetkaChannelDiscoveryPage())
+    },
     val recentRoomSummaries: ImmutableList<RoomListRoomSummary> = kotlinx.collections.immutable.persistentListOf(),
     val eventSink: (HomeEvent) -> Unit,
 ) {

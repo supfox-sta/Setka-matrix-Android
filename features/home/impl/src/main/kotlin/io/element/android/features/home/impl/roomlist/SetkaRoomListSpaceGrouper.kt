@@ -17,8 +17,9 @@ internal object SetkaRoomListSpaceGrouper {
         summaries: List<RoomListRoomSummary>,
         spaceFilters: List<SpaceServiceFilter>,
     ): ImmutableList<RoomListDisplayItem> {
+        val sortedSummaries = summaries.sortFavoritesFirst()
         if (spaceFilters.isEmpty()) {
-            return summaries.map { RoomListDisplayItem.Room(it) }.toImmutableList()
+            return sortedSummaries.map { RoomListDisplayItem.Room(it) }.toImmutableList()
         }
 
         val topLevelSpaces = spaceFilters.filter { it.level == 0 }
@@ -31,11 +32,11 @@ internal object SetkaRoomListSpaceGrouper {
         }
 
         val spaceRoomIds = spaceById.keys
-        val ungrouped = summaries.filter { summary ->
+        val ungrouped = sortedSummaries.filter { summary ->
             !summary.isSpace && summary.roomId !in roomToSpaceId && summary.roomId !in spaceRoomIds
         }
         val groupedBySpace = topLevelSpaces.mapNotNull { filter ->
-            val roomsInSpace = summaries.filter { summary ->
+            val roomsInSpace = sortedSummaries.filter { summary ->
                 !summary.isSpace && roomToSpaceId[summary.roomId] == filter.spaceRoom.roomId
             }
             if (roomsInSpace.isEmpty()) null else filter to roomsInSpace
@@ -54,6 +55,12 @@ internal object SetkaRoomListSpaceGrouper {
             }
         }.toImmutableList()
     }
+}
+
+internal fun List<RoomListRoomSummary>.sortFavoritesFirst(): List<RoomListRoomSummary> {
+    if (none { it.isFavorite }) return this
+    val (favorites, others) = partition { it.isFavorite }
+    return favorites + others
 }
 
 sealed interface RoomListDisplayItem {

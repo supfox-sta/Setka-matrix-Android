@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference: Simpla 2 PayAnyWay module settings (simpla_2.0_kassa_pay_url).
+  Map to Synapse env / setka_server_config.json.
+-->
+<module>
+    <settings>
+        <payment_url>https://www.payanyway.ru</payment_url>
+        <mnt_id>34838495</mnt_id>
+        <integrity_code>148888</integrity_code>
+        <test_mode>0</test_mode>
+        <currency>RUB</currency>
+        <!-- Login/password — only for offline terminals in Simpla, not for Assistant POST -->
+        <moneta_login></moneta_login>
+        <moneta_password></moneta_password>
+    </settings>
+</module>

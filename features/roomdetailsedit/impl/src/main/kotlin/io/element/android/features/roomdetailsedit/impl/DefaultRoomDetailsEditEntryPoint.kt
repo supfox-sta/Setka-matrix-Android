@@ -13,11 +13,16 @@ import com.bumble.appyx.core.node.Node
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import io.element.android.features.roomdetailsedit.api.RoomDetailsEditEntryPoint
+import io.element.android.libraries.architecture.callback
 import io.element.android.libraries.architecture.createNode
 
 @ContributesBinding(AppScope::class)
 class DefaultRoomDetailsEditEntryPoint : RoomDetailsEditEntryPoint {
-    override fun createNode(parentNode: Node, buildContext: BuildContext): Node {
-        return parentNode.createNode<RoomDetailsEditNode>(buildContext)
+    override fun createNode(
+        parentNode: Node,
+        buildContext: BuildContext,
+        callback: RoomDetailsEditEntryPoint.Callback,
+    ): Node {
+        return parentNode.createNode<RoomDetailsEditNode>(buildContext, listOf(callback))
     }
 }

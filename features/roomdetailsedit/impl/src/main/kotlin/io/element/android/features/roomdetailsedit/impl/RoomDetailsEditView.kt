@@ -41,11 +41,18 @@ import io.element.android.libraries.designsystem.components.dialogs.SaveChangesD
 import io.element.android.libraries.designsystem.modifiers.clearFocusOnTap
 import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
+import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.libraries.designsystem.components.list.ListItemContent
+import io.element.android.libraries.designsystem.theme.components.IconSource
+import io.element.android.libraries.designsystem.theme.components.ListItem
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.TextButton
 import io.element.android.libraries.designsystem.theme.components.TextField
+import io.element.android.libraries.designsystem.theme.components.Text
+import io.element.android.libraries.designsystem.theme.components.TextFieldValidity
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
 import io.element.android.libraries.matrix.ui.components.AvatarActionBottomSheet
+import io.element.android.libraries.matrix.ui.setka.SetkaFeedCategoryChips
 import io.element.android.libraries.matrix.ui.components.AvatarPickerState
 import io.element.android.libraries.matrix.ui.components.AvatarPickerView
 import io.element.android.libraries.permissions.api.PermissionsView
@@ -55,6 +62,7 @@ import io.element.android.libraries.ui.strings.CommonStrings
 fun RoomDetailsEditView(
     state: RoomDetailsEditState,
     onDone: () -> Unit,
+    onConfigurePrivacyClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -72,7 +80,13 @@ fun RoomDetailsEditView(
         modifier = modifier.clearFocusOnTap(focusManager),
         topBar = {
             TopAppBar(
-                titleStr = stringResource(id = R.string.screen_room_details_edit_room_title),
+                titleStr = stringResource(
+                    id = if (state.isSetkaChannel) {
+                        R.string.screen_setka_channel_edit_title
+                    } else {
+                        R.string.screen_room_details_edit_room_title
+                    }
+                ),
                 navigationIcon = {
                     BackButton(
                         onClick = {
@@ -128,21 +142,76 @@ fun RoomDetailsEditView(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            TextField(
-                label = stringResource(CommonStrings.common_topic),
-                value = state.roomTopic,
-                placeholder = if (state.isSpace) {
-                    stringResource(CommonStrings.common_space_topic_placeholder)
-                } else {
-                    stringResource(CommonStrings.common_topic_placeholder)
-                },
-                maxLines = 10,
-                readOnly = !state.canChangeTopic,
-                onValueChange = { state.eventSink(RoomDetailsEditEvent.UpdateRoomTopic(it)) },
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                ),
-            )
+            if (state.isSetkaChannel) {
+                TextField(
+                    label = stringResource(R.string.screen_setka_channel_edit_tag_label),
+                    value = state.channelTag,
+                    placeholder = stringResource(R.string.screen_setka_channel_edit_tag_placeholder),
+                    leadingIcon = { Text("#") },
+                    singleLine = true,
+                    readOnly = !state.canChangeTopic,
+                    validity = if (state.channelTagError) TextFieldValidity.Invalid else TextFieldValidity.None,
+                    supportingText = if (state.channelTagError) {
+                        stringResource(R.string.screen_setka_channel_edit_tag_error)
+                    } else {
+                        stringResource(R.string.screen_setka_channel_edit_tag_helper)
+                    },
+                    onValueChange = { state.eventSink(RoomDetailsEditEvent.UpdateChannelTag(it)) },
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                if (state.isPublicChannel) {
+                    SetkaFeedCategoryChips(
+                        label = stringResource(R.string.screen_setka_channel_edit_category_label),
+                        categories = state.feedCategories,
+                        selectedCategoryId = state.channelCategoryId,
+                        onCategorySelected = { state.eventSink(RoomDetailsEditEvent.ChannelCategoryChanged(it)) },
+                        requiredError = if (state.channelCategoryMissing) {
+                            stringResource(R.string.screen_setka_channel_edit_category_required_error)
+                        } else {
+                            null
+                        },
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+                TextField(
+                    label = stringResource(R.string.screen_setka_channel_edit_description_label),
+                    value = state.roomTopic,
+                    placeholder = stringResource(R.string.screen_setka_channel_edit_description_placeholder),
+                    maxLines = 6,
+                    readOnly = !state.canChangeTopic,
+                    onValueChange = { state.eventSink(RoomDetailsEditEvent.UpdateRoomTopic(it)) },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                    ),
+                )
+            } else {
+                TextField(
+                    label = stringResource(CommonStrings.common_topic),
+                    value = state.roomTopic,
+                    placeholder = if (state.isSpace) {
+                        stringResource(CommonStrings.common_space_topic_placeholder)
+                    } else {
+                        stringResource(CommonStrings.common_topic_placeholder)
+                    },
+                    maxLines = 10,
+                    readOnly = !state.canChangeTopic,
+                    onValueChange = { state.eventSink(RoomDetailsEditEvent.UpdateRoomTopic(it)) },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                    ),
+                )
+            }
+
+            if (state.canShowPrivacySettings) {
+                Spacer(modifier = Modifier.height(32.dp))
+                ListItem(
+                    headlineContent = {
+                        Text(stringResource(R.string.screen_setka_channel_edit_privacy_action))
+                    },
+                    leadingContent = ListItemContent.Icon(IconSource.Vector(CompoundIcons.Lock())),
+                    onClick = onConfigurePrivacyClick,
+                )
+            }
         }
     }
     AvatarActionBottomSheet(
@@ -183,5 +252,6 @@ internal fun RoomDetailsEditViewPreview(@PreviewParameter(RoomDetailsEditStatePr
     RoomDetailsEditView(
         state = state,
         onDone = {},
+        onConfigurePrivacyClick = {},
     )
 }

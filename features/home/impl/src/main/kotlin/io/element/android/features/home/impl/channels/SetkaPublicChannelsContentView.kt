@@ -8,6 +8,7 @@ package io.element.android.features.home.impl.channels
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,6 +23,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.home.impl.R
 import io.element.android.features.roomdirectory.api.RoomDescription
@@ -33,6 +35,7 @@ import io.element.android.libraries.designsystem.theme.components.CircularProgre
 import io.element.android.libraries.designsystem.theme.components.ListItem
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TextButton
+import io.element.android.libraries.ui.strings.CommonStrings
 
 @Composable
 fun SetkaPublicChannelsContentView(
@@ -51,6 +54,31 @@ fun SetkaPublicChannelsContentView(
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
+            }
+        }
+        state.loadError != null && state.channels.isEmpty() -> {
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .padding(contentPadding)
+                    .padding(horizontal = 32.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = stringResource(
+                        R.string.screen_home_public_channels_load_error,
+                        state.loadError?.displayCode.orEmpty(),
+                    ),
+                    style = ElementTheme.typography.fontBodyMdRegular,
+                    color = ElementTheme.colors.textSecondary,
+                    textAlign = TextAlign.Center,
+                )
+                TextButton(
+                    text = stringResource(CommonStrings.action_retry),
+                    onClick = { state.eventSink(SetkaPublicChannelsEvents.Retry) },
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
         }
         state.channels.isEmpty() -> {
@@ -106,17 +134,24 @@ internal fun PublicChannelRow(
     onClick: () -> Unit,
 ) {
     ListItem(
-        headlineContent = { Text(channel.computedName) },
+        headlineContent = {
+            Text(
+                text = SetkaChannelConfig.displayChannelName(
+                    name = channel.name,
+                    topic = channel.topic,
+                    fallback = channel.alias?.value ?: channel.roomId.value,
+                ),
+            )
+        },
         supportingContent = {
-            val description = io.element.android.appconfig.SetkaChannelConfig.displayTopic(channel.topic)
-                ?: channel.computedDescription
+            val description = SetkaChannelConfig.displayTopic(channel.topic)
             val members = pluralStringResource(
                 R.plurals.screen_home_public_channels_members,
                 channel.numberOfMembers.toInt().coerceAtLeast(0),
                 channel.numberOfMembers,
             )
             Text(
-                text = listOfNotNull(description.takeIf { it.isNotBlank() }, members).joinToString(" · "),
+                text = listOfNotNull(description?.takeIf { it.isNotBlank() }, members).joinToString(" · "),
                 maxLines = 2,
             )
         },

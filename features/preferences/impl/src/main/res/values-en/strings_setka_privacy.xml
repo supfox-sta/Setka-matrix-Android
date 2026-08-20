@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+  <string name="screen_setka_privacy_call_visibility_title">"Who can call me?"</string>
+  <string name="screen_setka_privacy_everyone">"Everyone"</string>
+  <string name="screen_setka_privacy_contacts">"Contacts"</string>
+  <string name="screen_setka_privacy_nobody">"Nobody"</string>
+</resources>

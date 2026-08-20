@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_edit_title">Edit channel</string>
+    <string name="screen_setka_channel_edit_tag_label">Tag</string>
+    <string name="screen_setka_channel_edit_tag_placeholder">username</string>
+    <string name="screen_setka_channel_edit_tag_helper">Shown as #tag in search. Lowercase letters, digits, underscore, 3–32 characters.</string>
+    <string name="screen_setka_channel_edit_tag_error">Invalid tag. Use 3–32 characters: a–z, 0–9, _</string>
+    <string name="screen_setka_channel_edit_category_label">Feed category</string>
+    <string name="screen_setka_channel_edit_category_required_error">Choose a category to publish this public channel in the feed.</string>
+    <string name="screen_setka_channel_edit_description_label">Description</string>
+    <string name="screen_setka_channel_edit_description_placeholder">What is this channel about?</string>
+    <string name="screen_setka_channel_edit_privacy_action">Configure privacy</string>
+</resources>

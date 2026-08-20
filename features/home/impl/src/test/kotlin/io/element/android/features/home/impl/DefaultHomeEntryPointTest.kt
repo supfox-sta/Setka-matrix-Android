@@ -11,7 +11,8 @@ package io.element.android.features.home.impl
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.bumble.appyx.core.modality.BuildContext
 import com.google.common.truth.Truth.assertThat
-import io.element.android.features.home.api.HomeEntryPoint
+import io.element.android.features.forward.test.FakeForwardEntryPoint
+import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.room.JoinedRoom
@@ -44,6 +45,7 @@ class DefaultHomeEntryPointTest {
                 reportRoomEntryPoint = { _, _, _ -> lambdaError() },
                 declineInviteAndBlockUserEntryPoint = { _, _, _ -> lambdaError() },
                 changeRoomMemberRolesEntryPoint = { _, _, _, _ -> lambdaError() },
+                forwardEntryPoint = FakeForwardEntryPoint(),
                 leaveRoomRenderer = { _, _, _ -> lambdaError() },
                 setkaRecentRoomsStore = SetkaRecentRoomsStore(
                     context = ApplicationProvider.getApplicationContext(),
@@ -53,7 +55,12 @@ class DefaultHomeEntryPointTest {
             )
         }
         val callback = object : HomeEntryPoint.Callback {
-            override fun navigateToRoom(roomId: RoomId, joinedRoom: JoinedRoom?) = lambdaError()
+            override fun navigateToRoom(
+                roomId: RoomId,
+                joinedRoom: JoinedRoom?,
+                focusedEventId: EventId?,
+                threadRootId: EventId?,
+            ) = lambdaError()
             override fun navigateToCreateRoom() = lambdaError()
             override fun navigateToCreateChannel() = lambdaError()
             override fun navigateToCreateSpace() = lambdaError()

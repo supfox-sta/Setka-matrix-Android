@@ -20,6 +20,8 @@ import io.element.android.libraries.matrix.test.AN_EVENT_ID
 import io.element.android.libraries.matrix.test.A_ROOM_ID
 import io.element.android.libraries.matrix.test.A_SESSION_ID
 import io.element.android.libraries.matrix.test.A_USER_ID_2
+import io.element.android.libraries.matrix.test.FakeMatrixClient
+import io.element.android.libraries.matrix.test.FakeMatrixClientProvider
 import io.element.android.tests.testutils.lambda.lambdaRecorder
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -75,5 +77,8 @@ class DefaultElementCallEntryPointTest {
     ) = DefaultElementCallEntryPoint(
         context = InstrumentationRegistry.getInstrumentation().targetContext,
         activeCallManager = activeCallManager,
+        matrixClientProvider = FakeMatrixClientProvider(
+            getClient = { Result.success(FakeMatrixClient(sessionId = A_SESSION_ID)) },
+        ),
     )
 }

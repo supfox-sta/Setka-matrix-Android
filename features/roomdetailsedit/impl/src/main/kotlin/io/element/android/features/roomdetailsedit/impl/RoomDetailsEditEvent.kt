@@ -14,6 +14,8 @@ sealed interface RoomDetailsEditEvent {
     data class HandleAvatarAction(val action: AvatarAction) : RoomDetailsEditEvent
     data class UpdateRoomName(val name: String) : RoomDetailsEditEvent
     data class UpdateRoomTopic(val topic: String) : RoomDetailsEditEvent
+    data class UpdateChannelTag(val tag: String) : RoomDetailsEditEvent
+    data class ChannelCategoryChanged(val categoryId: String) : RoomDetailsEditEvent
     data object OnBackPress : RoomDetailsEditEvent
     data object Save : RoomDetailsEditEvent
     data object CloseDialog : RoomDetailsEditEvent

@@ -27,6 +27,7 @@ class SetkaLoginVerificationPresenter(
         var isLoading by remember { mutableStateOf(true) }
         var ip by remember { mutableStateOf("") }
         var region by remember { mutableStateOf("") }
+        var recoveryBackupAvailable by remember { mutableStateOf(false) }
         var shouldSkip by remember { mutableStateOf(false) }
         var statusLoadError by remember { mutableStateOf(false) }
 
@@ -36,6 +37,7 @@ class SetkaLoginVerificationPresenter(
                     statusLoadError = false
                     ip = status.ip
                     region = status.region
+                    recoveryBackupAvailable = status.recoveryBackupAvailable
                     if (setkaLoginRecoverySync.trySilentLogin(status)) {
                         shouldSkip = true
                     }
@@ -59,6 +61,7 @@ class SetkaLoginVerificationPresenter(
             isLoading = isLoading,
             ip = ip,
             region = region,
+            recoveryBackupAvailable = recoveryBackupAvailable,
             shouldSkip = shouldSkip,
             statusLoadError = statusLoadError,
             eventSink = ::handleEvent,

@@ -45,11 +45,13 @@ import com.bumble.appyx.navmodel.backstack.operation.singleTop
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedInject
 import io.element.android.annotations.ContributesNode
+import io.element.android.appconfig.SetkaLoginNotificationGuard
 import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.appnav.setka.SetkaLoginRecoverySync
 import io.element.android.appnav.setka.SetkaLoginVerificationFlowNode
 import io.element.android.appnav.setka.SetkaRecoveryKeyBackupUploader
 import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.appnav.loggedin.LoggedInNode
 import io.element.android.appnav.loggedin.MediaPreviewConfigMigration
 import io.element.android.appnav.loggedin.SendQueues
@@ -165,6 +167,7 @@ class LoggedInFlowNode(
     private val setkaRecoveryKeyBackupUploader: SetkaRecoveryKeyBackupUploader,
     private val setkaLoginRecoverySync: SetkaLoginRecoverySync,
     private val setkaServerRecoveryService: SetkaServerRecoveryService,
+    private val setkaAnalyticsService: SetkaAnalyticsService,
     private val roomMediaPlaybackCoordinator: RoomMediaPlaybackCoordinator,
     private val roomMediaPlaybackBarPresenter: Presenter<RoomMediaPlaybackBarState>,
 ) : BaseFlowNode<LoggedInFlowNode.NavTarget>(
@@ -248,6 +251,7 @@ class LoggedInFlowNode(
 
                 val serverName = matrixClient.sessionId.value.substringAfter(':', "")
                 if (SetkaMatrixConfig.isSetkaHomeserver(serverName)) {
+                    SetkaLoginNotificationGuard.setSuppressNotifications(true)
                     sessionCoroutineScope.launch {
                         networkMonitor.connectivity.first { networkStatus -> networkStatus == NetworkStatus.Connected }
                         if (setkaLoginRecoverySync.trySilentLogin()) {
@@ -275,6 +279,7 @@ class LoggedInFlowNode(
                 }
             },
             onDestroy = {
+                SetkaLoginNotificationGuard.setSuppressNotifications(false)
                 appNavigationStateService.onLeavingSession(id)
                 loggedInFlowProcessor.stopObserving()
                 matrixClient.sessionVerificationService.setListener(null)
@@ -313,10 +318,12 @@ class LoggedInFlowNode(
 
     private fun finishSetkaLoginVerification() {
         if (setkaLoginVerificationResolved) return
+        SetkaLoginNotificationGuard.setSuppressNotifications(false)
         lifecycleScope.launch {
             // Setka login verification already confirmed the user; skip Matrix E2E onboarding step.
             ftueService.skipSessionVerificationForOnboarding()
             setkaLoginVerificationResolved = true
+            setkaAnalyticsService.trackSession()
             navigateFromFtueState(ftueService.state.value)
             launch {
                 if (setkaLoginRecoverySync.shouldPublishFreshKeyAfterLogin()) {
@@ -410,11 +417,20 @@ class LoggedInFlowNode(
             }
             NavTarget.Home -> {
                 val callback = object : HomeEntryPoint.Callback {
-                    override fun navigateToRoom(roomId: RoomId, joinedRoom: JoinedRoom?) {
+                    override fun navigateToRoom(
+                        roomId: RoomId,
+                        joinedRoom: JoinedRoom?,
+                        focusedEventId: EventId?,
+                        threadRootId: EventId?,
+                    ) {
                         backstack.push(
                             NavTarget.Room(
                                 roomIdOrAlias = roomId.toRoomIdOrAlias(),
-                                initialElement = RoomNavigationTarget.Root(joinedRoom = joinedRoom)
+                                initialElement = RoomNavigationTarget.Root(
+                                    eventId = focusedEventId,
+                                    threadRootId = threadRootId,
+                                    joinedRoom = joinedRoom,
+                                )
                             )
                         )
                     }

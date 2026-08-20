@@ -13,7 +13,11 @@ import io.element.android.features.roomdetailsedit.api.RoomDetailsEditEntryPoint
 import io.element.android.tests.testutils.lambda.lambdaError
 
 class FakeRoomDetailsEditEntryPoint : RoomDetailsEditEntryPoint {
-    override fun createNode(parentNode: Node, buildContext: BuildContext): Node {
+    override fun createNode(
+        parentNode: Node,
+        buildContext: BuildContext,
+        callback: RoomDetailsEditEntryPoint.Callback,
+    ): Node {
         lambdaError()
     }
 }

@@ -19,7 +19,7 @@ import io.element.android.libraries.matrix.test.AN_AVATAR_URL
 import io.element.android.libraries.matrix.test.A_ROOM_NAME
 import io.element.android.libraries.matrix.test.A_ROOM_RAW_NAME
 import io.element.android.libraries.matrix.test.A_ROOM_TOPIC
-import io.element.android.libraries.matrix.test.room.FakeBaseRoom
+import io.element.android.libraries.matrix.test.FakeMatrixClient
 import io.element.android.libraries.matrix.test.room.FakeJoinedRoom
 import io.element.android.libraries.matrix.test.room.aRoomInfo
 import io.element.android.libraries.matrix.test.room.powerlevels.FakeRoomPermissions
@@ -89,6 +89,7 @@ class RoomDetailsEditPresenterTest {
     ): RoomDetailsEditPresenter {
         return RoomDetailsEditPresenter(
             room = room,
+            matrixClient = FakeMatrixClient(),
             mediaPickerProvider = fakePickerProvider,
             mediaPreProcessor = fakeMediaPreProcessor,
             permissionsPresenterFactory = FakePermissionsPresenterFactory(permissionsPresenter),

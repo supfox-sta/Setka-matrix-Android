@@ -28,6 +28,9 @@ import io.element.android.features.securityandprivacy.impl.SecurityAndPrivacyNav
 import io.element.android.features.securityandprivacy.impl.editroomaddress.matchesServer
 import io.element.android.features.securityandprivacy.impl.manageauthorizedspaces.SpaceSelectionState
 import io.element.android.features.securityandprivacy.impl.manageauthorizedspaces.SpaceSelectionStateHolder
+import io.element.android.appconfig.SetkaChannelConfig
+import io.element.android.features.securityandprivacy.impl.root.SecurityAndPrivacyFailures.ChannelCategoryRequired
+import io.element.android.features.securityandprivacy.impl.root.SecurityAndPrivacyFailures.ChannelPublishNotAllowed
 import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.architecture.AsyncData
 import io.element.android.libraries.architecture.Presenter
@@ -44,7 +47,10 @@ import io.element.android.libraries.matrix.api.room.join.AllowRule
 import io.element.android.libraries.matrix.api.room.join.JoinRule
 import io.element.android.libraries.matrix.api.room.powerlevels.permissionsAsState
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
+import io.element.android.libraries.matrix.api.setka.publishSetkaChannelWhenReady
+import io.element.android.libraries.matrix.api.setka.unpublishSetkaChannel
 import io.element.android.libraries.matrix.api.spaces.SpaceRoom
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
@@ -55,6 +61,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import io.element.android.libraries.matrix.api.setka.SetkaFeedCategory
+import io.element.android.libraries.matrix.api.setka.loadSetkaFeedCategories
 
 @AssistedInject
 class SecurityAndPrivacyPresenter(
@@ -115,12 +123,20 @@ class SecurityAndPrivacyPresenter(
         var editedVisibleInRoomDirectory by remember(savedIsVisibleInRoomDirectory.value) {
             mutableStateOf(savedIsVisibleInRoomDirectory.value)
         }
+        var editedChannelCategoryId by remember { mutableStateOf<String?>(null) }
+        var feedCategories by remember { mutableStateOf<ImmutableList<SetkaFeedCategory>>(persistentListOf()) }
+        val isSetkaChannel = SetkaChannelConfig.isChannelTopic(roomInfo.topic)
+        LaunchedEffect(isSetkaChannel) {
+            if (!isSetkaChannel) return@LaunchedEffect
+            feedCategories = matrixClient.loadSetkaFeedCategories().toImmutableList()
+        }
         val editedSettings = SecurityAndPrivacySettings(
             roomAccess = editedRoomAccess.value,
             isEncrypted = editedIsEncrypted,
             isVisibleInRoomDirectory = editedVisibleInRoomDirectory,
             historyVisibility = editedHistoryVisibility,
             address = savedSettings.address,
+            channelCategoryId = editedChannelCategoryId,
         )
 
         val selectableJoinedSpaces by produceState(initialValue = persistentSetOf(), key1 = savedSettings.roomAccess.spaceIds()) {
@@ -166,7 +182,8 @@ class SecurityAndPrivacyPresenter(
                         saveAction = saveAction,
                         isVisibleInRoomDirectory = savedIsVisibleInRoomDirectory,
                         savedSettings = savedSettings,
-                        editedSettings = editedSettings
+                        editedSettings = editedSettings,
+                        isSetkaChannel = SetkaChannelConfig.isChannelTopic(roomInfo.topic),
                     )
                 }
                 is SecurityAndPrivacyEvent.ChangeRoomAccess -> {
@@ -181,6 +198,9 @@ class SecurityAndPrivacyPresenter(
                 }
                 is SecurityAndPrivacyEvent.ChangeHistoryVisibility -> {
                     editedHistoryVisibility = event.historyVisibility
+                }
+                is SecurityAndPrivacyEvent.ChannelCategoryChanged -> {
+                    editedChannelCategoryId = event.categoryId.takeIf { it.isNotBlank() }
                 }
                 SecurityAndPrivacyEvent.ToggleRoomVisibility -> {
                     editedVisibleInRoomDirectory = when (val edited = editedVisibleInRoomDirectory) {
@@ -248,6 +268,8 @@ class SecurityAndPrivacyPresenter(
             saveAction = saveAction.value,
             permissions = permissions,
             isSpace = roomInfo.isSpace,
+            isSetkaChannel = isSetkaChannel,
+            feedCategories = feedCategories,
             isSpaceSettingsEnabled = isSpaceSettingsEnabled,
             selectableJoinedSpaces = selectableJoinedSpaces,
             spaceSelectionMode = spaceSelectionMode,
@@ -389,17 +411,22 @@ class SecurityAndPrivacyPresenter(
         isVisibleInRoomDirectory: MutableState<AsyncData<Boolean>>,
         savedSettings: SecurityAndPrivacySettings,
         editedSettings: SecurityAndPrivacySettings,
+        isSetkaChannel: Boolean,
     ) = launch {
         suspend {
             val enableEncryption = async {
-                if (editedSettings.isEncrypted && !savedSettings.isEncrypted) {
+                if (isSetkaChannel) {
+                    Result.success(Unit)
+                } else if (editedSettings.isEncrypted && !savedSettings.isEncrypted) {
                     room.enableEncryption()
                 } else {
                     Result.success(Unit)
                 }
             }
             val updateHistoryVisibility = async {
-                if (editedSettings.historyVisibility != savedSettings.historyVisibility) {
+                if (isSetkaChannel) {
+                    room.updateHistoryVisibility(RoomHistoryVisibility.WorldReadable)
+                } else if (editedSettings.historyVisibility != savedSettings.historyVisibility) {
                     room.updateHistoryVisibility(editedSettings.historyVisibility.map())
                 } else {
                     Result.success(Unit)
@@ -414,24 +441,34 @@ class SecurityAndPrivacyPresenter(
                 }
             }
             val updateRoomVisibility = async {
-                // When a user changes join rules to something other than knock or public,
-                // the room should be automatically made invisible (private) in the room directory.
-                val editedIsVisibleInRoomDirectory = when (editedSettings.roomAccess) {
-                    SecurityAndPrivacyRoomAccess.AskToJoin,
-                    is SecurityAndPrivacyRoomAccess.AskToJoinWithSpaceMember,
-                    SecurityAndPrivacyRoomAccess.Anyone -> editedSettings.isVisibleInRoomDirectory.dataOrNull()
-                    else -> false
-                }
-                val savedIsVisibleInRoomDirectory = savedSettings.isVisibleInRoomDirectory.dataOrNull()
-                if (editedIsVisibleInRoomDirectory != null && editedIsVisibleInRoomDirectory != savedIsVisibleInRoomDirectory) {
-                    val roomVisibility = if (editedIsVisibleInRoomDirectory) RoomVisibility.Public else RoomVisibility.Private
-                    room
-                        .updateRoomVisibility(roomVisibility)
-                        .onSuccess {
-                            isVisibleInRoomDirectory.value = AsyncData.Success(editedIsVisibleInRoomDirectory)
-                        }
-                } else {
+                if (isSetkaChannel) {
                     Result.success(Unit)
+                } else {
+                    // When a user changes join rules to something other than knock or public,
+                    // the room should be automatically made invisible (private) in the room directory.
+                    val editedIsVisibleInRoomDirectory = when (editedSettings.roomAccess) {
+                        SecurityAndPrivacyRoomAccess.AskToJoin,
+                        is SecurityAndPrivacyRoomAccess.AskToJoinWithSpaceMember,
+                        SecurityAndPrivacyRoomAccess.Anyone -> editedSettings.isVisibleInRoomDirectory.dataOrNull()
+                        else -> false
+                    }
+                    val savedIsVisibleInRoomDirectory = savedSettings.isVisibleInRoomDirectory.dataOrNull()
+                    if (editedIsVisibleInRoomDirectory != null &&
+                        editedIsVisibleInRoomDirectory != savedIsVisibleInRoomDirectory
+                    ) {
+                        val roomVisibility = if (editedIsVisibleInRoomDirectory) {
+                            RoomVisibility.Public
+                        } else {
+                            RoomVisibility.Private
+                        }
+                        room
+                            .updateRoomVisibility(roomVisibility)
+                            .onSuccess {
+                                isVisibleInRoomDirectory.value = AsyncData.Success(editedIsVisibleInRoomDirectory)
+                            }
+                    } else {
+                        Result.success(Unit)
+                    }
                 }
             }
             val artificialDelay = async {
@@ -444,8 +481,36 @@ class SecurityAndPrivacyPresenter(
                 updateHistoryVisibility,
                 updateJoinRule,
                 updateRoomVisibility,
-                artificialDelay
+                artificialDelay,
             )
+            if (isSetkaChannel) {
+                val joinRule = editedSettings.roomAccess.map()
+                val channelDiscoveryResult = if (SetkaChannelConfig.isDiscoverableJoinRule(joinRule)) {
+                    if (editedSettings.roomAccess == SecurityAndPrivacyRoomAccess.Anyone &&
+                        editedSettings.channelCategoryId.isNullOrBlank() &&
+                        savedSettings.roomAccess != SecurityAndPrivacyRoomAccess.Anyone
+                    ) {
+                        Result.failure(ChannelCategoryRequired)
+                    } else {
+                        matrixClient.publishSetkaChannelWhenReady(
+                            roomId = room.roomId,
+                            categoryId = editedSettings.channelCategoryId,
+                        ).onSuccess {
+                            isVisibleInRoomDirectory.value = AsyncData.Success(true)
+                        }
+                    }
+                } else {
+                    runCatching {
+                        matrixClient.unpublishSetkaChannel(room.roomId).recover { Unit }.getOrThrow()
+                        room.updateRoomVisibility(RoomVisibility.Private).getOrThrow()
+                    }.onSuccess {
+                        isVisibleInRoomDirectory.value = AsyncData.Success(false)
+                    }
+                }
+                if (channelDiscoveryResult.isFailure) {
+                    throw channelDiscoveryResult.exceptionOrNull() ?: SecurityAndPrivacyFailures.SaveFailed
+                }
+            }
             if (results.any { it.isFailure }) {
                 throw SecurityAndPrivacyFailures.SaveFailed
             }

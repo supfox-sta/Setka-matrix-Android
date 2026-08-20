@@ -13,6 +13,7 @@ data class SetkaPublicChannelsState(
     val isLoading: Boolean,
     val channels: ImmutableList<RoomDescription>,
     val displayLoadMoreIndicator: Boolean,
+    val loadError: SetkaChannelLoadFailure?,
     val eventSink: (SetkaPublicChannelsEvents) -> Unit,
 ) {
     companion object {
@@ -20,6 +21,7 @@ data class SetkaPublicChannelsState(
             isLoading = false,
             channels = kotlinx.collections.immutable.persistentListOf(),
             displayLoadMoreIndicator = false,
+            loadError = null,
             eventSink = eventSink,
         )
     }
@@ -27,4 +29,5 @@ data class SetkaPublicChannelsState(
 
 sealed interface SetkaPublicChannelsEvents {
     data object LoadMore : SetkaPublicChannelsEvents
+    data object Retry : SetkaPublicChannelsEvents
 }

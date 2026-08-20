@@ -55,7 +55,8 @@ class DefaultDeeplinkParser : DeeplinkParser {
         if (!SetkaMatrixConfig.isSetkaPaymentReturnHost(host.orEmpty())) return null
         val segments = encodedPath.orEmpty().split("/").filter { it.isNotBlank() }
         if (segments.size < 4) return null
-        if (segments[0] != "setka" || segments[1] != "robokassa" || segments[2] != "return") return null
+        if (segments[0] != "setka" || segments[2] != "return") return null
+        if (segments[1] != "payanyway" && segments[1] != "robokassa") return null
         val outcome = when (segments[3].lowercase()) {
             "success" -> SetkaPlusPaymentReturnOutcome.SUCCESS
             "fail", "failed" -> SetkaPlusPaymentReturnOutcome.FAIL

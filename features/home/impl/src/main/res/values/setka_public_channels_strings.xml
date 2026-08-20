@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="screen_home_tab_channels">Channels</string>
-    <string name="screen_home_public_channels_empty">No public channels yet. Create one or ask an admin to publish it in the room directory.</string>
+    <string name="screen_home_public_channels_empty">No public channels yet. Create a channel or search by name and tag.</string>
+    <string name="screen_home_public_channels_load_error">Could not load public channels (%1$s). Check your connection and try again.</string>
     <string name="screen_home_public_channels_load_more">Load more</string>
     <plurals name="screen_home_public_channels_members">
         <item quantity="one">%1$d subscriber</item>

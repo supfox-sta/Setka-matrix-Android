@@ -18,6 +18,7 @@ sealed interface RoomNavigationTarget : Parcelable {
     @Parcelize
     data class Root(
         val eventId: EventId? = null,
+        val threadRootId: EventId? = null,
         @IgnoredOnParcel val joinedRoom: JoinedRoom? = null,
     ) : RoomNavigationTarget
 

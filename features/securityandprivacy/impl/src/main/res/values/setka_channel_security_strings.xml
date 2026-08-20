@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_security_and_privacy_channel_publish_not_allowed">To list a channel publicly, set access to «Anyone» or «Ask to join» first.</string>
+    <string name="screen_security_and_privacy_channel_directory_hint">Published Setka channels appear in the public channel search.</string>
+    <string name="screen_security_and_privacy_channel_title">Channel privacy</string>
+    <string name="screen_security_and_privacy_channel_category_label">Feed category</string>
+    <string name="screen_security_and_privacy_channel_category_required_error">Choose a category to publish this public channel in the feed.</string>
+    <string name="screen_security_and_privacy_channel_footer">Public and «ask to join» channels are listed automatically in channel search. Message history is always visible to everyone. Channels cannot be encrypted.</string>
+</resources>

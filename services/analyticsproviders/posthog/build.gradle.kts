@@ -30,6 +30,14 @@ android {
             name = "POSTHOG_APIKEY",
             value = BuildTimeConfig.SERVICES_POSTHOG_APIKEY.takeIf { isEnterpriseBuild } ?: ""
         )
+        buildConfigFieldStr(
+            name = "SETKA_POSTHOG_HOST",
+            value = BuildTimeConfig.SETKA_POSTHOG_HOST
+        )
+        buildConfigFieldStr(
+            name = "SETKA_POSTHOG_APIKEY",
+            value = BuildTimeConfig.SETKA_POSTHOG_APIKEY
+        )
     }
 }
 

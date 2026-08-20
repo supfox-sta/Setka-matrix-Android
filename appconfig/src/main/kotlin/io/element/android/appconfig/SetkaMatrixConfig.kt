@@ -18,11 +18,11 @@ object SetkaMatrixConfig {
     const val LIVEKIT_JWT_URL: String = "https://call.setka-matrix.ru/livekit/jwt"
     const val CALL_BASE_URL: String = "https://call.setka-matrix.ru/"
 
-    /** Robokassa server callbacks (ResultURL / SuccessURL / FailURL). */
-    const val ROBOKASSA_CALLBACK_BASE_URL: String = "$MATRIX_CLIENT_API_URL/setka/robokassa"
+    /** PayAnyWay (MONETA.Assistant) server callbacks — Pay URL, Check URL, Success/Fail return. */
+    const val PAYANYWAY_CALLBACK_BASE_URL: String = "$MATRIX_CLIENT_API_URL/setka/payanyway"
 
-    /** HTTPS return links opened after Robokassa checkout. */
-    const val ROBOKASSA_RETURN_BASE_URL: String = "$ROBOKASSA_CALLBACK_BASE_URL/return"
+    /** HTTPS return links opened after PayAnyWay checkout. */
+    const val PAYANYWAY_RETURN_BASE_URL: String = "$PAYANYWAY_CALLBACK_BASE_URL/return"
 
     /** Custom-scheme return links used after server-side redirect. */
     const val SETKA_PLUS_PAYMENT_DEEPLINK_PREFIX: String = "elementx://open"
@@ -40,11 +40,11 @@ object SetkaMatrixConfig {
             host.equals("setka-matrix.ru", ignoreCase = true)
     }
 
-    fun buildRobokassaSuccessReturnUrl(userId: String, paymentId: String): String =
-        "$ROBOKASSA_RETURN_BASE_URL/success?user_id=${encodeQuery(userId)}&payment_id=${encodeQuery(paymentId)}"
+    fun buildPayAnyWaySuccessReturnUrl(userId: String, paymentId: String): String =
+        "$PAYANYWAY_RETURN_BASE_URL/success?user_id=${encodeQuery(userId)}&payment_id=${encodeQuery(paymentId)}"
 
-    fun buildRobokassaFailReturnUrl(userId: String, paymentId: String): String =
-        "$ROBOKASSA_RETURN_BASE_URL/fail?user_id=${encodeQuery(userId)}&payment_id=${encodeQuery(paymentId)}"
+    fun buildPayAnyWayFailReturnUrl(userId: String, paymentId: String): String =
+        "$PAYANYWAY_RETURN_BASE_URL/fail?user_id=${encodeQuery(userId)}&payment_id=${encodeQuery(paymentId)}"
 
     fun buildSetkaPlusPaymentSuccessDeeplink(userId: String, paymentId: String): String =
         "$SETKA_PLUS_PAYMENT_DEEPLINK_PREFIX/${encodePath(userId)}/setka-plus/payment/success?payment_id=${encodeQuery(paymentId)}"

@@ -17,9 +17,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.element.android.appnav.R
@@ -28,7 +34,10 @@ import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.libraries.designsystem.atomic.molecules.ButtonColumnMolecule
 import io.element.android.libraries.designsystem.atomic.molecules.IconTitleSubtitleMolecule
 import io.element.android.libraries.designsystem.components.BigIcon
+import io.element.android.libraries.designsystem.components.dialogs.AlertDialog
 import io.element.android.libraries.designsystem.theme.components.Button
+import io.element.android.libraries.designsystem.theme.components.Icon
+import io.element.android.libraries.designsystem.theme.components.IconButton
 import io.element.android.libraries.designsystem.theme.components.Scaffold
 import io.element.android.libraries.designsystem.theme.components.Text
 import io.element.android.libraries.designsystem.theme.components.TopAppBar
@@ -41,10 +50,41 @@ fun SetkaLoginVerificationView(
     onUseRecoveryKey: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showHelpDialog by remember { mutableStateOf(false) }
+    val helpContentDescription = stringResource(R.string.screen_setka_login_verification_help_content_description)
+    val subtitleRes = if (state.recoveryBackupAvailable) {
+        R.string.screen_setka_login_verification_subtitle
+    } else {
+        R.string.screen_setka_login_verification_subtitle_no_backup
+    }
+
+    if (showHelpDialog) {
+        AlertDialog(
+            title = stringResource(R.string.screen_setka_login_verification_help_title),
+            content = stringResource(R.string.screen_setka_login_verification_help_body),
+            onDismiss = { showHelpDialog = false },
+        )
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(title = {})
+            TopAppBar(
+                title = {},
+                actions = {
+                    IconButton(
+                        onClick = { showHelpDialog = true },
+                        modifier = Modifier.semantics {
+                            contentDescription = helpContentDescription
+                        },
+                    ) {
+                        Icon(
+                            imageVector = CompoundIcons.HelpSolid(),
+                            contentDescription = null,
+                        )
+                    }
+                },
+            )
         },
     ) { padding ->
         Box(
@@ -63,7 +103,7 @@ fun SetkaLoginVerificationView(
                     modifier = Modifier.padding(top = 24.dp, start = 16.dp, end = 16.dp),
                     iconStyle = BigIcon.Style.Default(CompoundIcons.LockSolid()),
                     title = stringResource(R.string.screen_setka_login_verification_title),
-                    subTitle = stringResource(R.string.screen_setka_login_verification_subtitle),
+                    subTitle = stringResource(subtitleRes),
                 )
                 if (state.ip.isNotBlank()) {
                     Spacer(Modifier.height(12.dp))

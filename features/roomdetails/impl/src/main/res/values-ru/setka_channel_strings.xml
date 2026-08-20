@@ -12,4 +12,5 @@
     </plurals>
     <string name="screen_setka_channel_topic_label">Описание</string>
     <string name="screen_setka_channel_topic_placeholder">О чём этот канал?</string>
+    <string name="screen_setka_channel_edit_action">Редактировать канал</string>
 </resources>

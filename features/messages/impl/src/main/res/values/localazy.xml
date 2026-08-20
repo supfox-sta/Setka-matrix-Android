@@ -93,6 +93,10 @@
   <string name="screen_room_timeline_tombstoned_room_message">"This room has been replaced and is no longer active"</string>
   <string name="screen_room_timeline_upgraded_room_action">"See old messages"</string>
   <string name="screen_room_timeline_upgraded_room_message">"This room is a continuation of another room"</string>
+  <string name="screen_room_setka_voucher_title">"Промокод"</string>
+  <string name="screen_room_setka_voucher_description">"Введите промокод, чтобы активировать или продлить Сетка Plus."</string>
+  <string name="screen_room_setka_voucher_hint">"SETKA-XXXX-XXXX"</string>
+  <string name="screen_room_setka_voucher_redeem">"Активировать"</string>
   <string name="screen_room_setka_buy_plan">"Купить"</string>
   <string name="screen_room_setka_create_pack_title">"Создать пак"</string>
   <string name="screen_room_setka_create_pack_button">"Создать"</string>

@@ -38,6 +38,7 @@ import io.element.android.libraries.matrix.api.createroom.RoomPreset
 import io.element.android.libraries.matrix.api.room.alias.RoomAliasHelper
 import io.element.android.libraries.matrix.api.room.history.RoomHistoryVisibility
 import io.element.android.libraries.matrix.api.room.join.JoinRule
+import io.element.android.libraries.matrix.api.setka.publishSetkaChannelWhenReady
 import io.element.android.libraries.matrix.api.roomdirectory.RoomVisibility
 import io.element.android.libraries.matrix.api.spaces.SpaceRoom
 import io.element.android.libraries.matrix.ui.media.AvatarAction
@@ -49,6 +50,8 @@ import io.element.android.libraries.mediaupload.api.MediaPreProcessor
 import io.element.android.libraries.permissions.api.PermissionsEvent
 import io.element.android.libraries.permissions.api.PermissionsPresenter
 import io.element.android.services.analytics.api.AnalyticsService
+import io.element.android.libraries.matrix.api.setka.SetkaFeedCategory
+import io.element.android.libraries.matrix.api.setka.loadSetkaFeedCategories
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -56,10 +59,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
-import timber.log.Timber
 import kotlin.jvm.optionals.getOrDefault
 import kotlin.jvm.optionals.getOrNull
 import kotlin.time.Duration.Companion.seconds
+import timber.log.Timber
 
 @AssistedInject
 class ConfigureRoomPresenter(
@@ -192,6 +195,18 @@ class ConfigureRoomPresenter(
             }
         }
 
+        LaunchedEffect(isChannel) {
+            if (isChannel) {
+                dataStore.setJoinRule(JoinRuleItem.PublicVisibility.Public)
+            }
+        }
+
+        var feedCategories by remember { mutableStateOf<ImmutableList<SetkaFeedCategory>>(persistentListOf()) }
+        LaunchedEffect(isChannel) {
+            if (!isChannel) return@LaunchedEffect
+            feedCategories = matrixClient.loadSetkaFeedCategories().toImmutableList()
+        }
+
         fun createRoom(config: CreateRoomConfig) {
             createRoomAction.value = AsyncAction.Uninitialized
             localCoroutineScope.createRoom(config, createRoomAction)
@@ -201,6 +216,8 @@ class ConfigureRoomPresenter(
             when (event) {
                 is ConfigureRoomEvents.RoomNameChanged -> dataStore.setRoomName(event.name)
                 is ConfigureRoomEvents.TopicChanged -> dataStore.setTopic(event.topic)
+                is ConfigureRoomEvents.ChannelTagChanged -> dataStore.setChannelTag(event.tag)
+                is ConfigureRoomEvents.ChannelCategoryChanged -> dataStore.setChannelCategory(event.categoryId)
                 is ConfigureRoomEvents.JoinRuleChanged -> dataStore.setJoinRule(event.joinRuleItem)
                 is ConfigureRoomEvents.RoomAddressChanged -> dataStore.setRoomAddress(event.roomAddress)
                 is ConfigureRoomEvents.CreateRoom -> createRoom(createRoomConfig)
@@ -234,6 +251,7 @@ class ConfigureRoomPresenter(
             roomAddressValidity = roomAddressValidity.value,
             availableJoinRules = availableJoinRules,
             spaces = spaces,
+            feedCategories = feedCategories,
             isSpace = isSpace,
             isChannel = isChannel,
             eventSink = ::handleEvent,
@@ -241,7 +259,7 @@ class ConfigureRoomPresenter(
     }
 
     private fun channelTopic(config: CreateRoomConfig): String =
-        SetkaChannelConfig.formatChannelTopic(config.topic)
+        SetkaChannelConfig.formatChannelTopic(config.topic, config.channelTag)
 
     private fun buildCreateRoomParameters(config: CreateRoomConfig, avatarUrl: String?): CreateRoomParameters {
         val topic = when {
@@ -256,7 +274,11 @@ class ConfigureRoomPresenter(
                     isEncrypted = false,
                     isDirect = false,
                     visibility = RoomVisibility.Public,
-                    historyVisibilityOverride = if (isChannel) RoomHistoryVisibility.Shared else null,
+                    historyVisibilityOverride = if (isChannel) {
+                        RoomHistoryVisibility.WorldReadable
+                    } else {
+                        null
+                    },
                     joinRuleOverride = config.visibilityState.joinRuleItem.toJoinRule()
                         .takeIf { it != JoinRule.Public },
                     preset = RoomPreset.PUBLIC_CHAT,
@@ -274,7 +296,7 @@ class ConfigureRoomPresenter(
                     isDirect = false,
                     visibility = RoomVisibility.Private,
                     historyVisibilityOverride = if (isChannel) {
-                        RoomHistoryVisibility.Shared
+                        RoomHistoryVisibility.WorldReadable
                     } else {
                         RoomHistoryVisibility.Invited
                     },
@@ -307,8 +329,21 @@ class ConfigureRoomPresenter(
                 .getOrThrow()
 
             if (isChannel) {
-                matrixClient.getJoinedRoom(roomId)?.updateHistoryVisibility(RoomHistoryVisibility.Shared)
+                val joinedRoom = matrixClient.getJoinedRoom(roomId)
+                joinedRoom?.updateHistoryVisibility(RoomHistoryVisibility.WorldReadable)
                     ?.onFailure { Timber.w(it, "Failed to set channel history visibility for $roomId") }
+                val joinRule = config.visibilityState.joinRuleItem.toJoinRule()
+                if (SetkaChannelConfig.isDiscoverableJoinRule(joinRule)) {
+                    val publishResult = matrixClient.publishSetkaChannelWhenReady(
+                        roomId = roomId,
+                        categoryId = config.channelCategoryId,
+                    )
+                    if (joinRule == JoinRule.Public) {
+                        publishResult.getOrThrow()
+                    } else {
+                        publishResult.onFailure { Timber.w(it, "Failed to register channel $roomId in Setka directory") }
+                    }
+                }
             }
 
             // Add the newly created room to the parent space too

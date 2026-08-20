@@ -18,6 +18,8 @@ import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedInject
 import im.vector.app.features.analytics.plan.MobileScreen
 import io.element.android.annotations.ContributesNode
+import io.element.android.features.roomdetailsedit.api.RoomDetailsEditEntryPoint
+import io.element.android.libraries.architecture.callback
 import io.element.android.libraries.di.RoomScope
 import io.element.android.services.analytics.api.AnalyticsService
 
@@ -29,6 +31,7 @@ class RoomDetailsEditNode(
     private val presenter: RoomDetailsEditPresenter,
     private val analyticsService: AnalyticsService,
 ) : Node(buildContext, plugins = plugins) {
+    private val callback: RoomDetailsEditEntryPoint.Callback = plugins.callback()
     init {
         lifecycle.subscribe(
             onResume = {
@@ -43,6 +46,7 @@ class RoomDetailsEditNode(
         RoomDetailsEditView(
             state = state,
             onDone = ::navigateUp,
+            onConfigurePrivacyClick = callback::navigateToSecurityAndPrivacy,
             modifier = modifier,
         )
     }

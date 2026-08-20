@@ -28,7 +28,8 @@ open class RoomDetailsEditStateProvider : PreviewParameterProvider<RoomDetailsEd
             aRoomDetailsEditState(canChangeName = false, canChangeTopic = true, canChangeAvatar = false, saveButtonEnabled = false),
             aRoomDetailsEditState(saveAction = AsyncAction.Loading),
             aRoomDetailsEditState(saveAction = AsyncAction.Failure(RuntimeException("Whelp"))),
-            aRoomDetailsEditState(saveAction = AsyncAction.ConfirmingCancellation),
+            aRoomDetailsEditState(isSetkaChannel = true, isPublicChannel = true, channelTag = "news", roomTopic = "Daily updates", canShowPrivacySettings = true),
+            aRoomDetailsEditState(isSetkaChannel = true, channelTag = "ab", channelTagError = true),
         )
 }
 
@@ -38,6 +39,11 @@ fun aRoomDetailsEditState(
     canChangeName: Boolean = true,
     roomTopic: String = "a room topic that is quite long so should wrap onto multiple lines",
     canChangeTopic: Boolean = true,
+    isSetkaChannel: Boolean = false,
+    isPublicChannel: Boolean = false,
+    channelTag: String = "",
+    channelTagError: Boolean = false,
+    canShowPrivacySettings: Boolean = false,
     roomAvatarUrl: String? = null,
     canChangeAvatar: Boolean = true,
     avatarActions: List<AvatarAction> = emptyList(),
@@ -52,6 +58,11 @@ fun aRoomDetailsEditState(
     canChangeName = canChangeName,
     roomTopic = roomTopic,
     canChangeTopic = canChangeTopic,
+    isSetkaChannel = isSetkaChannel,
+    isPublicChannel = isPublicChannel,
+    channelTag = channelTag,
+    channelTagError = channelTagError,
+    canShowPrivacySettings = canShowPrivacySettings,
     roomAvatarUrl = roomAvatarUrl,
     canChangeAvatar = canChangeAvatar,
     avatarActions = avatarActions.toImmutableList(),

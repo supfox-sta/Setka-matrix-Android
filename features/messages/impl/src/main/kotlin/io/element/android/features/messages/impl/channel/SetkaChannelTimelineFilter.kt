@@ -8,6 +8,7 @@ package io.element.android.features.messages.impl.channel
 
 import io.element.android.features.messages.impl.timeline.model.TimelineItem
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStateContent
+import io.element.android.features.messages.impl.timeline.model.virtual.TimelineItemDaySeparatorModel
 import io.element.android.libraries.matrix.api.timeline.Timeline
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -23,7 +24,7 @@ internal fun filterSetkaChannelMainTimeline(
     if (!isSetkaChannel || timelineMode is Timeline.Mode.Thread) {
         return items
     }
-    return items.mapNotNull { item ->
+    val filtered = items.mapNotNull { item ->
         when (item) {
             is TimelineItem.Event -> {
                 if (item.content is TimelineItemStateContent) null else item
@@ -41,4 +42,30 @@ internal fun filterSetkaChannelMainTimeline(
             is TimelineItem.Virtual -> item
         }
     }.toImmutableList()
+    return filtered.withoutOrphanDayDividers()
+}
+
+private fun ImmutableList<TimelineItem>.withoutOrphanDayDividers(): ImmutableList<TimelineItem> {
+    return filterIndexed { index, item ->
+        if (item is TimelineItem.Virtual && item.model is TimelineItemDaySeparatorModel) {
+            hasVisibleEventBeforeNextDivider(index)
+        } else {
+            true
+        }
+    }.toImmutableList()
+}
+
+private fun ImmutableList<TimelineItem>.hasVisibleEventBeforeNextDivider(dividerIndex: Int): Boolean {
+    for (index in dividerIndex + 1 until size) {
+        when (val item = this[index]) {
+            is TimelineItem.Virtual -> {
+                if (item.model is TimelineItemDaySeparatorModel) {
+                    return false
+                }
+            }
+            is TimelineItem.Event,
+            is TimelineItem.GroupedEvents -> return true
+        }
+    }
+    return false
 }

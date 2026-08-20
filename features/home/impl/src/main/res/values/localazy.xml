@@ -47,6 +47,12 @@
   <string name="screen_home_setka_plus_processing">"Открываю..."</string>
   <string name="screen_home_setka_plus_refresh">"Обновить"</string>
 
+  <string name="screen_home_setka_plus_voucher_title">"Промокод"</string>
+  <string name="screen_home_setka_plus_voucher_description">"Введите промокод, чтобы активировать или продлить Сетка Plus."</string>
+  <string name="screen_home_setka_plus_voucher_hint">"SETKA-XXXX-XXXX"</string>
+  <string name="screen_home_setka_plus_voucher_redeem">"Активировать"</string>
+  <string name="screen_home_setka_plus_voucher_processing">"Активация..."</string>
+
   <string name="screen_home_setka_plus_promo_title">"Сетка Plus"</string>
   <string name="screen_home_setka_plus_promo_subtitle">"Подписка помогает развивать проект: оплачивать сервер, улучшать клиент и быстрее добавлять новые функции."</string>
   <string name="screen_home_setka_plus_promo_feature_1">"Стикеры и кастомные эмодзи (пакеты, пикер, редактор)"</string>

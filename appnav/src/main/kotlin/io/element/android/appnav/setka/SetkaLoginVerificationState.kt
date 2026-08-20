@@ -10,6 +10,7 @@ data class SetkaLoginVerificationState(
     val isLoading: Boolean,
     val ip: String,
     val region: String,
+    val recoveryBackupAvailable: Boolean,
     val shouldSkip: Boolean,
     val statusLoadError: Boolean,
     val eventSink: (SetkaLoginVerificationEvents) -> Unit,

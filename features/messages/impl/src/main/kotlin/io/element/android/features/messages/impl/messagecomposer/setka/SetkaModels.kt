@@ -76,10 +76,26 @@ data class SetkaPlusPaymentRequest(
     val checkoutUrl: String?,
 )
 
+data class SetkaCheckoutConfig(
+    val checkoutEnabled: Boolean = true,
+    val vouchersEnabled: Boolean = true,
+    val voucherFooterText: String = "",
+)
+
+data class SetkaPlansCatalog(
+    val plans: List<SetkaPlusPlan> = emptyList(),
+    val checkoutEnabled: Boolean = true,
+    val vouchersEnabled: Boolean = true,
+    val voucherFooterText: String = "",
+)
+
 data class SetkaBootstrap(
     val subscription: SetkaPlusSubscription?,
     val plans: List<SetkaPlusPlan>,
     val stickerPacks: List<SetkaStickerPack>,
+    val checkoutEnabled: Boolean = true,
+    val vouchersEnabled: Boolean = true,
+    val voucherFooterText: String = "",
 )
 
 data class SetkaPackEditorState(

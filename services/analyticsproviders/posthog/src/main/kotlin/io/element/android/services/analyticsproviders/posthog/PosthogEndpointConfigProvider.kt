@@ -29,6 +29,11 @@ class PosthogEndpointConfigProvider(
                 // So the configuration should be always valid.
                 it.isValid
             }
+        } else if (buildMeta.applicationId.startsWith("com.setkamatrix")) {
+            PosthogEndpointConfig(
+                host = BuildConfig.SETKA_POSTHOG_HOST,
+                apiKey = BuildConfig.SETKA_POSTHOG_APIKEY,
+            ).takeIf { it.isValid }
         } else if (buildMeta.isElement()) {
             when (buildMeta.buildType) {
                 BuildType.RELEASE -> PosthogEndpointConfig(

@@ -16,6 +16,10 @@ import kotlinx.collections.immutable.persistentListOf
 data class CreateRoomConfig(
     val roomName: String? = null,
     val topic: String? = null,
+    /** Public handle without `#`, stored in channel topic as `#tag`. */
+    val channelTag: String? = null,
+    /** Feed category slug from GET /setka/feed/categories (required for public channels). */
+    val channelCategoryId: String? = null,
     val avatarUri: String? = null,
     val invites: ImmutableList<MatrixUser> = persistentListOf(),
     val visibilityState: RoomVisibilityState = RoomVisibilityState.Private(JoinRuleItem.PrivateVisibility.Private),

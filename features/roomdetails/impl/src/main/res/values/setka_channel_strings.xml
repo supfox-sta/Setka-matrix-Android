@@ -10,4 +10,5 @@
     </plurals>
     <string name="screen_setka_channel_topic_label">Description</string>
     <string name="screen_setka_channel_topic_placeholder">What is this channel about?</string>
+    <string name="screen_setka_channel_edit_action">Edit channel</string>
 </resources>

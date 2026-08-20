@@ -12,6 +12,13 @@ data class HomeSetkaPlusState(
     val isLoading: Boolean = false,
     val subscription: HomeSetkaPlusSubscription? = null,
     val plans: List<HomeSetkaPlusPlan> = emptyList(),
+    val checkoutEnabled: Boolean = true,
+    val vouchersEnabled: Boolean = true,
+    val voucherCode: String = "",
+    val voucherFooterText: String = "",
+    val voucherNotice: String? = null,
+    val voucherNoticeIsSuccess: Boolean = false,
+    val isRedeemingVoucher: Boolean = false,
     val busyPlanId: String? = null,
     val errorMessage: String? = null,
     val paymentFlowState: io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState =

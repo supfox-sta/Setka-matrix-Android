@@ -160,7 +160,10 @@ class RoomDetailsPresenter(
             derivedStateOf { isKnockRequestsEnabled && permissions.knockRequestsPermissions.hasAny && joinRule == JoinRule.Knock }
         }
         val canShowSecurityAndPrivacy by remember {
-            derivedStateOf { !isDm && permissions.securityAndPrivacyPermissions.hasAny(isSpace = false, joinRule = joinRule) }
+            derivedStateOf {
+                !isDm && !isSetkaChannel &&
+                    permissions.securityAndPrivacyPermissions.hasAny(isSpace = false, joinRule = joinRule)
+            }
         }
         val isDeveloperModeEnabled by remember {
             appPreferencesStore.isDeveloperModeEnabledFlow()

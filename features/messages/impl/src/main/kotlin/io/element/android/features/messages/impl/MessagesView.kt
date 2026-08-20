@@ -515,6 +515,11 @@ fun MessagesView(
             onDismiss = { state.composerState.eventSink(MessageComposerEvent.HideSetkaPlusDialog) },
             onBuyPlan = { plan -> state.composerState.eventSink(MessageComposerEvent.BuySetkaPlan(plan)) },
             onDismissPaymentResult = { state.composerState.eventSink(MessageComposerEvent.DismissSetkaPlusPaymentResult) },
+            onVoucherCodeChange = { code ->
+                state.composerState.eventSink(MessageComposerEvent.SetkaVoucherCodeChanged(code))
+            },
+            onRedeemVoucher = { state.composerState.eventSink(MessageComposerEvent.RedeemSetkaVoucher) },
+            onClearVoucherNotice = { state.composerState.eventSink(MessageComposerEvent.ClearSetkaVoucherNotice) },
         )
     }
 

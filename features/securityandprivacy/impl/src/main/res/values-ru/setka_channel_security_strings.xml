@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_security_and_privacy_channel_publish_not_allowed">Чтобы канал был в поиске, откройте доступ «Всем» или «По запросу».</string>
+    <string name="screen_security_and_privacy_channel_directory_hint">Опубликованные каналы Setka появляются в поиске публичных каналов.</string>
+    <string name="screen_security_and_privacy_channel_title">Приватность канала</string>
+    <string name="screen_security_and_privacy_channel_category_label">Категория ленты</string>
+    <string name="screen_security_and_privacy_channel_category_required_error">Выберите категорию, чтобы опубликовать публичный канал в ленте.</string>
+    <string name="screen_security_and_privacy_channel_footer">Публичные каналы и каналы «по запросу» автоматически попадают в поиск. История сообщений всегда видна всем. Шифрование в каналах недоступно.</string>
+</resources>

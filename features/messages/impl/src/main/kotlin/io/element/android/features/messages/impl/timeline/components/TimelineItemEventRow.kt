@@ -76,6 +76,7 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemPollContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStickerContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVideoContent
+import io.element.android.features.messages.impl.timeline.model.event.isRedacted
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVoiceContent
 import io.element.android.features.messages.impl.timeline.model.event.aTimelineItemImageContent
 import io.element.android.features.messages.impl.timeline.model.event.aTimelineItemTextContent
@@ -284,6 +285,7 @@ fun TimelineItemEventRow(
         }
         val showChannelComments = isSetkaChannel &&
             setkaChannelCommentsEnabled &&
+            !event.content.isRedacted() &&
             timelineMode !is Timeline.Mode.Thread &&
             event.threadInfo !is TimelineItemThreadInfo.ThreadResponse
         val isVideoNotePost = (event.content as? TimelineItemVideoContent)?.isVideoNote == true
@@ -520,6 +522,7 @@ private fun TimelineItemEventRowContent(
                 )
                 if (isSetkaChannel &&
                     setkaChannelCommentsEnabled &&
+                    !event.content.isRedacted() &&
                     timelineMode !is Timeline.Mode.Thread &&
                     event.threadInfo !is TimelineItemThreadInfo.ThreadResponse
                 ) {

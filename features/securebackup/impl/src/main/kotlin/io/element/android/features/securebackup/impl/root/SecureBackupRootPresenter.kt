@@ -60,6 +60,8 @@ import io.element.android.libraries.matrix.api.encryption.BackupState
 
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
 
+import io.element.android.appconfig.SetkaAnalyticsEvents
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.libraries.matrix.api.setka.SetkaLoginVerificationService
 
 import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
@@ -83,6 +85,8 @@ class SecureBackupRootPresenter(
     private val setkaServerRecoveryService: SetkaServerRecoveryService,
 
     private val setkaLoginVerificationService: SetkaLoginVerificationService,
+
+    private val setkaAnalyticsService: SetkaAnalyticsService,
 
     private val buildMeta: BuildMeta,
 
@@ -268,9 +272,13 @@ class SecureBackupRootPresenter(
 
                 setkaServerRecoveryService.uploadKeysToServer().getOrThrow()
 
+                setkaAnalyticsService.trackEvent(SetkaAnalyticsEvents.SKEY_ENABLED)
+
             } else {
 
                 setkaServerRecoveryService.disableServerBackup().getOrThrow()
+
+                setkaAnalyticsService.trackEvent(SetkaAnalyticsEvents.SKEY_DISABLED)
 
             }
 

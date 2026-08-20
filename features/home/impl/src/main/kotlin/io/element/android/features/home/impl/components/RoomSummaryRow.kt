@@ -367,7 +367,14 @@ private fun MessagePreviewAndIndicatorRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (room.isSetkaChannel) {
+            if (room.isFavorite) {
+                Icon(
+                    imageVector = CompoundIcons.Pin(),
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = ElementTheme.colors.iconSecondary.copy(alpha = 0.55f),
+                )
+            } else if (room.isSetkaChannel) {
                 Icon(
                     imageVector = CompoundIcons.VolumeOn(),
                     contentDescription = null,

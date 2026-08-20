@@ -12,7 +12,9 @@ import io.element.android.libraries.architecture.AsyncAction
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.ui.media.AvatarAction
 import io.element.android.libraries.permissions.api.PermissionsState
+import io.element.android.libraries.matrix.api.setka.SetkaFeedCategory
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 
 data class RoomDetailsEditState(
     val roomId: RoomId,
@@ -21,6 +23,14 @@ data class RoomDetailsEditState(
     val canChangeName: Boolean,
     val roomTopic: String,
     val canChangeTopic: Boolean,
+    val isSetkaChannel: Boolean,
+    val isPublicChannel: Boolean,
+    val channelTag: String,
+    val channelTagError: Boolean,
+    val feedCategories: ImmutableList<SetkaFeedCategory> = persistentListOf(),
+    val channelCategoryId: String? = null,
+    val channelCategoryMissing: Boolean = false,
+    val canShowPrivacySettings: Boolean,
     val roomAvatarUrl: String?,
     val canChangeAvatar: Boolean,
     val avatarActions: ImmutableList<AvatarAction>,

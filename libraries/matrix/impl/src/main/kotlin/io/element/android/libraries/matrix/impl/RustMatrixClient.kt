@@ -432,7 +432,7 @@ class RustMatrixClient(
             readTimeout = 15_000
             setRequestProperty("Accept", accept)
             setRequestProperty("Authorization", "Bearer $token")
-            if (body != null) {
+            if (body != null && !method.equals("GET", ignoreCase = true) && !method.equals("HEAD", ignoreCase = true)) {
                 doOutput = true
                 setRequestProperty("Content-Type", contentType)
                 outputStream.use { it.write(body) }
@@ -1016,9 +1016,22 @@ private fun defaultRoomCreationPowerLevels(isPublic: Boolean, isSpace: Boolean) 
 
 private fun resolveMatrixClientApiUrl(homeserver: String): String {
     val trimmed = homeserver.trimEnd('/')
-    return when (trimmed) {
-        SetkaMatrixConfig.HOME_SERVER_URL,
-        "http://setka-matrix.ru" -> SetkaMatrixConfig.MATRIX_CLIENT_API_URL
+    if (trimmed.equals(SetkaMatrixConfig.MATRIX_CLIENT_API_URL, ignoreCase = true)) {
+        return trimmed
+    }
+    val host = runCatching { java.net.URI(trimmed).host?.lowercase() }.getOrNull()
+    if (host != null && host.endsWith("setka-matrix.ru", ignoreCase = true)) {
+        return when (host) {
+            "call.setka-matrix.ru",
+            "web.setka-matrix.ru",
+            "share.setka-matrix.ru" -> trimmed
+            else -> SetkaMatrixConfig.MATRIX_CLIENT_API_URL
+        }
+    }
+    return when (trimmed.lowercase()) {
+        SetkaMatrixConfig.HOME_SERVER_URL.lowercase(),
+        "http://setka-matrix.ru",
+        "https://setka-matrix.ru" -> SetkaMatrixConfig.MATRIX_CLIENT_API_URL
         else -> trimmed
     }
 }

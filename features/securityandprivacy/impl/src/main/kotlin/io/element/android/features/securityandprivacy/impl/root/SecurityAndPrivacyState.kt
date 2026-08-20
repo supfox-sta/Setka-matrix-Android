@@ -18,6 +18,8 @@ import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.spaces.SpaceRoom
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
+import io.element.android.libraries.matrix.api.setka.SetkaFeedCategory
+import io.element.android.libraries.matrix.ui.setka.SetkaFeedCategoryChips
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 
@@ -32,6 +34,8 @@ data class SecurityAndPrivacyState(
     private val isSpaceSettingsEnabled: Boolean,
     val saveAction: AsyncAction<Unit>,
     val isSpace: Boolean,
+    val isSetkaChannel: Boolean,
+    val feedCategories: ImmutableList<SetkaFeedCategory> = persistentListOf(),
     private val permissions: SecurityAndPrivacyPermissions,
     private val selectableJoinedSpaces: ImmutableSet<SpaceRoom>,
     private val spaceSelectionMode: SpaceSelectionMode,
@@ -64,7 +68,20 @@ data class SecurityAndPrivacyState(
     val showAskToJoinWithSpaceMemberOption = savedSettings.roomAccess is SecurityAndPrivacyRoomAccess.AskToJoinWithSpaceMember ||
         isAskToJoinWithSpaceMembersSelectable
 
-    val canBeSaved = savedSettings != editedSettings
+    val showChannelCategorySection = isSetkaChannel &&
+        editedSettings.roomAccess == SecurityAndPrivacyRoomAccess.Anyone
+
+    val canBeSaved = savedSettings != editedSettings &&
+        !missingChannelCategoryForPublish()
+
+    private fun missingChannelCategoryForPublish(): Boolean {
+        if (!isSetkaChannel) return false
+        if (editedSettings.roomAccess != SecurityAndPrivacyRoomAccess.Anyone) return false
+        if (!editedSettings.channelCategoryId.isNullOrBlank()) return false
+        // Already public with a category on the server — republish without re-selecting is OK.
+        if (savedSettings.roomAccess == SecurityAndPrivacyRoomAccess.Anyone) return false
+        return true
+    }
 
     // Logic is in https://github.com/element-hq/element-meta/issues/3029
     val availableHistoryVisibilities = buildList {
@@ -82,10 +99,11 @@ data class SecurityAndPrivacyState(
     val showRoomAccessSection = permissions.canChangeRoomAccess
 
     val showRoomVisibilitySections = permissions.canChangeRoomVisibility &&
-        editedSettings.roomAccess.canConfigureRoomVisibility()
+        editedSettings.roomAccess.canConfigureRoomVisibility() &&
+        !isSetkaChannel
 
-    val showHistoryVisibilitySection = permissions.canChangeHistoryVisibility && !isSpace
-    val showEncryptionSection = permissions.canChangeEncryption && !isSpace
+    val showHistoryVisibilitySection = permissions.canChangeHistoryVisibility && !isSpace && !isSetkaChannel
+    val showEncryptionSection = permissions.canChangeEncryption && !isSpace && !isSetkaChannel
 
     @Composable
     fun spaceMemberDescription(): String {
@@ -127,7 +145,8 @@ data class SecurityAndPrivacySettings(
     val isEncrypted: Boolean,
     val historyVisibility: SecurityAndPrivacyHistoryVisibility,
     val address: String?,
-    val isVisibleInRoomDirectory: AsyncData<Boolean>
+    val isVisibleInRoomDirectory: AsyncData<Boolean>,
+    val channelCategoryId: String? = null,
 )
 
 enum class SecurityAndPrivacyHistoryVisibility {
@@ -179,4 +198,8 @@ sealed interface SecurityAndPrivacyRoomAccess {
 
 sealed class SecurityAndPrivacyFailures : Exception() {
     data object SaveFailed : SecurityAndPrivacyFailures()
+    /** Setka channel cannot be listed when join rule is invite-only. */
+    data object ChannelPublishNotAllowed : SecurityAndPrivacyFailures()
+    /** Public Setka channel publish requires a feed category on the homeserver. */
+    data object ChannelCategoryRequired : SecurityAndPrivacyFailures()
 }

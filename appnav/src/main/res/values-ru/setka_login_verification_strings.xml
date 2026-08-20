@@ -1,43 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-
-
 <resources>
-
-
-
     <string name="screen_setka_login_verification_title">Подтвердите вход</string>
-
-
-
     <string name="screen_setka_login_verification_subtitle">Подтверждаем вход. Если ключ сохранён на сервере, вход выполнится автоматически.</string>
-
-
-
+    <string name="screen_setka_login_verification_subtitle_no_backup">Подтвердите вход с помощью эмодзи на другом устройстве или резервного ключа.</string>
     <string name="screen_setka_login_verification_ip">IP-адрес: %1$s</string>
-
-
-
     <string name="screen_setka_login_verification_region">Регион: %1$s</string>
-
-
-
     <string name="screen_setka_login_verification_status_error">Не удалось проверить вход. Попробуйте позже.</string>
-
-
-
     <string name="screen_setka_login_verification_fallback_emoji">Сверить эмодзи на другом устройстве</string>
-
-
-
     <string name="screen_setka_login_verification_fallback_recovery">Ввести резервный ключ</string>
-
-
-
     <string name="screen_setka_login_verification_loading">Проверяем вход…</string>
-
-
-
+    <string name="screen_setka_login_verification_help_title">Как получить ключ</string>
+    <string name="screen_setka_login_verification_help_body">Если у вас установлен старый клиент Setka:\n\n1. Откройте настройки приложения (ваша аватарка сверху слева)\n2. Откройте «Шифрование»\n3. Нажмите «Изменить ключ…»\n4. Создайте новый ключ и запишите его в удобное для вас место</string>
+    <string name="screen_setka_login_verification_help_content_description">Как получить резервный ключ</string>
 </resources>
-
-

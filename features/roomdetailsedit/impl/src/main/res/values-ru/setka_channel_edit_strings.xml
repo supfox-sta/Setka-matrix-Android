@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_setka_channel_edit_title">Редактирование канала</string>
+    <string name="screen_setka_channel_edit_tag_label">Тег</string>
+    <string name="screen_setka_channel_edit_tag_placeholder">username</string>
+    <string name="screen_setka_channel_edit_tag_helper">В поиске отображается как #тег. Строчные буквы, цифры, _, 3–32 символа.</string>
+    <string name="screen_setka_channel_edit_tag_error">Неверный тег. Используйте 3–32 символа: a–z, 0–9, _</string>
+    <string name="screen_setka_channel_edit_category_label">Категория ленты</string>
+    <string name="screen_setka_channel_edit_category_required_error">Выберите категорию, чтобы опубликовать публичный канал в ленте.</string>
+    <string name="screen_setka_channel_edit_description_label">Описание</string>
+    <string name="screen_setka_channel_edit_description_placeholder">О чём этот канал?</string>
+    <string name="screen_setka_channel_edit_privacy_action">Настроить приватность</string>
+</resources>

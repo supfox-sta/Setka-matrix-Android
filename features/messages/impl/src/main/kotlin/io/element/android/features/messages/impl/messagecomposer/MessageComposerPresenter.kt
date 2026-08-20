@@ -306,6 +306,9 @@ class MessageComposerPresenter(
                             subscription = bootstrap.subscription,
                             plans = bootstrap.plans.toImmutableList(),
                             stickerPacks = bootstrap.stickerPacks.toImmutableList(),
+                            checkoutEnabled = bootstrap.checkoutEnabled,
+                            vouchersEnabled = bootstrap.vouchersEnabled,
+                            voucherFooterText = bootstrap.voucherFooterText,
                             errorMessage = errorMessage,
                         )
                     },
@@ -405,9 +408,8 @@ class MessageComposerPresenter(
             }
         }
 
-        fun openSetkaPayment(url: String?) {
-            if (url.isNullOrBlank()) return
-            externalIntentLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        fun openSetkaPayment(url: String?, paymentId: String) {
+            setkaPlusPaymentCoordinator.openCheckout(paymentId = paymentId, checkoutUrl = url)
         }
 
         LaunchedEffect(Unit) {
@@ -577,6 +579,13 @@ class MessageComposerPresenter(
                 }
                 is MessageComposerEvent.BuySetkaPlan -> {
                     localCoroutineScope.launch {
+                        if (!setkaState.checkoutEnabled) {
+                            setkaState = setkaState.copy(
+                                voucherNoticeIsSuccess = false,
+                                voucherNotice = "Используйте промокод для активации",
+                            )
+                            return@launch
+                        }
                         if (setkaState.subscription?.isActive == true) {
                             setkaState = setkaState.copy(errorMessage = "Подписка уже активна")
                             return@launch
@@ -584,18 +593,55 @@ class MessageComposerPresenter(
                         setkaState = setkaState.copy(busyPlanId = event.plan.id, errorMessage = null)
                         setkaService.createPlusPayment(event.plan)
                             .onSuccess { payment ->
-                                openSetkaPayment(payment.checkoutUrl)
-                                if (payment.paymentId.isNotBlank()) {
-                                    setkaPlusPaymentCoordinator.beginPayment(payment.paymentId)
-                                }
+                                openSetkaPayment(payment.checkoutUrl, payment.paymentId)
                             }
                             .onFailure { failure ->
+                                val checkoutDisabled = io.element.android.libraries.matrix.api.setka.isSetkaCheckoutDisabledError(failure)
                                 setkaState = setkaState.copy(
-                                    errorMessage = failure.message ?: "Не удалось создать платеж",
+                                    checkoutEnabled = if (checkoutDisabled) false else setkaState.checkoutEnabled,
+                                    errorMessage = if (checkoutDisabled) null else (failure.message ?: "Не удалось создать платеж"),
+                                    voucherNoticeIsSuccess = false,
+                                    voucherNotice = if (checkoutDisabled) "Используйте промокод для активации" else setkaState.voucherNotice,
                                 )
                             }
                         setkaState = setkaState.copy(busyPlanId = null)
                     }
+                }
+                is MessageComposerEvent.SetkaVoucherCodeChanged -> {
+                    setkaState = setkaState.copy(voucherCode = event.code)
+                }
+                MessageComposerEvent.RedeemSetkaVoucher -> {
+                    localCoroutineScope.launch {
+                        val code = setkaState.voucherCode.trim()
+                        if (code.isBlank()) {
+                            setkaState = setkaState.copy(
+                                voucherNoticeIsSuccess = false,
+                                voucherNotice = "Введите промокод",
+                            )
+                            return@launch
+                        }
+                        setkaState = setkaState.copy(isRedeemingVoucher = true, voucherNotice = null)
+                        setkaService.redeemVoucher(code).fold(
+                            onSuccess = { subscription ->
+                                setkaState = setkaState.copy(
+                                    subscription = subscription,
+                                    voucherCode = "",
+                                    voucherNoticeIsSuccess = true,
+                                    voucherNotice = "Промокод активирован",
+                                )
+                            },
+                            onFailure = { failure ->
+                                setkaState = setkaState.copy(
+                                    voucherNoticeIsSuccess = false,
+                                    voucherNotice = io.element.android.libraries.matrix.api.setka.formatSetkaPlusVoucherRedeemError(failure),
+                                )
+                            },
+                        )
+                        setkaState = setkaState.copy(isRedeemingVoucher = false)
+                    }
+                }
+                MessageComposerEvent.ClearSetkaVoucherNotice -> {
+                    setkaState = setkaState.copy(voucherNotice = null)
                 }
                 is MessageComposerEvent.OpenSetkaPackEditor -> {
                     if (event.kind == SetkaPackKind.EMOJI) {

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="screen_home_tab_channels">Каналы</string>
-    <string name="screen_home_public_channels_empty">Публичных каналов пока нет. Создайте канал или попросите опубликовать его в каталоге комнат.</string>
+    <string name="screen_home_public_channels_empty">Публичных каналов пока нет. Создайте канал или найдите по имени и тегу.</string>
+    <string name="screen_home_public_channels_load_error">Не удалось загрузить каналы (%1$s). Проверьте соединение и попробуйте снова.</string>
     <string name="screen_home_public_channels_load_more">Загрузить ещё</string>
     <plurals name="screen_home_public_channels_members">
         <item quantity="one">%1$d подписчик</item>

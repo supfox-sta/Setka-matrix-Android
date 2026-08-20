@@ -1,43 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-
-
-
 <resources>
-
-
-
     <string name="screen_setka_login_verification_title">Confirm sign-in</string>
-
-
-
     <string name="screen_setka_login_verification_subtitle">Confirming sign-in. If your key is saved on the server, you will continue automatically.</string>
-
-
-
+    <string name="screen_setka_login_verification_subtitle_no_backup">Confirm sign-in using emojis on another device or your recovery key.</string>
     <string name="screen_setka_login_verification_ip">IP address: %1$s</string>
-
-
-
     <string name="screen_setka_login_verification_region">Region: %1$s</string>
-
-
-
     <string name="screen_setka_login_verification_status_error">Could not check sign-in status. Try again later.</string>
-
-
-
     <string name="screen_setka_login_verification_fallback_emoji">Compare emojis on another device</string>
-
-
-
     <string name="screen_setka_login_verification_fallback_recovery">Enter recovery key</string>
-
-
-
     <string name="screen_setka_login_verification_loading">Checking sign-in…</string>
-
-
-
+    <string name="screen_setka_login_verification_help_title">How to get your key</string>
+    <string name="screen_setka_login_verification_help_body">If you have the previous Setka client installed:\n\n1. Open app settings (your avatar at the top left)\n2. Open Encryption\n3. Tap Change key…\n4. Create a new key and save it somewhere safe</string>
+    <string name="screen_setka_login_verification_help_content_description">How to get a recovery key</string>
 </resources>
-
-

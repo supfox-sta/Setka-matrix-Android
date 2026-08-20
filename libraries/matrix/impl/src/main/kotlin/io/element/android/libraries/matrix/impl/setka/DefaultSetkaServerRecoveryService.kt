@@ -76,12 +76,17 @@ class DefaultSetkaServerRecoveryService(
             val recoveryState = encryptionService.recoveryStateStateFlow.value
             val loginVerified = !status.required || status.verified
 
-            if (loginVerified &&
-                recoveryState == RecoveryState.ENABLED &&
-                status.recoveryBackupAvailable
-            ) {
+            if (loginVerified) {
+                if (recoveryState == RecoveryState.ENABLED) {
+                    _syncState.value = SetkaServerRecoverySyncState.Synced
+                    log("Login already verified and local recovery enabled")
+                    return@withLock SetkaLoginRecoveryEvaluation.ProceedWithoutFreshKey
+                }
+                if (status.recoveryBackupAvailable && applyServerRecoveryKeyForLogin()) {
+                    return@withLock SetkaLoginRecoveryEvaluation.ProceedWithFreshKey
+                }
                 _syncState.value = SetkaServerRecoverySyncState.Synced
-                log("Login recovery already ready locally, skipping restore")
+                log("Login verified on server; skipping verification gate")
                 return@withLock SetkaLoginRecoveryEvaluation.ProceedWithoutFreshKey
             }
 
@@ -130,7 +135,16 @@ class DefaultSetkaServerRecoveryService(
     }
 
     override suspend fun uploadKeysToServer(): Result<Unit> {
-        return publishFreshRecoveryKeyAfterLogin()
+        if (!isSetkaSession) return Result.success(Unit)
+        return syncMutex.withLock {
+            runCatching {
+                awaitEncryptionReady()
+                _syncState.value = SetkaServerRecoverySyncState.Uploading
+                log("Re-enabling Setka server backup from settings")
+                publishFreshRecoveryKey()
+                markSyncedAfterUpload()
+            }
+        }
     }
 
     override suspend fun uploadRecoveryKeyIfVerified(recoveryKey: String) {
@@ -311,11 +325,7 @@ class DefaultSetkaServerRecoveryService(
                 Timber.d("Setka recovery key stored on server")
                 log("Setka recovery key stored on server")
             }
-            .onFailure { error ->
-                Timber.w(error, "Failed to store Setka recovery key on server")
-                Log.w(TAG, "Failed to store Setka recovery key on server", error)
-                _syncState.value = SetkaServerRecoverySyncState.Error
-            }
+            .getOrThrow()
     }
 
     private suspend fun updateStateFromServerStatus() {

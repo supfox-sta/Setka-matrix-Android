@@ -52,6 +52,12 @@ fun ThreePidSettingsView(
                 enabled = !privacyBusy,
                 onSelect = { state.eventSink(ThreePidSettingsEvents.SetPhoneVisibility(it)) },
             )
+            VisibilityPreference(
+                title = stringResource(R.string.screen_setka_privacy_call_visibility_title),
+                visibility = privacy?.callVisibility ?: SetkaVisibility.Everyone,
+                enabled = !privacyBusy,
+                onSelect = { state.eventSink(ThreePidSettingsEvents.SetCallVisibility(it)) },
+            )
         }
 
         PreferenceCategory(title = stringResource(R.string.screen_setka_privacy_search_section_title)) {

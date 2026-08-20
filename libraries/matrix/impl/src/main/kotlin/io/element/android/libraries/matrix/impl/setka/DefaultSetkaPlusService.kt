@@ -10,12 +10,15 @@ import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.SingleIn
 import io.element.android.libraries.di.SessionScope
 import io.element.android.libraries.matrix.api.MatrixClient
+import io.element.android.libraries.matrix.api.setka.SetkaPlusCatalog
+import io.element.android.libraries.matrix.api.setka.SetkaPlusCheckoutConfig
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPayment
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentRequest
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentStatus
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPlan
 import io.element.android.libraries.matrix.api.setka.SetkaPlusService
 import io.element.android.libraries.matrix.api.setka.SetkaPlusSubscription
+import io.element.android.libraries.matrix.api.setka.SetkaPlusVoucherRedemption
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -40,12 +43,31 @@ class DefaultSetkaPlusService(
     }
 
     override suspend fun getPlans(): Result<List<SetkaPlusPlan>> {
+        return getPlansCatalog().map { it.plans }
+    }
+
+    override suspend fun getPlansCatalog(): Result<SetkaPlusCatalog> {
         return requestGet<PlansResponse>(setkaPath("/plans"))
-            .map { response ->
-                response.plans
-                    .mapNotNull { it.toDomain() }
-                    .sortedWith(compareBy<SetkaPlusPlan> { it.sortOrder }.thenBy { it.priceRub })
+            .map { it.toCatalog() }
+    }
+
+    override suspend fun getCheckoutConfig(): Result<SetkaPlusCheckoutConfig> {
+        return requestGet<CheckoutConfigResponse>(setkaPath("/config"))
+            .map { it.toDomain() }
+            .recoverCatching {
+                getPlansCatalog().getOrThrow().checkoutConfig
             }
+    }
+
+    override suspend fun redeemVoucher(code: String): Result<SetkaPlusVoucherRedemption> {
+        val trimmed = code.trim()
+        require(trimmed.isNotBlank()) { "Voucher code is empty" }
+        val body = buildJsonObject { put("code", trimmed) }
+        return requestBody<VoucherRedeemResponse>(
+            method = "POST",
+            path = setkaPath("/vouchers/redeem"),
+            body = json.encodeToString(body),
+        ).map { it.toDomain() }
     }
 
     override suspend fun createPayment(plan: SetkaPlusPlan): Result<SetkaPlusPaymentRequest> {
@@ -56,7 +78,7 @@ class DefaultSetkaPlusService(
         }
         return requestBody<PaymentResponse>(
             method = "POST",
-            path = setkaPath("/payments/robokassa/create"),
+            path = setkaPath("/payments/payanyway/create"),
             body = json.encodeToString(body),
         ).map { response -> response.toDomain() }
     }
@@ -133,7 +155,56 @@ private data class SubscriptionResponse(
 @Serializable
 private data class PlansResponse(
     val plans: List<PlanResponse> = emptyList(),
-)
+    @SerialName("payment_mode") val paymentMode: String? = null,
+    @SerialName("checkout_enabled") val checkoutEnabled: Boolean? = null,
+    @SerialName("vouchers_enabled") val vouchersEnabled: Boolean? = null,
+    @SerialName("voucher_footer_text") val voucherFooterText: String? = null,
+) {
+    fun toCatalog(): SetkaPlusCatalog {
+        val paymentModeValue = paymentMode ?: "acquiring_and_vouchers"
+        return SetkaPlusCatalog(
+            plans = plans
+                .mapNotNull { it.toDomain() }
+                .sortedWith(compareBy<SetkaPlusPlan> { it.sortOrder }.thenBy { it.priceRub }),
+            checkoutConfig = SetkaPlusCheckoutConfig(
+                paymentMode = paymentModeValue,
+                checkoutEnabled = checkoutEnabled ?: (paymentModeValue != "vouchers_only"),
+                vouchersEnabled = vouchersEnabled ?: true,
+                voucherFooterText = voucherFooterText.orEmpty().trim(),
+            ),
+        )
+    }
+}
+
+@Serializable
+private data class CheckoutConfigResponse(
+    @SerialName("payment_mode") val paymentMode: String = "acquiring_and_vouchers",
+    @SerialName("checkout_enabled") val checkoutEnabled: Boolean = true,
+    @SerialName("vouchers_enabled") val vouchersEnabled: Boolean = true,
+    @SerialName("voucher_footer_text") val voucherFooterText: String = "",
+) {
+    fun toDomain(): SetkaPlusCheckoutConfig {
+        return SetkaPlusCheckoutConfig(
+            paymentMode = paymentMode,
+            checkoutEnabled = checkoutEnabled,
+            vouchersEnabled = vouchersEnabled,
+            voucherFooterText = voucherFooterText.trim(),
+        )
+    }
+}
+
+@Serializable
+private data class VoucherRedeemResponse(
+    @SerialName("voucher_code") val voucherCode: String = "",
+    val subscription: SubscriptionResponse = SubscriptionResponse(),
+) {
+    fun toDomain(): SetkaPlusVoucherRedemption {
+        return SetkaPlusVoucherRedemption(
+            voucherCode = voucherCode,
+            subscription = subscription.toDomain(),
+        )
+    }
+}
 
 @Serializable
 private data class PlanResponse(

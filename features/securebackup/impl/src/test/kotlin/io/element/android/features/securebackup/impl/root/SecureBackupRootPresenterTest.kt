@@ -21,6 +21,7 @@ import io.element.android.libraries.matrix.api.encryption.RecoveryState
 import io.element.android.libraries.matrix.test.AN_EXCEPTION
 import io.element.android.libraries.matrix.test.core.aBuildMeta
 import io.element.android.libraries.matrix.test.encryption.FakeEncryptionService
+import io.element.android.libraries.matrix.api.setka.SetkaAnalyticsService
 import io.element.android.libraries.matrix.test.setka.FakeSetkaLoginVerificationService
 import io.element.android.libraries.matrix.test.setka.FakeSetkaServerRecoveryService
 import io.element.android.tests.testutils.WarmUpRule
@@ -113,8 +114,15 @@ class SecureBackupRootPresenterTest {
             encryptionService = encryptionService,
             setkaServerRecoveryService = FakeSetkaServerRecoveryService(),
             setkaLoginVerificationService = FakeSetkaLoginVerificationService(),
+            setkaAnalyticsService = FakeSetkaAnalyticsService(),
             buildMeta = aBuildMeta(applicationName = appName),
             snackbarDispatcher = SnackbarDispatcher(),
         )
     }
+}
+
+private class FakeSetkaAnalyticsService : SetkaAnalyticsService {
+    override fun trackEvent(eventName: String, properties: Map<String, String>) = Unit
+    override fun trackSession() = Unit
+    override suspend fun flush() = Unit
 }

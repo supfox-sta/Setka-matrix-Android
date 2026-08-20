@@ -8,6 +8,7 @@
 
 package io.element.android.libraries.push.impl.notifications
 
+import io.element.android.appconfig.SetkaLoginNotificationGuard
 import dev.zacsweers.metro.AppScope
 import dev.zacsweers.metro.ContributesBinding
 import dev.zacsweers.metro.SingleIn
@@ -109,6 +110,9 @@ class DefaultNotificationDrawerManager(
     }
 
     suspend fun onNotifiableEventsReceived(notifiableEvents: List<NotifiableEvent>) {
+        if (SetkaLoginNotificationGuard.shouldSuppressNotifications()) {
+            return
+        }
         val eventsToNotify = notifiableEvents.filter { !appNavigationStateService.appNavigationState.value.shouldIgnoreEvent(it) }
         renderEvents(eventsToNotify)
     }

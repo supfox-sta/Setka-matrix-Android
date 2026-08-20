@@ -17,6 +17,9 @@ sealed interface HomeEvent {
     data object ToggleQuickTheme : HomeEvent
     data object RefreshSetkaPlus : HomeEvent
     data class BuySetkaPlusPlan(val planId: String) : HomeEvent
+    data class SetkaPlusVoucherCodeChanged(val code: String) : HomeEvent
+    data object RedeemSetkaPlusVoucher : HomeEvent
+    data object ClearSetkaPlusVoucherNotice : HomeEvent
     data object ClearSetkaPlusError : HomeEvent
     data object DismissSetkaPlusPaymentResult : HomeEvent
     data object OpenStatusEmojiPicker : HomeEvent

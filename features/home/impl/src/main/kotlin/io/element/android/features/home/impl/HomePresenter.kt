@@ -8,7 +8,6 @@
 
 package io.element.android.features.home.impl
 
-import android.content.Intent
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,8 +23,9 @@ import androidx.compose.runtime.setValue
 import dev.zacsweers.metro.Inject
 import io.element.android.features.announcement.api.Announcement
 import io.element.android.features.announcement.api.AnnouncementService
-import io.element.android.features.home.impl.channels.SetkaPublicChannelsPresenter
 import io.element.android.features.home.impl.channels.SetkaPublicChannelsState
+import io.element.android.features.home.impl.feed.SetkaFeedPresenter
+import io.element.android.features.home.impl.feed.SetkaFeedState
 import io.element.android.features.home.impl.model.HomeContact
 import io.element.android.features.home.impl.recent.RecentRoomSummariesResolver
 import io.element.android.features.home.impl.recent.SetkaRecentRoomsStore
@@ -49,10 +49,10 @@ import io.element.android.libraries.matrix.api.setka.SetkaPlusPaymentFlowState
 import io.element.android.libraries.matrix.api.setka.SetkaPlusPlan
 import io.element.android.libraries.matrix.api.setka.SetkaPlusService
 import io.element.android.libraries.matrix.api.setka.SetkaPlusSubscription
+import io.element.android.libraries.matrix.api.setka.isSetkaCheckoutDisabledError
 import io.element.android.libraries.matrix.api.setka.SetkaServerRecoveryService
 import io.element.android.libraries.setkalite.api.SetkaLiteCoordinator
 import io.element.android.libraries.setkalite.api.SetkaTransferQueue
-import io.element.android.services.toolbox.api.intent.ExternalIntentLauncher
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.setka.fetchSetkaStatusEmojiMxc
 import kotlinx.collections.immutable.ImmutableList
@@ -81,7 +81,6 @@ class HomePresenter(
     private val sessionStore: SessionStore,
     private val announcementService: AnnouncementService,
     private val appPreferencesStore: AppPreferencesStore,
-    private val externalIntentLauncher: ExternalIntentLauncher,
     private val setkaRecentRoomsStore: SetkaRecentRoomsStore,
     private val recentRoomSummariesResolver: RecentRoomSummariesResolver,
     private val setkaPlusService: SetkaPlusService,
@@ -89,7 +88,7 @@ class HomePresenter(
     private val setkaServerRecoveryService: SetkaServerRecoveryService,
     private val setkaLiteCoordinator: SetkaLiteCoordinator,
     private val setkaTransferQueue: SetkaTransferQueue,
-    private val setkaPublicChannelsPresenter: SetkaPublicChannelsPresenter,
+    private val setkaFeedPresenter: SetkaFeedPresenter,
 ) : Presenter<HomeState> {
     private val currentUserWithNeighborsBuilder = CurrentUserWithNeighborsBuilder()
 
@@ -117,7 +116,6 @@ class HomePresenter(
         val canReportBug by remember { rageshakeFeatureAvailability.isAvailable() }.collectAsState(false)
         val roomListState = roomListPresenter.present()
         val homeSpacesState = homeSpacesPresenter.present()
-        val setkaPublicChannelsState = setkaPublicChannelsPresenter.present()
         var contacts by remember { mutableStateOf<ImmutableList<HomeContact>>(persistentListOf()) }
         var setkaPlusState by remember { mutableStateOf(HomeSetkaPlusState()) }
         val paymentFlowState by setkaPlusPaymentCoordinator.flowState.collectAsState()
@@ -129,6 +127,9 @@ class HomePresenter(
                 HomeNavigationBarItem.from(currentHomeNavigationBarItemOrdinal)
             }
         }
+        val setkaFeedState = setkaFeedPresenter.presentFeedTab(
+            feedTabSelected = currentHomeNavigationBarItem == HomeNavigationBarItem.Channels,
+        )
         fun refreshContacts() = coroutineState.launch {
             val updatedContacts = client.getContactList()
                 .getOrNull()
@@ -238,12 +239,15 @@ class HomePresenter(
             }
             try {
                 val subscriptionResult = setkaPlusService.getSubscription()
-                val plansResult = setkaPlusService.getPlans()
+                val catalogResult = setkaPlusService.getPlansCatalog()
+                val checkoutConfigResult = setkaPlusService.getCheckoutConfig()
                 val subscription = subscriptionResult.getOrNull()?.toHomeState()
-                val plans = plansResult.getOrDefault(emptyList()).map { it.toHomeState() }
+                val catalog = catalogResult.getOrNull()
+                val checkoutConfig = checkoutConfigResult.getOrNull() ?: catalog?.checkoutConfig
+                val plans = catalog?.plans.orEmpty().map { it.toHomeState() }
                 val errorMessage = subscriptionResult.exceptionOrNull()?.message
-                    ?: plansResult.exceptionOrNull()?.message
-                    ?: if (plans.isEmpty() && subscription == null) {
+                    ?: catalogResult.exceptionOrNull()?.message
+                    ?: if (plans.isEmpty() && subscription == null && (checkoutConfig?.checkoutEnabled != false)) {
                         "Сервер не вернул тарифы. Проверьте, что на homeserver включён API Сетка Plus."
                     } else {
                         null
@@ -251,6 +255,9 @@ class HomePresenter(
                 setkaPlusState = setkaPlusState.copy(
                     subscription = subscription,
                     plans = plans,
+                    checkoutEnabled = checkoutConfig?.checkoutEnabled ?: true,
+                    vouchersEnabled = checkoutConfig?.vouchersEnabled ?: true,
+                    voucherFooterText = checkoutConfig?.voucherFooterText.orEmpty(),
                     errorMessage = errorMessage,
                 )
             } finally {
@@ -259,6 +266,13 @@ class HomePresenter(
         }
 
         fun buySetkaPlusPlan(planId: String) = coroutineState.launch {
+            if (!setkaPlusState.checkoutEnabled) {
+                setkaPlusState = setkaPlusState.copy(
+                    voucherNoticeIsSuccess = false,
+                    voucherNotice = "Используйте промокод для активации",
+                )
+                return@launch
+            }
             if (setkaPlusState.subscription?.isActive == true) {
                 setkaPlusState = setkaPlusState.copy(errorMessage = "Подписка уже активна")
                 return@launch
@@ -281,23 +295,54 @@ class HomePresenter(
             )
             result.fold(
                 onSuccess = { payment ->
-                    payment.checkoutUrl?.let { checkoutUrl ->
-                        externalIntentLauncher.launch(Intent(Intent.ACTION_VIEW, Uri.parse(checkoutUrl)))
-                    }
-                    if (payment.paymentId.isNotBlank()) {
-                        setkaPlusPaymentCoordinator.beginPayment(payment.paymentId)
-                    }
+                    setkaPlusPaymentCoordinator.openCheckout(
+                        paymentId = payment.paymentId,
+                        checkoutUrl = payment.checkoutUrl,
+                    )
                 },
                 onFailure = { throwable ->
+                    val checkoutDisabled = isSetkaCheckoutDisabledError(throwable)
                     setkaPlusState = setkaPlusState.copy(
                         busyPlanId = null,
-                        errorMessage = throwable.message ?: "Не удалось создать платеж",
+                        checkoutEnabled = if (checkoutDisabled) false else setkaPlusState.checkoutEnabled,
+                        errorMessage = if (checkoutDisabled) null else (throwable.message ?: "Не удалось создать платеж"),
+                        voucherNoticeIsSuccess = false,
+                        voucherNotice = if (checkoutDisabled) "Используйте промокод для активации" else setkaPlusState.voucherNotice,
                     )
                 },
             )
             if (result.isSuccess) {
                 setkaPlusState = setkaPlusState.copy(busyPlanId = null)
             }
+        }
+
+        fun redeemSetkaPlusVoucher() = coroutineState.launch {
+            val code = setkaPlusState.voucherCode.trim()
+            if (code.isBlank()) {
+                setkaPlusState = setkaPlusState.copy(
+                    voucherNoticeIsSuccess = false,
+                    voucherNotice = "Введите промокод",
+                )
+                return@launch
+            }
+            setkaPlusState = setkaPlusState.copy(isRedeemingVoucher = true, voucherNotice = null)
+            setkaPlusService.redeemVoucher(code).fold(
+                onSuccess = { result ->
+                    setkaPlusState = setkaPlusState.copy(
+                        subscription = result.subscription.toHomeState(),
+                        voucherCode = "",
+                        voucherNoticeIsSuccess = true,
+                        voucherNotice = "Промокод активирован",
+                    )
+                },
+                onFailure = { throwable ->
+                    setkaPlusState = setkaPlusState.copy(
+                        voucherNoticeIsSuccess = false,
+                        voucherNotice = io.element.android.libraries.matrix.api.setka.formatSetkaPlusVoucherRedeemError(throwable),
+                    )
+                },
+            )
+            setkaPlusState = setkaPlusState.copy(isRedeemingVoucher = false)
         }
 
         LaunchedEffect(paymentFlowState) {
@@ -350,6 +395,13 @@ class HomePresenter(
                 }
                 HomeEvent.RefreshSetkaPlus -> refreshSetkaPlus(showLoading = setkaPlusState.plans.isEmpty())
                 is HomeEvent.BuySetkaPlusPlan -> buySetkaPlusPlan(event.planId)
+                is HomeEvent.SetkaPlusVoucherCodeChanged -> {
+                    setkaPlusState = setkaPlusState.copy(voucherCode = event.code)
+                }
+                HomeEvent.RedeemSetkaPlusVoucher -> redeemSetkaPlusVoucher()
+                HomeEvent.ClearSetkaPlusVoucherNotice -> {
+                    setkaPlusState = setkaPlusState.copy(voucherNotice = null)
+                }
                 HomeEvent.ClearSetkaPlusError -> {
                     setkaPlusState = setkaPlusState.copy(errorMessage = null)
                 }
@@ -426,8 +478,8 @@ class HomePresenter(
                 }
             }
         }
-        val loadPublicChannelsForDiscovery = remember {
-            suspend { setkaPublicChannelsPresenter.loadPublicChannelsForDiscovery() }
+        val loadPublicChannelsForDiscovery = remember(setkaFeedPresenter) {
+            setkaFeedPresenter.publicChannelsPresenter().discoveryLoader()
         }
         return HomeState(
             currentUserAndNeighbors = currentUserAndNeighbors,
@@ -448,7 +500,7 @@ class HomePresenter(
             showTransferQueueSheet = showTransferQueueSheet,
             canCreateSetkaChannel = setkaServerRecoveryService.isSetkaSession,
             showSetkaChannelsTab = setkaServerRecoveryService.isSetkaSession,
-            setkaPublicChannelsState = setkaPublicChannelsState.takeIf { setkaServerRecoveryService.isSetkaSession },
+            setkaFeedState = setkaFeedState.takeIf { setkaServerRecoveryService.isSetkaSession },
             loadPublicChannelsForDiscovery = loadPublicChannelsForDiscovery,
             recentRoomSummaries = recentRoomSummaries,
             eventSink = ::handleEvent,

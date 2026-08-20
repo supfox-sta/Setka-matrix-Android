@@ -4,4 +4,11 @@
     <string name="screen_create_channel_creating">Creating channel…</string>
     <string name="screen_create_channel_error_creating">The channel could not be created because of an unknown error. Try again later.</string>
     <string name="screen_create_channel_add_people_title">Invite subscribers</string>
+    <string name="screen_setka_channel_tag_label">Channel tag</string>
+    <string name="screen_setka_channel_tag_placeholder">username (without #)</string>
+    <string name="screen_setka_channel_tag_required_hint">Required for public channels — shown in search as #tag.</string>
+    <string name="screen_setka_channel_tag_required_error">Enter a valid tag to create a public channel.</string>
+    <string name="screen_setka_channel_tag_optional_hint">Optional for private channels. Lowercase letters, digits, underscore, 3–32 characters.</string>
+    <string name="screen_setka_channel_category_label">Feed category</string>
+    <string name="screen_setka_channel_category_required_error">Select a category for public channels.</string>
 </resources>

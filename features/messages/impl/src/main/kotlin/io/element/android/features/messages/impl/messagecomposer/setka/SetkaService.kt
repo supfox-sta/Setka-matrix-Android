@@ -46,13 +46,17 @@ class SetkaService(
 
     suspend fun bootstrap(): Result<SetkaBootstrap> {
         val subscription = refreshSubscription().getOrNull()
-        val plans = refreshPlans().getOrDefault(emptyList())
+        val catalog = refreshPlansCatalog().getOrNull()
+        val checkout = refreshCheckoutConfig().getOrNull()
         val packs = refreshStickerPacks().getOrDefault(emptyList())
         return Result.success(
             SetkaBootstrap(
                 subscription = subscription,
-                plans = plans,
+                plans = catalog?.plans.orEmpty(),
                 stickerPacks = packs,
+                checkoutEnabled = checkout?.checkoutEnabled ?: catalog?.checkoutEnabled ?: true,
+                vouchersEnabled = checkout?.vouchersEnabled ?: catalog?.vouchersEnabled ?: true,
+                voucherFooterText = checkout?.voucherFooterText ?: catalog?.voucherFooterText.orEmpty(),
             )
         )
     }
@@ -64,13 +68,36 @@ class SetkaService(
     }
 
     suspend fun refreshPlans(): Result<List<SetkaPlusPlan>> {
+        return refreshPlansCatalog().map { it.plans }
+    }
+
+    suspend fun refreshPlansCatalog(): Result<SetkaPlansCatalog> {
         return requestGet<PlansResponse>(setkaPath("/plans"))
-            .map { response ->
-                response.plans
-                    .mapNotNull { it.toDomain() }
-                    .sortedWith(compareBy<SetkaPlusPlan> { it.sortOrder }.thenBy { it.priceRub })
+            .map { it.toCatalog() }
+    }
+
+    suspend fun refreshCheckoutConfig(): Result<SetkaCheckoutConfig> {
+        return requestGet<CheckoutConfigResponse>(setkaPath("/config"))
+            .map { it.toDomain() }
+            .recoverCatching {
+                refreshPlansCatalog().getOrThrow().let { catalog ->
+                    SetkaCheckoutConfig(
+                        checkoutEnabled = catalog.checkoutEnabled,
+                        vouchersEnabled = catalog.vouchersEnabled,
+                        voucherFooterText = catalog.voucherFooterText,
+                    )
+                }
             }
-            .recover { emptyList() }
+    }
+
+    suspend fun redeemVoucher(code: String): Result<SetkaPlusSubscription> {
+        val trimmed = code.trim()
+        require(trimmed.isNotBlank()) { "Voucher code is empty" }
+        return requestBody<RedeemVoucherBody, VoucherRedeemResponse>(
+            method = "POST",
+            path = setkaPath("/vouchers/redeem"),
+            body = RedeemVoucherBody(code = trimmed),
+        ).map { response -> response.subscription.toDomain() }
     }
 
     suspend fun refreshStickerPacks(): Result<List<SetkaStickerPack>> {
@@ -172,7 +199,7 @@ class SetkaService(
     suspend fun createPlusPayment(plan: SetkaPlusPlan): Result<SetkaPlusPaymentRequest> {
         return requestBody<CreatePaymentBody, PaymentResponse>(
             method = "POST",
-            path = setkaPath("/payments/robokassa/create"),
+            path = setkaPath("/payments/payanyway/create"),
             body = CreatePaymentBody(
                 amount = plan.priceRub,
                 description = plan.name,
@@ -487,6 +514,17 @@ private fun String.escapeHtml(): String {
 }
 
 @Serializable
+private data class RedeemVoucherBody(
+    val code: String,
+)
+
+@Serializable
+private data class VoucherRedeemResponse(
+    @SerialName("voucher_code") val voucherCode: String = "",
+    val subscription: SubscriptionResponse = SubscriptionResponse(),
+)
+
+@Serializable
 private data class SubscriptionResponse(
     val tier: String = "setka_plus",
     @SerialName("plan_name") val planName: String? = null,
@@ -514,9 +552,42 @@ private data class SubscriptionResponse(
 }
 
 @Serializable
+private data class CheckoutConfigResponse(
+    @SerialName("payment_mode") val paymentMode: String? = null,
+    @SerialName("checkout_enabled") val checkoutEnabled: Boolean? = null,
+    @SerialName("vouchers_enabled") val vouchersEnabled: Boolean? = null,
+    @SerialName("voucher_footer_text") val voucherFooterText: String? = null,
+) {
+    fun toDomain(): SetkaCheckoutConfig {
+        val paymentModeValue = paymentMode ?: "acquiring_and_vouchers"
+        return SetkaCheckoutConfig(
+            checkoutEnabled = checkoutEnabled ?: (paymentModeValue != "vouchers_only"),
+            vouchersEnabled = vouchersEnabled ?: true,
+            voucherFooterText = voucherFooterText.orEmpty().trim(),
+        )
+    }
+}
+
+@Serializable
 private data class PlansResponse(
     val plans: List<PlanResponse> = emptyList(),
-)
+    @SerialName("payment_mode") val paymentMode: String? = null,
+    @SerialName("checkout_enabled") val checkoutEnabled: Boolean? = null,
+    @SerialName("vouchers_enabled") val vouchersEnabled: Boolean? = null,
+    @SerialName("voucher_footer_text") val voucherFooterText: String? = null,
+) {
+    fun toCatalog(): SetkaPlansCatalog {
+        val paymentModeValue = paymentMode ?: "acquiring_and_vouchers"
+        return SetkaPlansCatalog(
+            plans = plans
+                .mapNotNull { it.toDomain() }
+                .sortedWith(compareBy<SetkaPlusPlan> { it.sortOrder }.thenBy { it.priceRub }),
+            checkoutEnabled = checkoutEnabled ?: (paymentModeValue != "vouchers_only"),
+            vouchersEnabled = vouchersEnabled ?: true,
+            voucherFooterText = voucherFooterText.orEmpty().trim(),
+        )
+    }
+}
 
 @Serializable
 private data class PlanResponse(

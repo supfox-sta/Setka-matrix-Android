@@ -44,6 +44,7 @@ import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.ThreadId
+import io.element.android.libraries.matrix.api.core.toThreadId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkData
 import io.element.android.libraries.matrix.api.room.JoinedRoom
@@ -100,6 +101,7 @@ class JoinedRoomLoadedFlowNode(
 
     // This is an ugly hack to check activity recreation
     private var currentActivity: Activity? = null
+    private var initialThreadAttached = false
 
     init {
         lifecycle.subscribe(
@@ -115,6 +117,13 @@ class JoinedRoomLoadedFlowNode(
                 analyticsService.finishLongRunningTransaction(LoadJoinedRoomFlow)
                 sessionCoroutineScope.launch {
                     inputs.room.subscribeToSync()
+                }
+                val threadRootId = (inputs.initialElement as? RoomNavigationTarget.Root)?.threadRootId
+                if (!initialThreadAttached && threadRootId != null) {
+                    initialThreadAttached = true
+                    lifecycleScope.launch {
+                        attachThread(threadRootId.toThreadId(), null)
+                    }
                 }
             },
             onDestroy = {

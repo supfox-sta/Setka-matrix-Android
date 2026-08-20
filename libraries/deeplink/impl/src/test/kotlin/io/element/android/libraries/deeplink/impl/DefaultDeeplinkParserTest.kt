@@ -46,7 +46,9 @@ class DefaultDeeplinkParserTest {
         const val A_URI_SETKA_PLUS_PAYMENT_FAIL =
             "elementx://open/@alice:server.org/setka-plus/payment/fail?payment_id=pay-456"
         const val A_HTTPS_SETKA_PAYMENT_SUCCESS =
-            "https://matrix.setka-matrix.ru/setka/robokassa/return/success?user_id=%40alice%3Aserver.org&payment_id=pay-789"
+            "https://matrix.setka-matrix.ru/setka/payanyway/return/success?user_id=%40alice%3Aserver.org&payment_id=pay-789"
+        const val A_HTTPS_SETKA_PAYMENT_SUCCESS_LEGACY_ROBOKASSA =
+            "https://matrix.setka-matrix.ru/setka/robokassa/return/success?user_id=%40alice%3Aserver.org&payment_id=pay-legacy"
     }
 
     @Test
@@ -92,6 +94,14 @@ class DefaultDeeplinkParserTest {
                 DeeplinkData.SetkaPlusPaymentReturn(
                     sessionId = A_SESSION_ID,
                     paymentId = "pay-789",
+                    outcome = SetkaPlusPaymentReturnOutcome.SUCCESS,
+                )
+            )
+        assertThat(sut.getFromIntent(createIntent(A_HTTPS_SETKA_PAYMENT_SUCCESS_LEGACY_ROBOKASSA)))
+            .isEqualTo(
+                DeeplinkData.SetkaPlusPaymentReturn(
+                    sessionId = A_SESSION_ID,
+                    paymentId = "pay-legacy",
                     outcome = SetkaPlusPaymentReturnOutcome.SUCCESS,
                 )
             )

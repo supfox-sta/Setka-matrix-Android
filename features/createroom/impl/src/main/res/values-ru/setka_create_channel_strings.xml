@@ -4,4 +4,11 @@
     <string name="screen_create_channel_creating">Создаём канал…</string>
     <string name="screen_create_channel_error_creating">Не удалось создать канал из‑за неизвестной ошибки. Попробуйте позже.</string>
     <string name="screen_create_channel_add_people_title">Пригласить участников</string>
+    <string name="screen_setka_channel_tag_label">Тег канала</string>
+    <string name="screen_setka_channel_tag_placeholder">username (без #)</string>
+    <string name="screen_setka_channel_tag_required_hint">Обязателен для публичных каналов — отображается в поиске как #тег.</string>
+    <string name="screen_setka_channel_tag_required_error">Укажите корректный тег, чтобы создать публичный канал.</string>
+    <string name="screen_setka_channel_tag_optional_hint">Для приватных каналов необязателен. Строчные буквы, цифры, _, 3–32 символа.</string>
+    <string name="screen_setka_channel_category_label">Категория ленты</string>
+    <string name="screen_setka_channel_category_required_error">Выберите категорию для публичного канала.</string>
 </resources>

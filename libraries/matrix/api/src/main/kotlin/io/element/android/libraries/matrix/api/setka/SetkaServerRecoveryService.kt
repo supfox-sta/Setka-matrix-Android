@@ -46,6 +46,10 @@ interface SetkaServerRecoveryService {
 
     suspend fun refreshAndSync(): Result<Unit>
 
+    /**
+     * Re-enables S/Key server backup from settings (toggle ON).
+     * Does not require login verification — the user already has an active session.
+     */
     suspend fun uploadKeysToServer(): Result<Unit>
 
     suspend fun uploadRecoveryKeyIfVerified(recoveryKey: String)

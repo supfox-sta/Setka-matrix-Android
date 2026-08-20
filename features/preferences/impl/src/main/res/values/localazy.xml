@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
   <string name="full_screen_intent_banner_message">"To ensure you never miss an important call, please change your settings to allow full-screen notifications when your phone is locked."</string>
   <string name="full_screen_intent_banner_title">"Enhance your call experience"</string>
@@ -162,6 +162,19 @@ If you proceed, some of your settings may change."</string>
   <string name="screen_preferences_setka_plus_buy">"Купить"</string>
   <string name="screen_preferences_setka_plus_processing">"Открываю оплату..."</string>
   <string name="screen_preferences_setka_plus_refresh">"Обновить статус"</string>
+  <string name="screen_preferences_setka_plus_voucher_title">"Промокод"</string>
+  <string name="screen_preferences_setka_plus_voucher_description">"Введите промокод, чтобы активировать или продлить Сетка Plus."</string>
+  <string name="screen_preferences_setka_plus_voucher_hint">"SETKA-XXXX-XXXX"</string>
+  <string name="screen_preferences_setka_plus_voucher_redeem">"Активировать"</string>
+  <string name="screen_preferences_setka_plus_voucher_success">"Промокод активирован"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_empty">"Введите промокод"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_generic">"Не удалось активировать промокод"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_not_found">"Промокод не найден"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_invalid">"Промокод недействителен"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_expired">"Срок действия промокода истёк"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_limit">"Промокод уже использован максимальное число раз"</string>
+  <string name="screen_preferences_setka_plus_voucher_error_already">"Вы уже активировали этот промокод"</string>
+  <string name="screen_preferences_setka_plus_checkout_disabled">"Оплата картой временно недоступна."</string>
 
   <string name="screen_setka_privacy_section_title">"Приватность"</string>
   <string name="screen_setka_privacy_visibility_section_title">"Кто видит мои данные"</string>
@@ -172,6 +185,7 @@ If you proceed, some of your settings may change."</string>
   <string name="screen_setka_privacy_discoverable_msisdn_subtitle">"Если выключено, поиск по номеру не найдет ваш аккаунт"</string>
   <string name="screen_setka_privacy_last_seen_title">"Время последнего входа"</string>
   <string name="screen_setka_privacy_phone_visibility_title">"Телефон"</string>
+  <string name="screen_setka_privacy_call_visibility_title">"Кто может мне звонить?"</string>
   <string name="screen_setka_privacy_email_visibility_title">"Почта"</string>
   <string name="screen_setka_privacy_everyone">"Все"</string>
   <string name="screen_setka_privacy_contacts">"Контакты"</string>

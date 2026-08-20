@@ -43,6 +43,7 @@ dependencies {
     implementation(projects.services.analytics.api)
     implementation(projects.libraries.testtags)
     api(projects.features.roomdetailsedit.api)
+    implementation(projects.features.securityandprivacy.api)
     api(projects.services.apperror.api)
     implementation(libs.coil.compose)
 

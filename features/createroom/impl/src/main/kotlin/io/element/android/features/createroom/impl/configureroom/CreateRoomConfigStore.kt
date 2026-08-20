@@ -58,6 +58,18 @@ class CreateRoomConfigStore(
         }
     }
 
+    fun setChannelCategory(categoryId: String) {
+        createRoomConfigFlow.getAndUpdate { config ->
+            config.copy(channelCategoryId = categoryId.takeIf { it.isNotBlank() })
+        }
+    }
+
+    fun setChannelTag(tag: String) {
+        createRoomConfigFlow.getAndUpdate { config ->
+            config.copy(channelTag = tag.takeIf { it.isNotEmpty() })
+        }
+    }
+
     fun setAvatarUri(uri: Uri?, cached: Boolean = false) {
         cachedAvatarUri = uri.takeIf { cached }
         createRoomConfigFlow.getAndUpdate { config ->

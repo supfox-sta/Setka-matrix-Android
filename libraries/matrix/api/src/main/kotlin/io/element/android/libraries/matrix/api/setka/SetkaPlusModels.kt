@@ -29,6 +29,23 @@ data class SetkaPlusPlan(
     val sortOrder: Int = 0,
 )
 
+data class SetkaPlusCheckoutConfig(
+    val paymentMode: String = "acquiring_and_vouchers",
+    val checkoutEnabled: Boolean = true,
+    val vouchersEnabled: Boolean = true,
+    val voucherFooterText: String = "",
+)
+
+data class SetkaPlusCatalog(
+    val plans: List<SetkaPlusPlan>,
+    val checkoutConfig: SetkaPlusCheckoutConfig,
+)
+
+data class SetkaPlusVoucherRedemption(
+    val voucherCode: String,
+    val subscription: SetkaPlusSubscription,
+)
+
 data class SetkaPlusPaymentRequest(
     val paymentId: String,
     val checkoutUrl: String?,
@@ -63,7 +80,7 @@ data class SetkaPlusPayment(
 sealed interface SetkaPlusPaymentFlowState {
     data object Idle : SetkaPlusPaymentFlowState
 
-    /** User opened Robokassa checkout; waiting for ResultURL confirmation on server. */
+    /** User opened PayAnyWay checkout; waiting for Pay URL confirmation on server. */
     data class Confirming(val paymentId: String) : SetkaPlusPaymentFlowState
 
     /** Server confirmed payment via ResultURL and subscription is active. */
@@ -108,4 +125,59 @@ fun formatSetkaPlusPaymentStatus(status: SetkaPlusPaymentStatus?): String = when
     SetkaPlusPaymentStatus.FAILED -> "Оплата не прошла"
     SetkaPlusPaymentStatus.CANCELED -> "Оплата отменена"
     null -> "Статус неизвестен"
+}
+
+fun isSetkaCheckoutDisabledError(throwable: Throwable): Boolean {
+    if (throwable is io.element.android.libraries.matrix.api.exception.ClientException.MatrixApi) {
+        if (throwable.code == "M_FORBIDDEN") {
+            val combined = "${throwable.message.orEmpty()} ${throwable.details.orEmpty()}".lowercase()
+            if (
+                "voucher" in combined ||
+                "checkout" in combined ||
+                "промокод" in combined ||
+                "оплат" in combined && "недоступ" in combined
+            ) {
+                return true
+            }
+        }
+    }
+    val raw = buildString {
+        append(throwable.message.orEmpty())
+        if (throwable is io.element.android.libraries.matrix.api.exception.ClientException) {
+            append(' ')
+            append(throwable.details.orEmpty())
+        }
+        throwable.cause?.message?.let {
+            append(' ')
+            append(it)
+        }
+    }.lowercase()
+    return "403" in raw ||
+        "forbidden" in raw ||
+        "checkout is disabled" in raw ||
+        "online checkout is disabled" in raw ||
+        "use a voucher" in raw
+}
+
+fun formatSetkaPlusVoucherRedeemError(throwable: Throwable): String {
+    val raw = buildString {
+        append(throwable.message.orEmpty())
+        if (throwable is io.element.android.libraries.matrix.api.exception.ClientException) {
+            append(' ')
+            append(throwable.details.orEmpty())
+        }
+        throwable.cause?.message?.let {
+            append(' ')
+            append(it)
+        }
+    }.lowercase()
+    return when {
+        "not found" in raw || "не найден" in raw -> "Промокод не найден"
+        "expired" in raw || "истёк" in raw || "истек" in raw -> "Срок действия промокода истёк"
+        "limit reached" in raw || "максимальное число" in raw -> "Промокод уже использован максимальное число раз"
+        "already redeemed" in raw || "уже активировали" in raw -> "Вы уже активировали этот промокод"
+        "inactive" in raw || "недействител" in raw -> "Промокод недействителен"
+        "invalid voucher" in raw -> "Промокод недействителен"
+        else -> throwable.message?.takeIf { it.isNotBlank() } ?: "Не удалось активировать промокод"
+    }
 }

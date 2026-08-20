@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -92,7 +93,7 @@ import dev.chrisbanes.haze.materials.HazeMaterials
 import dev.chrisbanes.haze.rememberHazeState
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
-import io.element.android.features.home.impl.channels.SetkaPublicChannelsContentView
+import io.element.android.features.home.impl.feed.SetkaFeedView
 import io.element.android.features.home.impl.channels.SetkaChannelDiscoveryOverlay
 import io.element.android.features.home.impl.components.ContactsContentView
 import io.element.android.features.home.impl.components.SetkaLiteSuggestionBanner
@@ -121,6 +122,7 @@ import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
 import io.element.android.libraries.designsystem.components.avatar.AvatarType
+import io.element.android.libraries.designsystem.theme.components.CircularProgressIndicator
 import io.element.android.libraries.designsystem.theme.components.FloatingActionButton
 import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconButton
@@ -134,10 +136,13 @@ import io.element.android.libraries.designsystem.theme.LocalSetkaCustomization
 import io.element.android.libraries.designsystem.theme.parseSetkaColorOrNull
 import io.element.android.libraries.designsystem.utils.snackbar.SnackbarHost
 import io.element.android.libraries.designsystem.utils.snackbar.rememberSnackbarHostState
+import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.setka.formatSetkaPlusStatus
 import io.element.android.libraries.matrix.ui.setka.SetkaPlusPaymentFlowBanner
+import io.element.android.libraries.matrix.ui.setka.SetkaPlusVoucherCard
+import io.element.android.libraries.matrix.ui.setka.SetkaPlusVoucherResultBannerHost
 import io.element.android.libraries.matrix.api.user.MatrixUser
 import io.element.android.libraries.matrix.ui.model.getAvatarData
 import androidx.core.content.ContextCompat
@@ -165,6 +170,8 @@ fun HomeView(
     onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
     onJoinPublicChannelClick: (RoomId) -> Unit = {},
+    onOpenRoomEvent: (RoomId, EventId) -> Unit = { roomId, _ -> onRoomClick(roomId) },
+    onSharePost: (RoomId, EventId) -> Unit = { _, _ -> },
     onRoomSettingsClick: (roomId: RoomId) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     onReportRoomClick: (roomId: RoomId) -> Unit,
@@ -248,6 +255,8 @@ fun HomeView(
                 onUpdateContact = onUpdateContact,
                 onCreateSpaceClick = { if (firstThrottler.canHandle()) onCreateSpaceClick() },
                 onJoinPublicChannelClick = { if (firstThrottler.canHandle()) onJoinPublicChannelClick(it) },
+                onOpenRoomEvent = { roomId, eventId -> if (firstThrottler.canHandle()) onOpenRoomEvent(roomId, eventId) },
+                onSharePost = { roomId, eventId -> if (firstThrottler.canHandle()) onSharePost(roomId, eventId) },
                 onMenuActionClick = onMenuActionClick,
                 homeBackgroundColor = homeBackgroundColor,
                 homeBackgroundBitmap = homeBackgroundBitmap,
@@ -288,6 +297,8 @@ private fun HomeScaffold(
     onUpdateContact: suspend (HomeContact, String, String?, String?) -> Boolean,
     onCreateSpaceClick: () -> Unit,
     onJoinPublicChannelClick: (RoomId) -> Unit,
+    onOpenRoomEvent: (RoomId, EventId) -> Unit,
+    onSharePost: (RoomId, EventId) -> Unit,
     onMenuActionClick: (RoomListMenuAction) -> Unit,
     homeBackgroundColor: Color,
     homeBackgroundBitmap: ImageBitmap?,
@@ -588,11 +599,14 @@ private fun HomeScaffold(
                         )
                     }
                     HomeNavigationBarItem.Channels -> {
-                        val channelsState = state.setkaPublicChannelsState
-                        if (channelsState != null) {
-                            SetkaPublicChannelsContentView(
-                                state = channelsState,
-                                onChannelClick = onRoomClick,
+                        val feedState = state.setkaFeedState
+                        if (feedState != null) {
+                            SetkaFeedView(
+                                state = feedState,
+                                channelsState = feedState.publicChannelsState,
+                                onOpenPostComments = onOpenRoomEvent,
+                                onSharePost = onSharePost,
+                                onOpenChannel = onJoinPublicChannelClick,
                                 contentPadding = PaddingValues(
                                     start = padding.calculateStartPadding(LocalLayoutDirection.current),
                                     end = padding.calculateEndPadding(LocalLayoutDirection.current),
@@ -603,6 +617,16 @@ private fun HomeScaffold(
                                     .consumeWindowInsets(padding)
                                     .hazeSource(state = hazeState),
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(padding)
+                                    .consumeWindowInsets(padding),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator()
+                            }
                         }
                     }
                 }
@@ -630,18 +654,7 @@ private fun HomeScaffold(
         },
         floatingActionButton = {
             when (state.currentHomeNavigationBarItem) {
-                HomeNavigationBarItem.Channels -> {
-                    FloatingActionButton(
-                        onClick = { showChannelDiscovery = true },
-                        containerColor = fabContainerColor,
-                        contentColor = fabIconColor,
-                    ) {
-                        Icon(
-                            imageVector = CompoundIcons.Search(),
-                            contentDescription = stringResource(R.string.screen_home_channels_discover),
-                        )
-                    }
-                }
+                HomeNavigationBarItem.Channels -> Unit
                 else -> if (state.displayActions) {
                 val isContactsTab = false
                 FloatingActionButton(
@@ -681,7 +694,7 @@ private fun HomeScaffold(
     SetkaChannelDiscoveryOverlay(
         visible = showChannelDiscovery,
         onDismiss = { showChannelDiscovery = false },
-        onChannelClick = onRoomClick,
+        onChannelClick = onJoinPublicChannelClick,
         loadChannels = state.loadPublicChannelsForDiscovery,
     )
 
@@ -822,13 +835,14 @@ private fun HomeScaffold(
         },
         label = "setkaPlusOverlay",
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(ElementTheme.colors.bgCanvasDefault)
-                .safeDrawingPadding(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(ElementTheme.colors.bgCanvasDefault)
+                    .safeDrawingPadding(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -860,26 +874,30 @@ private fun HomeScaffold(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 item(key = "setka-plus-promo") {
-                    HomeSetkaPlusPromoCard()
+                    if (state.setkaPlusState.checkoutEnabled) {
+                        HomeSetkaPlusPromoCard()
+                    }
                 }
 
-                item(key = "setka-plus-status") {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.screen_home_setka_plus_subscription_status),
-                            style = ElementTheme.typography.fontBodyLgMedium,
-                        )
-                        Text(formatSetkaPlusStatus(state.setkaPlusState.subscription?.status))
-                        Text(
-                            text = state.setkaPlusState.subscription?.planName ?: stringResource(R.string.screen_home_setka_plus_title),
-                            color = ElementTheme.colors.textSecondary,
-                        )
+                if (state.setkaPlusState.checkoutEnabled) {
+                    item(key = "setka-plus-status") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.screen_home_setka_plus_subscription_status),
+                                style = ElementTheme.typography.fontBodyLgMedium,
+                            )
+                            Text(formatSetkaPlusStatus(state.setkaPlusState.subscription?.status))
+                            Text(
+                                text = state.setkaPlusState.subscription?.planName ?: stringResource(R.string.screen_home_setka_plus_title),
+                                color = ElementTheme.colors.textSecondary,
+                            )
+                        }
                     }
                 }
 
@@ -901,54 +919,80 @@ private fun HomeScaffold(
                     }
                 }
 
-                if (state.setkaPlusState.plans.isEmpty() && !state.setkaPlusState.isLoading) {
-                    item(key = "setka-plus-no-plans") {
-                        Text(
-                            text = stringResource(R.string.screen_home_setka_plus_no_plans),
-                            color = ElementTheme.colors.textSecondary,
+                if (state.setkaPlusState.vouchersEnabled) {
+                    item(key = "setka-plus-voucher") {
+                        SetkaPlusVoucherCard(
+                            title = stringResource(R.string.screen_home_setka_plus_voucher_title),
+                            voucherCode = state.setkaPlusState.voucherCode,
+                            onVoucherCodeChange = { code ->
+                                state.eventSink(HomeEvent.SetkaPlusVoucherCodeChanged(code))
+                            },
+                            hintText = stringResource(R.string.screen_home_setka_plus_voucher_hint),
+                            footerText = state.setkaPlusState.voucherFooterText,
+                            defaultFooterText = stringResource(R.string.screen_home_setka_plus_voucher_description),
+                            redeemButtonText = stringResource(R.string.screen_home_setka_plus_voucher_redeem),
+                            processingText = stringResource(R.string.screen_home_setka_plus_voucher_processing),
+                            isRedeeming = state.setkaPlusState.isRedeemingVoucher,
+                            onRedeem = { state.eventSink(HomeEvent.RedeemSetkaPlusVoucher) },
+                            subscriptionStatusLine = if (!state.setkaPlusState.checkoutEnabled) {
+                                "${stringResource(R.string.screen_home_setka_plus_subscription_status)}: ${formatSetkaPlusStatus(state.setkaPlusState.subscription?.status)}"
+                            } else {
+                                null
+                            },
                         )
                     }
                 }
 
-                items(state.setkaPlusState.plans.filter { it.active }, key = { it.id }) { plan ->
-                    val isOwned = state.setkaPlusState.subscription?.isActive == true &&
-                        state.setkaPlusState.subscription?.tier == plan.id
-                    val hasActiveSubscription = state.setkaPlusState.subscription?.isActive == true
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(plan.name, style = ElementTheme.typography.fontBodyLgMedium)
-                        Text(
-                            text = stringResource(
-                                R.string.screen_home_setka_plus_plan_price,
-                                plan.priceRub,
-                                plan.durationDays,
-                            ),
-                            color = ElementTheme.colors.textSecondary,
-                        )
-                        plan.features.forEach { feature ->
+                if (state.setkaPlusState.checkoutEnabled) {
+                    if (state.setkaPlusState.plans.isEmpty() && !state.setkaPlusState.isLoading) {
+                        item(key = "setka-plus-no-plans") {
                             Text(
-                                text = "- $feature",
+                                text = stringResource(R.string.screen_home_setka_plus_no_plans),
                                 color = ElementTheme.colors.textSecondary,
                             )
                         }
-                        FilledTonalButton(
-                            onClick = { state.eventSink(HomeEvent.BuySetkaPlusPlan(plan.id)) },
-                            enabled = !hasActiveSubscription && !isOwned && state.setkaPlusState.busyPlanId == null,
+                    }
+
+                    items(state.setkaPlusState.plans.filter { it.active }, key = { it.id }) { plan ->
+                        val isOwned = state.setkaPlusState.subscription?.isActive == true &&
+                            state.setkaPlusState.subscription?.tier == plan.id
+                        val hasActiveSubscription = state.setkaPlusState.subscription?.isActive == true
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(ElementTheme.colors.bgSubtleSecondary, RoundedCornerShape(20.dp))
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
+                            Text(plan.name, style = ElementTheme.typography.fontBodyLgMedium)
                             Text(
-                                if (isOwned) {
-                                    stringResource(R.string.screen_home_setka_plus_plan_current)
-                                } else if (state.setkaPlusState.busyPlanId == plan.id) {
-                                    stringResource(R.string.screen_home_setka_plus_processing)
-                                } else {
-                                    stringResource(R.string.screen_home_setka_plus_plan_buy)
-                                }
+                                text = stringResource(
+                                    R.string.screen_home_setka_plus_plan_price,
+                                    plan.priceRub,
+                                    plan.durationDays,
+                                ),
+                                color = ElementTheme.colors.textSecondary,
                             )
+                            plan.features.forEach { feature ->
+                                Text(
+                                    text = "- $feature",
+                                    color = ElementTheme.colors.textSecondary,
+                                )
+                            }
+                            FilledTonalButton(
+                                onClick = { state.eventSink(HomeEvent.BuySetkaPlusPlan(plan.id)) },
+                                enabled = !hasActiveSubscription && !isOwned && state.setkaPlusState.busyPlanId == null,
+                            ) {
+                                Text(
+                                    if (isOwned) {
+                                        stringResource(R.string.screen_home_setka_plus_plan_current)
+                                    } else if (state.setkaPlusState.busyPlanId == plan.id) {
+                                        stringResource(R.string.screen_home_setka_plus_processing)
+                                    } else {
+                                        stringResource(R.string.screen_home_setka_plus_plan_buy)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -964,6 +1008,17 @@ private fun HomeScaffold(
                     }
                 }
             }
+            }
+
+            SetkaPlusVoucherResultBannerHost(
+                message = state.setkaPlusState.voucherNotice,
+                isSuccess = state.setkaPlusState.voucherNoticeIsSuccess,
+                onDismiss = { state.eventSink(HomeEvent.ClearSetkaPlusVoucherNotice) },
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 72.dp, start = 16.dp, end = 16.dp),
+            )
         }
     }
 
