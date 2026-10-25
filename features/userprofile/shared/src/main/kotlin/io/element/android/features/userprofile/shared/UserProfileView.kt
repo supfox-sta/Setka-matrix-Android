@@ -105,6 +105,7 @@ fun UserProfileView(
                 badgeEmojiMxcUrl = state.badgeEmojiMxcUrl,
                 statusEmojiMxcUrl = state.statusEmojiMxcUrl,
                 profileBackgroundMxcUrl = state.profileBackgroundMxcUrl,
+                profileBackgroundVideoPath = state.profileBackgroundVideoPath,
                 lastSeenText = state.lastSeenText,
                 verificationState = state.verificationState,
                 openAvatarPreview = { avatarUrl ->

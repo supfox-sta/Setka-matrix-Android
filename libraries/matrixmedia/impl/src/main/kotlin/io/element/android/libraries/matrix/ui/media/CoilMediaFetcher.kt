@@ -16,6 +16,7 @@ import coil3.fetch.SourceFetchResult
 import io.element.android.libraries.matrix.api.media.MatrixMediaLoader
 import io.element.android.libraries.matrix.api.media.MediaSource
 import io.element.android.libraries.matrix.api.media.toFile
+import kotlinx.coroutines.delay
 import okio.Buffer
 import okio.FileSystem
 import okio.Path.Companion.toOkioPath
@@ -65,25 +66,37 @@ internal class CoilMediaFetcher(
     }
 
     private suspend fun fetchContent(mediaSource: MediaSource): FetchResult? {
-        return mediaLoader.loadMediaContent(
-            source = mediaSource,
-        ).map { byteArray ->
-            byteArray.asSourceResult()
-        }.onFailure {
-            Timber.e(it)
-        }.getOrNull()
+        repeat(MAX_ATTEMPTS) { attempt ->
+            val result = mediaLoader.loadMediaContent(source = mediaSource)
+            result.getOrNull()?.let { return it.asSourceResult() }
+            result.exceptionOrNull()?.let { Timber.w(it, "Content load failed (attempt ${attempt + 1})") }
+            if (attempt < MAX_ATTEMPTS - 1) delay(RETRY_DELAY_MS * (attempt + 1))
+        }
+        return null
+    }
+
+    private companion object {
+        const val MAX_ATTEMPTS = 3
+        const val RETRY_DELAY_MS = 600L
     }
 
     private suspend fun fetchThumbnail(mediaSource: MediaSource, kind: MediaRequestData.Kind.Thumbnail): FetchResult? {
-        return mediaLoader.loadMediaThumbnail(
-            source = mediaSource,
-            width = kind.width,
-            height = kind.height,
-        ).map { byteArray ->
-            byteArray.asSourceResult()
-        }.onFailure {
-            Timber.e(it)
-        }.getOrNull()
+        // Setka: a single failed request used to leave the avatar empty until the app restarted.
+        // Retry a few times with a short back-off, then fall back to the full image.
+        repeat(MAX_ATTEMPTS) { attempt ->
+            val result = mediaLoader.loadMediaThumbnail(
+                source = mediaSource,
+                width = kind.width,
+                height = kind.height,
+            )
+            result.getOrNull()?.let { return it.asSourceResult() }
+            result.exceptionOrNull()?.let { Timber.w(it, "Thumbnail load failed (attempt ${attempt + 1})") }
+            if (attempt < MAX_ATTEMPTS - 1) delay(RETRY_DELAY_MS * (attempt + 1))
+        }
+        return mediaLoader.loadMediaContent(source = mediaSource)
+            .map { it.asSourceResult() }
+            .onFailure { Timber.e(it) }
+            .getOrNull()
     }
 
     private fun ByteArray.asSourceResult(): SourceFetchResult {

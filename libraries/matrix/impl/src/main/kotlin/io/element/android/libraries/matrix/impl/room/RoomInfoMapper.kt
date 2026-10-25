@@ -8,7 +8,9 @@
 
 package io.element.android.libraries.matrix.impl.room
 
+import io.element.android.libraries.core.data.tryOrNull
 import io.element.android.libraries.matrix.api.core.EventId
+import io.element.android.libraries.matrix.api.core.MatrixPatterns
 import io.element.android.libraries.matrix.api.core.RoomAlias
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
@@ -51,8 +53,8 @@ class RoomInfoMapper {
             joinRule = it.joinRule?.map(),
             isSpace = it.isSpace,
             isFavorite = it.isFavourite,
-            canonicalAlias = it.canonicalAlias?.let(::RoomAlias),
-            alternativeAliases = it.alternativeAliases.map(::RoomAlias).toImmutableList(),
+            canonicalAlias = it.canonicalAlias.toRoomAliasOrNull(),
+            alternativeAliases = it.alternativeAliases.mapNotNull { alias -> alias.toRoomAliasOrNull() }.toImmutableList(),
             currentUserMembership = it.membership.map(),
             inviter = it.inviter?.let(RoomMemberMapper::map),
             activeMembersCount = it.activeMembersCount.toLong(),
@@ -100,6 +102,11 @@ fun RoomHero.map(): MatrixUser = MatrixUser(
     displayName = displayName,
     avatarUrl = avatarUrl
 )
+
+private fun String?.toRoomAliasOrNull(): RoomAlias? {
+    val value = this?.takeIf { MatrixPatterns.isRoomAlias(it) } ?: return null
+    return tryOrNull { RoomAlias(value) }
+}
 
 fun mapPowerLevels(roomPowerLevels: RustRoomPowerLevels): RoomPowerLevels {
     return RoomPowerLevels(

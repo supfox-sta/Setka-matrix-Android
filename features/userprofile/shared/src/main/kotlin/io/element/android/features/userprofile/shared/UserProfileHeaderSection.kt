@@ -8,6 +8,17 @@
 
 package io.element.android.features.userprofile.shared
 
+import android.net.Uri
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -77,7 +88,8 @@ fun UserProfileHeaderSection(
     openAvatarPreview: (url: String) -> Unit,
     onUserIdClick: () -> Unit,
     withdrawVerificationClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    profileBackgroundVideoPath: String? = null,
 ) {
     val baseColor = parseSetkaColorOrNull(profileColorHex) ?: ElementTheme.colors.bgSubtlePrimary
     val gradient = Brush.verticalGradient(
@@ -108,7 +120,9 @@ fun UserProfileHeaderSection(
                 .background(baseColor),
             contentAlignment = Alignment.Center,
         ) {
-            if (!profileBackgroundMxcUrl.isNullOrBlank()) {
+            if (profileBackgroundVideoPath != null) {
+                ProfileVideoBackground(path = profileBackgroundVideoPath, modifier = Modifier.matchParentSize())
+            } else if (!profileBackgroundMxcUrl.isNullOrBlank()) {
                 AsyncImage(
                     model = MediaRequestData(MediaSource(profileBackgroundMxcUrl), MediaRequestData.Kind.Content),
                     contentDescription = null,
@@ -298,5 +312,31 @@ internal fun UserProfileHeaderSectionWithVerificationViolationPreview() = Elemen
         openAvatarPreview = {},
         onUserIdClick = {},
         withdrawVerificationClick = {},
+    )
+}
+
+/** Muted, looping video behind the profile header (Setka Plus). */
+@Composable
+private fun ProfileVideoBackground(path: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val player = remember(path) {
+        ExoPlayer.Builder(context).build().apply {
+            setMediaItem(MediaItem.fromUri(Uri.fromFile(File(path))))
+            repeatMode = Player.REPEAT_MODE_ALL
+            volume = 0f
+            playWhenReady = true
+            prepare()
+        }
+    }
+    DisposableEffect(player) { onDispose { player.release() } }
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            PlayerView(ctx).apply {
+                useController = false
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                this.player = player
+            }
+        },
     )
 }

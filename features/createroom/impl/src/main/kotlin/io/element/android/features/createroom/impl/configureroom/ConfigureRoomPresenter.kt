@@ -261,6 +261,15 @@ class ConfigureRoomPresenter(
     private fun channelTopic(config: CreateRoomConfig): String =
         SetkaChannelConfig.formatChannelTopic(config.topic, config.channelTag)
 
+    private fun publicRoomAliasName(
+        config: CreateRoomConfig,
+        visibility: RoomVisibilityState.Public,
+    ): java.util.Optional<String> {
+        val fromTag = SetkaChannelConfig.normalizeChannelTag(config.channelTag).takeIf { isChannel }
+        val fromAddress = visibility.roomAddress().orElse(null)
+        return java.util.Optional.ofNullable(fromTag ?: fromAddress)
+    }
+
     private fun buildCreateRoomParameters(config: CreateRoomConfig, avatarUrl: String?): CreateRoomParameters {
         val topic = when {
             isChannel -> channelTopic(config)
@@ -284,7 +293,7 @@ class ConfigureRoomPresenter(
                     preset = RoomPreset.PUBLIC_CHAT,
                     invite = config.invites.map { it.userId },
                     avatar = avatarUrl,
-                    roomAliasName = config.visibilityState.roomAddress(),
+                    roomAliasName = publicRoomAliasName(config, config.visibilityState),
                     isSpace = isSpace,
                 )
             }
@@ -330,8 +339,16 @@ class ConfigureRoomPresenter(
 
             if (isChannel) {
                 val joinedRoom = matrixClient.getJoinedRoom(roomId)
+                val topic = channelTopic(config)
+                joinedRoom?.setTopic(topic)
+                    ?.onFailure { Timber.w(it, "Failed to set channel topic for $roomId") }
                 joinedRoom?.updateHistoryVisibility(RoomHistoryVisibility.WorldReadable)
                     ?.onFailure { Timber.w(it, "Failed to set channel history visibility for $roomId") }
+                joinedRoom?.powerLevels()?.getOrNull()?.let { current ->
+                    joinedRoom.updatePowerLevels(
+                        current.copy(eventsDefault = SetkaChannelConfig.MODERATOR_POWER_LEVEL)
+                    ).onFailure { Timber.w(it, "Failed to set channel events_default for $roomId") }
+                }
                 val joinRule = config.visibilityState.joinRuleItem.toJoinRule()
                 if (SetkaChannelConfig.isDiscoverableJoinRule(joinRule)) {
                     val publishResult = matrixClient.publishSetkaChannelWhenReady(

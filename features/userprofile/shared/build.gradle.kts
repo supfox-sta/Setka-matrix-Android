@@ -39,6 +39,8 @@ dependencies {
     api(projects.features.userprofile.api)
     api(projects.services.apperror.api)
     implementation(libs.coil.compose)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
     implementation(projects.features.startchat.api)
     implementation(projects.services.analytics.api)
 

@@ -40,6 +40,7 @@ import io.element.android.libraries.designsystem.utils.snackbar.collectSnackbarM
 import io.element.android.libraries.matrix.api.MatrixClient
 import io.element.android.libraries.matrix.api.core.RoomId
 import io.element.android.libraries.matrix.api.core.UserId
+import io.element.android.libraries.matrix.api.media.MediaSource
 import io.element.android.libraries.matrix.api.room.powerlevels.canCall
 import io.element.android.libraries.matrix.api.room.powerlevels.use
 import io.element.android.libraries.matrix.api.user.MatrixUser
@@ -150,6 +151,19 @@ class UserProfilePresenter(
             value = payloads.firstOrNull { it.hasUsefulSetkaProfilePayload() } ?: payloads.firstOrNull()
         }
         val canCall by getCanCall(dmRoomId, setkaProfile)
+        val backgroundMxc = setkaProfile?.optString("background_mxc")?.takeIf { it.isNotBlank() }
+        val backgroundIsVideo = setkaProfile?.optBoolean("background_is_video", false) == true
+        val profileBackgroundVideoPath by produceState<String?>(null, backgroundMxc, backgroundIsVideo) {
+            if (backgroundMxc == null || !backgroundIsVideo) {
+                value = null
+                return@produceState
+            }
+            val file = client.matrixMediaLoader
+                .downloadMediaFile(MediaSource(backgroundMxc), "video/mp4", "profile_background.mp4")
+                .getOrNull()
+            value = file?.path()
+            awaitDispose { file?.close() }
+        }
 
         fun handleEvent(event: UserProfileEvents) {
             when (event) {
@@ -220,6 +234,7 @@ class UserProfilePresenter(
             canCall = canCall,
             snackbarMessage = snackbarMessage,
             eventSink = ::handleEvent,
+            profileBackgroundVideoPath = profileBackgroundVideoPath,
         )
     }
 

@@ -22,7 +22,7 @@ sealed interface RoomVisibilityState {
     fun roomAddress(): Optional<String> {
         return when (this) {
             is Private -> Optional.empty()
-            is Public -> Optional.of(roomAddress.value)
+            is Public -> Optional.of(roomAddress.value).filter { it.isNotBlank() }
         }
     }
 }

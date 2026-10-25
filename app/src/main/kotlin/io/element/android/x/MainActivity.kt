@@ -212,6 +212,19 @@ class MainActivity : NodeActivity() {
                             modifier = Modifier,
                         )
                     }
+                    val currentCall by remember { appBindings.currentCallService().currentCall }.collectAsState()
+                    ReturnToCallBanner(
+                        visible = currentCall !is io.element.android.features.call.api.CurrentCall.None,
+                        onClick = {
+                            startActivity(
+                                android.content.Intent().setClassName(
+                                    packageName,
+                                    "io.element.android.features.call.impl.ui.ElementCallActivity",
+                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        },
+                        modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter),
+                    )
                     updatePromptState?.let { state ->
                         AppUpdatePrompt(
                             state = state,

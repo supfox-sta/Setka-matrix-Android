@@ -9,6 +9,21 @@
 package io.element.android.features.call.impl.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,7 +51,6 @@ import io.element.android.compound.theme.ElementTheme
 import io.element.android.compound.tokens.generated.CompoundIcons
 import io.element.android.features.call.impl.R
 import io.element.android.features.call.impl.notifications.CallNotificationData
-import io.element.android.libraries.designsystem.background.OnboardingBackground
 import io.element.android.libraries.designsystem.components.avatar.Avatar
 import io.element.android.libraries.designsystem.components.avatar.AvatarData
 import io.element.android.libraries.designsystem.components.avatar.AvatarSize
@@ -60,62 +74,107 @@ internal fun IncomingCallScreen(
     onAnswer: (CallNotificationData) -> Unit,
     onCancel: () -> Unit,
 ) {
-    OnboardingBackground()
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Bottom
+    // Setka: full-screen call, gradient background, caller in the middle, one rounded bubble with the actions at the bottom.
+    val pulse = rememberInfiniteTransition(label = "ring")
+    val ringScale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+        label = "ringScale",
+    )
+    val ringAlpha by pulse.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+        label = "ringAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF2B1B5E), Color(0xFF15102E), Color(0xFF0B0A18)),
+                )
+            )
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 20.dp, end = 20.dp, top = 124.dp)
-                .weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .fillMaxSize()
+                .systemBarsPadding(),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Avatar(
-                avatarData = AvatarData(
-                    id = notificationData.senderId.value,
-                    name = notificationData.senderName,
-                    url = notificationData.avatarUrl,
-                    size = AvatarSize.IncomingCall,
-                ),
-                avatarType = AvatarType.User,
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.weight(1f))
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(160.dp)
+                        .scale(ringScale)
+                        .alpha(ringAlpha)
+                        .background(Color(0xFF7C5CFF), CircleShape)
+                )
+                Avatar(
+                    avatarData = AvatarData(
+                        id = notificationData.senderId.value,
+                        name = notificationData.senderName,
+                        url = notificationData.avatarUrl,
+                        size = AvatarSize.IncomingCall,
+                    ),
+                    avatarType = AvatarType.User,
+                )
+            }
+            Spacer(modifier = Modifier.height(28.dp))
             Text(
+                modifier = Modifier.padding(horizontal = 24.dp),
                 text = notificationData.senderName ?: notificationData.senderId.value,
-                style = ElementTheme.typography.fontHeadingMdBold,
+                style = ElementTheme.typography.fontHeadingXlBold,
+                color = Color.White,
                 textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = stringResource(R.string.screen_incoming_call_subtitle_android),
                 style = ElementTheme.typography.fontBodyLgRegular,
-                color = ElementTheme.colors.textSecondary,
+                color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
             )
-        }
-        Row(
-            modifier = Modifier.padding(bottom = 64.dp),
-            horizontalArrangement = Arrangement.spacedBy(48.dp),
-        ) {
-            ActionButton(
-                size = 64.dp,
-                onClick = { onAnswer(notificationData) },
-                icon = CompoundIcons.VoiceCallSolid(),
-                title = stringResource(CommonStrings.action_accept),
-                backgroundColor = ElementTheme.colors.iconSuccessPrimary,
-                borderColor = ElementTheme.colors.borderSuccessSubtle
-            )
-            ActionButton(
-                size = 64.dp,
-                onClick = onCancel,
-                icon = CompoundIcons.EndCall(),
-                title = stringResource(CommonStrings.action_reject),
-                backgroundColor = ElementTheme.colors.iconCriticalPrimary,
-                borderColor = ElementTheme.colors.borderCriticalSubtle
-            )
+            if (!notificationData.roomName.isNullOrBlank() && notificationData.roomName != notificationData.senderName) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = notificationData.roomName,
+                    style = ElementTheme.typography.fontBodyMdRegular,
+                    color = Color.White.copy(alpha = 0.5f),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Spacer(modifier = Modifier.weight(1.2f))
+            Row(
+                modifier = Modifier
+                    .padding(bottom = 36.dp)
+                    .clip(RoundedCornerShape(40.dp))
+                    .background(Color.White.copy(alpha = 0.10f))
+                    .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(40.dp))
+                    .padding(horizontal = 28.dp, vertical = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(56.dp),
+            ) {
+                ActionButton(
+                    size = 68.dp,
+                    onClick = onCancel,
+                    icon = CompoundIcons.EndCall(),
+                    title = stringResource(CommonStrings.action_reject),
+                    backgroundColor = ElementTheme.colors.iconCriticalPrimary,
+                    borderColor = ElementTheme.colors.borderCriticalSubtle
+                )
+                ActionButton(
+                    size = 68.dp,
+                    onClick = { onAnswer(notificationData) },
+                    icon = CompoundIcons.VoiceCallSolid(),
+                    title = stringResource(CommonStrings.action_accept),
+                    backgroundColor = ElementTheme.colors.iconSuccessPrimary,
+                    borderColor = ElementTheme.colors.borderSuccessSubtle
+                )
+            }
         }
     }
 }
@@ -132,7 +191,7 @@ private fun ActionButton(
     borderSize: Dp = 1.33.dp,
 ) {
     Column(
-        modifier = Modifier.width(120.dp),
+        modifier = Modifier.width(96.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         FilledIconButton(
@@ -151,12 +210,13 @@ private fun ActionButton(
                 contentDescription = contentDescription
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = title,
-            style = ElementTheme.typography.fontBodyLgMedium,
-            color = ElementTheme.colors.textPrimary,
+            style = ElementTheme.typography.fontBodyMdMedium,
+            color = Color.White.copy(alpha = 0.9f),
             overflow = TextOverflow.Ellipsis,
+            maxLines = 1,
         )
     }
 }

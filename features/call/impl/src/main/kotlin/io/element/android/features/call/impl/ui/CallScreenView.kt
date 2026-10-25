@@ -8,6 +8,17 @@
 
 package io.element.android.features.call.impl.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import io.element.android.compound.tokens.generated.CompoundIcons
+import io.element.android.libraries.designsystem.theme.components.Icon
 import android.annotation.SuppressLint
 import android.os.Build
 import android.view.View
@@ -97,6 +108,7 @@ internal fun CallScreenView(
             }
         }
 
+        Box(modifier = Modifier.fillMaxSize()) {
         CallWebView(
             modifier = modifier
                 .consumeWindowInsets(WindowInsets.systemBars)
@@ -142,6 +154,25 @@ internal fun CallScreenView(
                 webViewAudioManager?.onCallStopped()
             },
         )
+        // Setka: native "back" over the call (minimize), like the web client.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(start = 12.dp, top = 8.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.38f))
+                .clickable(onClick = ::handleBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = CompoundIcons.ArrowLeft(),
+                contentDescription = stringResource(CommonStrings.action_back),
+                tint = Color.White,
+            )
+        }
+        }
         when (state.urlState) {
             AsyncData.Uninitialized,
             is AsyncData.Loading ->

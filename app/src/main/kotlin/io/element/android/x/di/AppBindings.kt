@@ -54,4 +54,6 @@ interface AppBindings {
     fun appUpdateService(): AppUpdateService
 
     fun sentrySdkDsn(): SentrySdkDsn?
+
+    fun currentCallService(): io.element.android.features.call.api.CurrentCallService
 }

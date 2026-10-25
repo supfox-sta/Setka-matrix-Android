@@ -8,6 +8,7 @@
 
 package io.element.android.libraries.matrix.impl
 
+import io.element.android.appconfig.SetkaChannelConfig
 import io.element.android.appconfig.SetkaMatrixConfig
 import io.element.android.libraries.androidutils.file.getSizeOfFiles
 import io.element.android.libraries.core.bool.orFalse
@@ -511,8 +512,13 @@ class RustMatrixClient(
 
     override suspend fun createRoom(createRoomParams: CreateRoomParameters): Result<RoomId> = withContext(sessionDispatcher) {
         runCatchingExceptions {
+            val isChannel = SetkaChannelConfig.isChannelTopic(createRoomParams.topic)
             val hasPublicAccess = createRoomParams.preset == RoomPreset.PUBLIC_CHAT || createRoomParams.joinRuleOverride == JoinRule.Public
-            val powerLevels = defaultRoomCreationPowerLevels(isSpace = createRoomParams.isSpace, isPublic = hasPublicAccess)
+            val powerLevels = defaultRoomCreationPowerLevels(
+                isSpace = createRoomParams.isSpace,
+                isPublic = hasPublicAccess,
+                isChannel = isChannel,
+            )
 
             val rustParams = RustCreateRoomParameters(
                 name = createRoomParams.name,
@@ -537,7 +543,7 @@ class RustMatrixClient(
                 ),
                 joinRuleOverride = createRoomParams.joinRuleOverride?.map(),
                 historyVisibilityOverride = createRoomParams.historyVisibilityOverride?.map(),
-                canonicalAlias = createRoomParams.roomAliasName.getOrNull(),
+                canonicalAlias = createRoomParams.roomAliasName.getOrNull()?.takeIf { it.isNotBlank() },
                 isSpace = createRoomParams.isSpace,
             )
             val roomId = RoomId(innerClient.createRoom(rustParams))
@@ -993,10 +999,15 @@ class RustMatrixClient(
     }
 }
 
-private fun defaultRoomCreationPowerLevels(isPublic: Boolean, isSpace: Boolean) = PowerLevels(
+private fun defaultRoomCreationPowerLevels(isPublic: Boolean, isSpace: Boolean, isChannel: Boolean = false) = PowerLevels(
     usersDefault = null,
-    // Only admins should be able to send events in general
-    eventsDefault = if (isSpace) 100 else null,
+    // Channels: only moderators post to the main timeline (thread comments are relaxed server-side).
+    // Spaces: only admins should be able to send events in general.
+    eventsDefault = when {
+        isChannel -> SetkaChannelConfig.MODERATOR_POWER_LEVEL.toInt()
+        isSpace -> 100
+        else -> null
+    },
     stateDefault = null,
     ban = null,
     kick = null,

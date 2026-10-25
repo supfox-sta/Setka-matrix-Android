@@ -39,7 +39,9 @@ data class UserProfileState(
     val dmRoomId: RoomId?,
     val canCall: Boolean,
     val snackbarMessage: SnackbarMessage?,
-    val eventSink: (UserProfileEvents) -> Unit
+    val eventSink: (UserProfileEvents) -> Unit,
+    /** Setka Plus: local file of the video profile background (null when the background is an image or not ready). */
+    val profileBackgroundVideoPath: String? = null,
 ) {
     enum class ConfirmationDialog {
         Block,

@@ -307,6 +307,7 @@ dependencies {
     }
     allFeaturesImpl(project)
     implementation(projects.features.migration.api)
+    implementation(projects.features.call.api)
     implementation(projects.appnav)
     implementation(projects.appconfig)
     implementation(projects.libraries.uiStrings)
